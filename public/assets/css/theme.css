@@ -1,0 +1,612 @@
+/* ============================================================
+   Hidden Vietnam FRMS — Theme
+   Maroon & gold palette. Loaded on every page.
+   ============================================================ */
+
+:root {
+    --maroon:       #7A1717;
+    --maroon-dark:  #5C1010;
+    --maroon-light: #9B2C2C;
+    --gold:         #D4A94A;
+    --gold-soft:    #F3E7CC;
+    --cream:        #FBF7F0;
+    --ink:          #2B2B2B;
+    --muted:        #8A8A8A;
+    --success:      #3E7C4A;
+    --danger:       #C0392B;
+    --border:       #E7E0D4;
+
+    --sidebar-width:   260px;
+    --sidebar-collapsed: 72px;
+    --topbar-height:   60px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    font-size: 15px;
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn-maroon {
+    background: var(--maroon);
+    border: 1px solid var(--maroon);
+    color: #fff;
+}
+.btn-maroon:hover { background: var(--maroon-dark); color: #fff; }
+
+.btn-outline-maroon {
+    border: 1px solid var(--maroon);
+    color: var(--maroon);
+    background: transparent;
+}
+.btn-outline-maroon:hover { background: var(--maroon); color: #fff; }
+
+/* ── Cards ───────────────────────────────────────────── */
+.hv-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* ── Badges ──────────────────────────────────────────── */
+.hv-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.hv-badge-info    { background: #E3EEF5; color: #2C6E8F; }
+.hv-badge-warning { background: #FBEED3; color: #9A6B00; }
+.hv-badge-danger  { background: #F6DED9; color: var(--danger); }
+.hv-badge-muted   { background: #EEE; color: var(--muted); }
+.hv-badge-success   { background: #E1EFE3; color: var(--success); }
+.hv-badge-secondary { background: #EEE; color: #5A5A5A; }
+
+/* ── Tables ──────────────────────────────────────────── */
+.hv-table thead th {
+    background: var(--gold-soft);
+    color: var(--maroon-dark);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: none;
+}
+.hv-table td { border-color: var(--border); }
+.text-danger-hv { color: var(--danger); }
+
+/* ── Login / Auth Screen ─────────────────────────────── */
+.hv-auth-wrap {
+    min-height: 100vh;
+    margin: 0;
+}
+.hv-auth-left {
+    background: linear-gradient(135deg, var(--maroon-dark), var(--maroon));
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+}
+.hv-auth-right {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    background: var(--cream);
+}
+.hv-logo-circle {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 3px solid var(--gold);
+}
+.hv-brand-title {
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: var(--gold);
+}
+.hv-script {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    color: var(--gold-soft);
+}
+
+/* Input with an icon inside */
+.hv-input-icon { position: relative; }
+.hv-input-icon i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+}
+.hv-input-icon input { padding-left: 38px; }
+
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR — Clean Dark Red
+   ═══════════════════════════════════════════════════════ */
+.hv-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: linear-gradient(180deg, #3C0808 0%, #5C1010 40%, #4A0E0E 100%);
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1040;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Scrollbar styling for sidebar */
+.hv-sidebar::-webkit-scrollbar { width: 4px; }
+.hv-sidebar::-webkit-scrollbar-track { background: transparent; }
+.hv-sidebar::-webkit-scrollbar-thumb { background: rgba(212,169,74,0.3); border-radius: 2px; }
+
+/* ── Sidebar Header: centered logo + brand ────────────── */
+.hv-sidebar-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 16px;
+    flex-shrink: 0;
+}
+
+.hv-sidebar-logo-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    object-fit: cover;
+    margin-bottom: 8px;
+}
+
+.hv-sidebar-title {
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    color: var(--gold);
+    text-align: center;
+}
+
+/* ── Sidebar Nav Links ─────────────────────────────────── */
+.hv-sidebar-nav {
+    padding: 8px 0 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.hv-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    color: rgba(255,255,255,0.72);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.hv-nav-link:hover {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border-left-color: rgba(212,169,74,0.35);
+}
+.hv-nav-link.active {
+    background: rgba(212,169,74,0.13);
+    color: var(--gold);
+    border-left-color: var(--gold);
+    font-weight: 600;
+}
+.hv-nav-link i {
+    font-size: 17px;
+    width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ── Sidebar Dropdown Groups ──────────────────────────── */
+.hv-nav-group {}
+.hv-nav-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    margin: 0;
+    color: rgba(255,255,255,0.72);
+    text-decoration: none;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    border: none;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    background: none;
+    width: 100%;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    text-align: left;
+    line-height: inherit;
+}
+.hv-nav-group-toggle:hover {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+}
+.hv-nav-group-toggle.active {
+    color: var(--gold);
+    border-left-color: rgba(212,169,74,0.3);
+}
+.hv-nav-group-toggle i.bi-chevron-down,
+.hv-nav-group-toggle i.bi-chevron-right {
+    font-size: 11px;
+    width: auto;
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: transform 0.2s;
+}
+.hv-nav-group-toggle > span:not(.hv-sidebar-badge) {
+    flex: 1;
+}
+.hv-nav-group-toggle .hv-nav-icon {
+    font-size: 17px;
+    width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.hv-sidebar-badge {
+    background: #fff;
+    color: var(--maroon-dark);
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    border-radius: 50px;
+    text-align: center;
+    padding: 0 5px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px rgba(92,16,16,0.4);
+}
+.hv-nav-submenu {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+    background: rgba(0,0,0,0.08);
+}
+.hv-nav-submenu.open {
+    max-height: 300px;
+}
+.hv-nav-submenu .hv-nav-link {
+    padding-left: 57px;
+    font-size: 13px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-left: 3px solid transparent;
+    color: rgba(255,255,255,0.6);
+}
+.hv-nav-submenu .hv-nav-link:hover {
+    color: #fff;
+    border-left-color: transparent;
+    background: rgba(255,255,255,0.05);
+}
+.hv-nav-submenu .hv-nav-link.active {
+    color: var(--gold);
+    border-left-color: transparent;
+    background: rgba(212,169,74,0.1);
+}
+.hv-sidebar-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin: 6px 20px;
+}
+
+/* ── Notification Toast ───────────────────────────────── */
+.hv-toast-container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 1090;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+.hv-toast {
+    pointer-events: auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 340px;
+    animation: hvToastIn 0.3s ease;
+    border-left: 4px solid var(--gold);
+    font-size: 13px;
+}
+.hv-toast.severity-critical { border-left-color: var(--danger); }
+.hv-toast.severity-warning { border-left-color: #E6A800; }
+.hv-toast.severity-info { border-left-color: #2C6E8F; }
+.hv-toast .hv-toast-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.hv-toast .hv-toast-body { flex: 1; min-width: 0; }
+.hv-toast .hv-toast-title { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+.hv-toast .hv-toast-msg { color: var(--ink); line-height: 1.35; }
+.hv-toast .hv-toast-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.hv-toast .hv-toast-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
+.hv-toast.fade-out { animation: hvToastOut 0.3s ease forwards; }
+@keyframes hvToastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes hvToastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+/* Notification dropdown item */
+.hv-notif-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 16px;
+    text-decoration: none;
+    color: var(--ink);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    font-size: 13px;
+}
+.hv-notif-item:hover { background: var(--cream); color: var(--ink); }
+.hv-notif-item .hv-notif-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+.hv-notif-item .hv-notif-text { flex: 1; min-width: 0; line-height: 1.35; }
+.hv-notif-item .hv-notif-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+
+/* ═══ TOP BAR (inside main content) ═════════════════════ */
+.hv-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.hv-topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 4px 14px 4px 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--ink);
+    transition: all 0.2s;
+}
+.hv-topbar-user:hover {
+    background: var(--gold-soft);
+    border-color: var(--gold);
+}
+.hv-topbar-user::after {
+    /* Bootstrap dropdown caret */
+    margin-left: 4px;
+}
+
+.hv-topbar-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--gold);
+}
+
+.hv-topbar-avatar-placeholder {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--gold-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--maroon);
+    font-size: 16px;
+}
+
+.hv-hamburger-main {
+    background: none;
+    border: none;
+    color: var(--maroon);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    line-height: 1;
+}
+.hv-hamburger-main:hover {
+    background: var(--gold-soft);
+}
+
+
+/* ═══ MAIN CONTENT AREA ════════════════════════════════ */
+.hv-main {
+    margin-left: var(--sidebar-width);
+    padding: 1.25rem 1.5rem;
+    min-height: 100vh;
+}
+
+/* ═══ BACKDROP (mobile sidebar overlay) ════════════════ */
+.hv-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1035;
+    backdrop-filter: blur(2px);
+}
+.hv-backdrop.show { display: block; }
+
+
+/* ═══ MOBILE: sidebar off-screen ══════════════════════ */
+@media (max-width: 991.98px) {
+    .hv-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    .hv-sidebar.open {
+        transform: translateX(0);
+    }
+    .hv-main {
+        margin-left: 0 !important;
+    }
+}
+
+
+/* ── Dashboard Stat Cards ───────────────────────────────── */
+.hv-stat {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.hv-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+.hv-stat-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--ink);
+    line-height: 1;
+}
+.hv-stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+/* Clickable stat cards */
+a.hv-stat-link {
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+a.hv-stat-link:hover {
+    border-color: var(--gold);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Page Header ────────────────────────────────────────── */
+.hv-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+.hv-page-header h4 {
+    margin: 0;
+    font-weight: 800;
+    color: var(--maroon-dark);
+}
+
+/* ── Mission & Vision (shared card styles) ──────────── */
+.hv-mv-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 14px; }
+.hv-mv-kicker { font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); font-size: 13px; }
+.hv-mv-tag { font-size: 12px; color: rgba(255,255,255,.7); font-style: italic; }
+.hv-mv-card {
+    height: 100%;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(212,169,74,.35);
+    border-radius: 12px;
+    padding: 16px 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255,255,255,.92);
+}
+.hv-mv-title { color: var(--gold); font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.hv-mv-title i { margin-right: 6px; }
+
+/* ── Login page: Mission & Vision band below auth form ── */
+.hv-login-mv {
+    background: linear-gradient(135deg, var(--maroon-dark), var(--maroon));
+    color: #fff;
+    padding: 0;
+}
+.hv-login-mv .hv-mv-head { justify-content: center; }
+.hv-login-mv .hv-mv-card {
+    background: rgba(255,255,255,.08);
+    border-color: rgba(212,169,74,.3);
+}
+@media (max-width: 767.98px) {
+    .hv-login-mv .container-fluid { padding: 1.25rem !important; }
+    .hv-login-mv .hv-mv-card { padding: 14px; font-size: 13px; }
+}
+
+/* ── Profile Page ───────────────────────────────────────── */
+.hv-profile-photo-wrap {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+}
+.hv-profile-photo {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--gold);
+    object-fit: cover;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.hv-profile-photo-placeholder {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--gold);
+    background: var(--gold-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: var(--maroon);
+}
+.hv-profile-photo-overlay {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--maroon);
+    color: #fff;
+    border: 2px solid #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+.hv-profile-photo-overlay:hover {
+    background: var(--maroon-dark);
+}

@@ -1,0 +1,63 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\AuditLog;
+use App\Models\Setting;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class SettingsController extends Controller
+{
+    /**
+     * Show the settings page.
+     */
+    public function index()
+    {
+        $all = Setting::orderBy('setting_key')->get();
+        $cfg = [];
+        foreach ($all as $s) {
+            $cfg[$s->setting_key] = [
+                'value' => $s->setting_value,
+                'desc'  => $s->description,
+            ];
+        }
+
+        return view('settings.index', compact('cfg'));
+    }
+
+    /**
+     * Update settings (POST).
+     */
+    public function update(Request $request)
+    {
+        $fields = [
+            'app_name'            => 'Application Name',
+            'forecast_weeks'      => 'Forecast Weeks',
+            'safety_stock_factor' => 'Safety Stock Factor',
+            'unusual_sales_sigma' => 'Unusual Sales Sigma',
+            'idle_branch_days'    => 'Idle Branch Days',
+            'expiry_warning_days' => 'Expiry Warning Days',
+        ];
+
+        foreach ($fields as $key => $label) {
+            if ($request->has($key)) {
+                $val = trim($request->input($key));
+                if ($val !== '') {
+                    Setting::set($key, $val);
+                }
+            }
+        }
+
+        AuditLog::create([
+            'user_id'    => Auth::id(),
+            'action'     => 'settings updated',
+            'table_name' => 'settings',
+            'record_id'  => 0,
+            'details'    => 'System settings updated.',
+            'ip_address' => $request->ip(),
+        ]);
+
+        return redirect()->route('settings')->with('success', 'Settings saved successfully.');
+    }
+}
