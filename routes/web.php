@@ -66,6 +66,14 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     // ---------------------------------------------------------------
     // Inventory-management roles (super_admin, owner, branch_manager, warehouse_admin)
     // ---------------------------------------------------------------
+    // Notification endpoints — accessible to all roles that see the bell
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin,warehouse_staff')->group(function () {
+        Route::get('alerts/count', [\App\Http\Controllers\AlertController::class, 'count'])
+            ->name('alerts.count');
+        Route::get('notifications', [\App\Http\Controllers\AlertController::class, 'notifications'])
+            ->name('notifications');
+    });
+
     Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin')->group(function () {
 
         // Inventory (branch managers view their own stock)
@@ -97,14 +105,15 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
             ->name('alerts');
         Route::post('alerts', [\App\Http\Controllers\AlertController::class, 'index'])
             ->name('alerts.action');
-        Route::get('alerts/count', [\App\Http\Controllers\AlertController::class, 'count'])
-            ->name('alerts.count');
-        Route::get('notifications', [\App\Http\Controllers\AlertController::class, 'notifications'])
-            ->name('notifications');
-
         // Reports
         Route::get('reports', [\App\Http\Controllers\ReportController::class, 'index'])
             ->name('reports');
+
+        // Stock movement history (traceability)
+        Route::get('stock/history/{item}', [\App\Http\Controllers\StockController::class, 'history'])
+            ->name('stock.history');
+        Route::get('stock/batch/{batch}', [\App\Http\Controllers\StockController::class, 'batchDetail'])
+            ->name('stock.batch');
     });
 
     // ---------------------------------------------------------------

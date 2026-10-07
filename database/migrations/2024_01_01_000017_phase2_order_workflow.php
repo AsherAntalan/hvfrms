@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending','approved','preparing','delivering','delivered','settled','cancelled') NOT NULL DEFAULT 'pending'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending','approved','preparing','delivering','delivered','settled','cancelled') NOT NULL DEFAULT 'pending'");
+        }
 
         Schema::table('orders', function (Blueprint $table) {
             $table->unsignedInteger('prepared_by')->nullable()->after('approved_at');
@@ -57,6 +59,8 @@ return new class extends Migration
             $table->dropColumn(['prepared_by', 'prepared_at', 'confirmed_by', 'confirmed_at']);
         });
 
-        DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending','approved','delivering','delivered','settled','cancelled') NOT NULL DEFAULT 'pending'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE orders MODIFY COLUMN status ENUM('pending','approved','delivering','delivered','settled','cancelled') NOT NULL DEFAULT 'pending'");
+        }
     }
 };

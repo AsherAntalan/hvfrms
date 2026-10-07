@@ -175,7 +175,7 @@ class AlertController extends Controller
         // Pending/delivering orders (up to 5)
         $orderQuery = Order::select('orders.*', 'branches.branch_name')
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
-            ->whereIn('orders.status', ['pending', 'delivering']);
+            ->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering']);
 
         if ($user->isBranchScoped()) {
             $orderQuery->where('orders.branch_id', $user->branch_id);
@@ -184,9 +184,13 @@ class AlertController extends Controller
         $orders = $orderQuery->orderByDesc('orders.updated_at')->limit(5)->get();
 
         foreach ($orders as $o) {
-            $msg = $o->status === 'pending'
-                ? "Order {$o->order_number} awaiting approval"
-                : "Order {$o->order_number} is being delivered";
+            $msg = match ($o->status) {
+                'pending'    => "Order {$o->order_number} awaiting approval",
+                'approved'   => "Order {$o->order_number} approved, awaiting preparation",
+                'preparing'  => "Order {$o->order_number} is being prepared",
+                'delivering' => "Order {$o->order_number} is being delivered",
+                default      => "Order {$o->order_number} — {$o->status}",
+            };
             $items[] = [
                 'type'     => 'delivery',
                 'severity' => $o->status === 'pending' ? 'warning' : 'info',

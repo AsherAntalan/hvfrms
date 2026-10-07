@@ -84,6 +84,7 @@ class ReportController extends Controller
                    COUNT(*) AS total_orders,
                    SUM(CASE WHEN o.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
                    SUM(CASE WHEN o.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+                   SUM(CASE WHEN o.status = 'preparing' THEN 1 ELSE 0 END) AS preparing_count,
                    SUM(CASE WHEN o.status = 'delivering' THEN 1 ELSE 0 END) AS delivering_count,
                    SUM(CASE WHEN o.status = 'delivered' THEN 1 ELSE 0 END) AS delivered_count,
                    SUM(CASE WHEN o.status = 'settled' THEN 1 ELSE 0 END) AS settled_count,

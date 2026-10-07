@@ -229,6 +229,7 @@
                         <th class="text-center">Total</th>
                         <th class="text-center">Pending</th>
                         <th class="text-center">Approved</th>
+                        <th class="text-center">Preparing</th>
                         <th class="text-center">Delivering</th>
                         <th class="text-center">Delivered</th>
                         <th class="text-center">Settled</th>
@@ -238,7 +239,7 @@
                 </thead>
                 <tbody>
                 @if(empty($orderRows))
-                    <tr><td colspan="9" class="text-center text-muted py-4">No orders in this period.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-4">No orders in this period.</td></tr>
                 @else
                     @foreach($orderRows as $or)
                     <tr>
@@ -246,6 +247,7 @@
                         <td class="text-center fw-bold">{{ $or->total_orders }}</td>
                         <td class="text-center">{{ $or->pending_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->approved_count ?: '&mdash;' }}</td>
+                        <td class="text-center">{{ $or->preparing_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->delivering_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->delivered_count ?: '&mdash;' }}</td>
                         <td class="text-center text-success fw-semibold">{{ $or->settled_count ?: '&mdash;' }}</td>

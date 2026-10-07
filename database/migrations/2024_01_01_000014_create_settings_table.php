@@ -16,7 +16,9 @@ return new class extends Migration
             $table->dateTime('updated_at')->nullable();
         });
 
-        DB::statement('ALTER TABLE settings MODIFY updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE settings MODIFY updated_at DATETIME ON UPDATE CURRENT_TIMESTAMP');
+        }
     }
 
     public function down(): void

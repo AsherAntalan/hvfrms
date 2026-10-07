@@ -410,7 +410,7 @@
             @endif
 
             {{-- Notification bell --}}
-            @unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
+            @unless(Auth::user()->isBranchStaff())
             <div class="dropdown" id="notifDropdown">
                 <button class="btn btn-link position-relative p-1" style="color:var(--ink);font-size:20px;"
                         data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="notifBell">
@@ -545,7 +545,7 @@ function toggleNav(btn) {
 }
 </script>
 {{-- Notification toast container --}}
-@unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
+@unless(Auth::user()->isBranchStaff())
 <div class="hv-toast-container" id="toastContainer"></div>
 <script>
 (function() {

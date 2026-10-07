@@ -20,7 +20,9 @@ return new class extends Migration
             $table->foreign('item_id')->references('id')->on('items');
         });
 
-        DB::statement('ALTER TABLE order_items ADD COLUMN subtotal DECIMAL(12,2) GENERATED ALWAYS AS (quantity * unit_price) STORED');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE order_items ADD COLUMN subtotal DECIMAL(12,2) GENERATED ALWAYS AS (quantity * unit_price) STORED');
+        }
     }
 
     public function down(): void
