@@ -31,6 +31,11 @@ class BranchScope
             // Owners can optionally filter by branch via query parameter.
             $branchId = $request->query('branch') ? (int) $request->query('branch') : null;
             $request->merge(['branch_id' => $branchId]);
+        } elseif (in_array($roleName, ['warehouse_admin', 'warehouse_staff'], true)) {
+            // Warehouse roles operate at the main branch.
+            $mainBranch = \App\Models\Branch::where('branch_type', 'main')
+                ->where('is_active', true)->first();
+            $request->merge(['branch_id' => $mainBranch ? $mainBranch->id : $user->branch_id]);
         } else {
             // Non-owner roles are locked to their own branch.
             $request->merge(['branch_id' => $user->branch_id]);

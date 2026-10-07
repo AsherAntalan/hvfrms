@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 | Hidden Vietnam Franchise Restaurant Management System (HVFRMS)
 |
 | Role constants used in middleware:
-|   super_admin, owner, branch_manager, it_staff
+|   super_admin, owner, branch_manager, it_staff, warehouse_admin, warehouse_staff
 |
 */
 
@@ -46,17 +46,26 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class, 'logout'])
         ->name('logout');
 
-    // Root redirect
-    Route::redirect('/', '/dashboard');
+    // Root redirect — warehouse_staff goes to warehouse, everyone else to dashboard
+    Route::get('/', function () {
+        if (auth()->user()?->isWarehouseStaff()) {
+            return redirect('/warehouse');
+        }
+        return redirect('/dashboard');
+    });
 
     // ---------------------------------------------------------------
-    // Inventory-management roles (super_admin, owner, branch_manager)
+    // Dashboard — all management roles + warehouse_admin
     // ---------------------------------------------------------------
-    Route::middleware('role:super_admin,owner,branch_manager')->group(function () {
-
-        // Dashboard
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin')->group(function () {
         Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
             ->name('dashboard');
+    });
+
+    // ---------------------------------------------------------------
+    // Inventory-management roles (super_admin, owner, branch_manager, warehouse_admin)
+    // ---------------------------------------------------------------
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin')->group(function () {
 
         // Inventory (branch managers view their own stock)
         Route::get('inventory', [\App\Http\Controllers\InventoryController::class, 'index'])
@@ -70,19 +79,13 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         Route::post('stock/api', [\App\Http\Controllers\StockController::class, 'api'])
             ->name('stock.api');
 
-        // Warehouse (main branch only — controller enforces branch_type check)
-        Route::get('warehouse', [\App\Http\Controllers\WarehouseController::class, 'index'])
-            ->name('warehouse');
-        Route::post('warehouse/api', [\App\Http\Controllers\WarehouseController::class, 'api'])
-            ->name('warehouse.api');
-
         // Orders
         Route::get('orders', [\App\Http\Controllers\OrderController::class, 'index'])
             ->name('orders');
         Route::post('orders/api', [\App\Http\Controllers\OrderController::class, 'api'])
             ->name('orders.api');
 
-        // Ordering
+        // Ordering (branch managers only)
         Route::get('ordering', [\App\Http\Controllers\OrderingController::class, 'index'])
             ->name('ordering');
         Route::post('ordering/api', [\App\Http\Controllers\OrderingController::class, 'api'])
@@ -113,6 +116,16 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
             ->name('delivery');
         Route::get('delivery/history', [\App\Http\Controllers\DeliveryController::class, 'history'])
             ->name('delivery.history');
+    });
+
+    // ---------------------------------------------------------------
+    // Warehouse (main branch — super_admin, owner, warehouse_admin, warehouse_staff)
+    // ---------------------------------------------------------------
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin,warehouse_staff')->group(function () {
+        Route::get('warehouse', [\App\Http\Controllers\WarehouseController::class, 'index'])
+            ->name('warehouse');
+        Route::post('warehouse/api', [\App\Http\Controllers\WarehouseController::class, 'api'])
+            ->name('warehouse.api');
     });
 
     // ---------------------------------------------------------------
@@ -154,9 +167,9 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         ->name('profile.password');
 
     // ---------------------------------------------------------------
-    // QR Scanner (it_staff, branch_manager)
+    // QR Scanner (it_staff, branch_manager, warehouse_admin, warehouse_staff)
     // ---------------------------------------------------------------
-    Route::middleware('role:super_admin,owner,branch_manager,it_staff')->group(function () {
+    Route::middleware('role:super_admin,owner,branch_manager,it_staff,warehouse_admin,warehouse_staff')->group(function () {
         Route::get('qr', [\App\Http\Controllers\QrController::class, 'index'])
             ->name('qr');
         Route::post('qr/api', [\App\Http\Controllers\QrController::class, 'api'])

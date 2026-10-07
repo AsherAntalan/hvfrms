@@ -103,6 +103,21 @@ class User extends Authenticatable
         return $this->role->role_name === 'it_staff';
     }
 
+    public function isWarehouseAdmin(): bool
+    {
+        return $this->role->role_name === 'warehouse_admin';
+    }
+
+    public function isWarehouseStaff(): bool
+    {
+        return $this->role->role_name === 'warehouse_staff';
+    }
+
+    public function isWarehouseRole(): bool
+    {
+        return in_array($this->role->role_name, ['warehouse_admin', 'warehouse_staff']);
+    }
+
     public function isBranchScoped(): bool
     {
         return !$this->isOwner();
@@ -110,11 +125,16 @@ class User extends Authenticatable
 
     public function canManageInventory(): bool
     {
-        return in_array($this->role->role_name, ['super_admin', 'owner', 'branch_manager']);
+        return in_array($this->role->role_name, ['super_admin', 'owner', 'branch_manager', 'warehouse_admin']);
     }
 
     public function canManageCatalog(): bool
     {
         return $this->isOwner();
+    }
+
+    public function canAccessWarehouse(): bool
+    {
+        return in_array($this->role->role_name, ['super_admin', 'owner', 'warehouse_admin', 'warehouse_staff']);
     }
 }
