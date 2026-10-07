@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 | Hidden Vietnam Franchise Restaurant Management System (HVFRMS)
 |
 | Role constants used in middleware:
-|   super_admin, owner, branch_manager, it_staff, warehouse_admin, warehouse_staff
+|   super_admin, owner, branch_manager, branch_staff, warehouse_admin, warehouse_staff
 |
 */
 
@@ -46,10 +46,14 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class, 'logout'])
         ->name('logout');
 
-    // Root redirect — warehouse_staff goes to warehouse, everyone else to dashboard
+    // Root redirect — role-aware landing page
     Route::get('/', function () {
-        if (auth()->user()?->isWarehouseStaff()) {
+        $user = auth()->user();
+        if ($user?->isWarehouseStaff()) {
             return redirect('/warehouse');
+        }
+        if ($user?->isBranchStaff()) {
+            return redirect('/qr');
         }
         return redirect('/dashboard');
     });
@@ -167,9 +171,9 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         ->name('profile.password');
 
     // ---------------------------------------------------------------
-    // QR Scanner (it_staff, branch_manager, warehouse_admin, warehouse_staff)
+    // QR Scanner (branch_staff, branch_manager, warehouse_admin, warehouse_staff)
     // ---------------------------------------------------------------
-    Route::middleware('role:super_admin,owner,branch_manager,it_staff,warehouse_admin,warehouse_staff')->group(function () {
+    Route::middleware('role:super_admin,owner,branch_manager,branch_staff,warehouse_admin,warehouse_staff')->group(function () {
         Route::get('qr', [\App\Http\Controllers\QrController::class, 'index'])
             ->name('qr');
         Route::post('qr/api', [\App\Http\Controllers\QrController::class, 'api'])

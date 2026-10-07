@@ -13,7 +13,7 @@ class BranchScope
      *
      * Automatically apply branch filtering based on the user's role.
      * - Owner / super_admin: can see all branches, or filter via ?branch= parameter.
-     * - branch_manager / it_staff: restricted to their own branch_id.
+     * - branch_manager / branch_staff: restricted to their own branch_id.
      *
      * Sets 'branch_id' on the request for controllers to consume.
      */

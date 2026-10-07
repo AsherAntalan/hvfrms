@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
             ['role_name' => 'super_admin',     'description' => 'Researcher/developer — full system access, audit logs, user management', 'created_at' => now()],
             ['role_name' => 'owner',           'description' => 'Hidden Vietnam main owner — all branches, users, branches, settings, order approval', 'created_at' => now()],
             ['role_name' => 'branch_manager',  'description' => 'Branch manager — dashboard, stock, orders, reports, forecast, alerts for OWN branch only', 'created_at' => now()],
-            ['role_name' => 'it_staff',        'description' => 'IT staff — QR scanner web app only (record usage/spoilage for own branch)', 'created_at' => now()],
+            ['role_name' => 'branch_staff',     'description' => 'Branch staff — QR scanning, usage/spoilage recording, branch inventory tasks', 'created_at' => now()],
             ['role_name' => 'warehouse_admin', 'description' => 'Warehouse administrator — supervises warehouse operations, receiving, stocking, QR, delivery prep, disposal', 'created_at' => now()],
             ['role_name' => 'warehouse_staff', 'description' => 'Warehouse staff — performs physical receiving, stocking, QR scanning, picking, delivery prep, expired handling', 'created_at' => now()],
         ]);
@@ -59,7 +59,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // ── Demo Users ─────────────────────────────────
-        // Passwords: admin123 (super_admin), owner123 (owner), staff123 (it_staff), warehouse123 (warehouse_admin & warehouse_staff)
+        // Passwords: admin123 (super_admin), owner123 (owner), staff123 (branch_staff), warehouse123 (warehouse_admin & warehouse_staff)
         DB::table('users')->insert([
             [
                 'full_name'     => 'Research Admin',
@@ -87,7 +87,7 @@ class DatabaseSeeder extends Seeder
                 'full_name'     => 'Tanza Staff',
                 'email'         => 'staff.tanza@hiddenvietnam.com',
                 'password_hash' => '$2y$12$HVeVaWOQZvfHU5mbA8Bf9OEFMltmrkLzhS23nIZ/bgG1C2jXdp9zC',
-                'role_id'       => 4, // it_staff
+                'role_id'       => 4, // branch_staff
                 'branch_id'     => 1, // Tanza
                 'status'        => 'active',
                 'failed_attempts' => 0,

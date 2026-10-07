@@ -48,8 +48,7 @@ class StockController extends Controller
 
         $user = Auth::user();
 
-        // IT staff can only do stock_in, stock_out, and adjustment
-        if ($user->isItStaff() && !in_array($action, ['stock_in', 'stock_out', 'adjustment'])) {
+        if ($user->isBranchStaff() && !in_array($action, ['stock_in', 'stock_out', 'adjustment'])) {
             return response()->json(['ok' => false, 'error' => 'You do not have permission for this action.'], 403);
         }
 

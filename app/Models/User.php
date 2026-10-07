@@ -98,9 +98,9 @@ class User extends Authenticatable
         return $this->role->role_name === 'branch_manager';
     }
 
-    public function isItStaff(): bool
+    public function isBranchStaff(): bool
     {
-        return $this->role->role_name === 'it_staff';
+        return $this->role->role_name === 'branch_staff';
     }
 
     public function isWarehouseAdmin(): bool

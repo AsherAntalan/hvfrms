@@ -160,8 +160,8 @@
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center">
                                     @if($canEditBatches)
-                                    <button class="btn btn-sm btn-outline-secondary" title="Edit"
-                                            onclick="openEditModal({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }}, '{{ $b->expiry_date ?? '' }}')">
+                                    <button class="btn btn-sm btn-outline-secondary" title="Adjust Quantity"
+                                            onclick="openAdjustModal({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     @endif
@@ -170,9 +170,9 @@
                                         <i class="bi bi-printer"></i>
                                     </button>
                                     @if($canManageProducts)
-                                    <button class="btn btn-sm btn-outline-danger" title="Delete"
-                                            onclick="deleteBatch({{ $b->id }}, '{{ e($b->item_name) }}')">
-                                        <i class="bi bi-trash"></i>
+                                    <button class="btn btn-sm btn-outline-danger" title="Void Batch"
+                                            onclick="voidBatch({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
+                                        <i class="bi bi-x-octagon"></i>
                                     </button>
                                     @endif
                                 </div>
@@ -233,9 +233,9 @@
                                         <i class="bi bi-recycle me-1"></i> Dispose
                                     </button>
                                     @if($canManageProducts)
-                                    <button class="btn btn-sm btn-outline-danger" title="Delete expired batch"
-                                            onclick="deleteBatch({{ $b->id }}, '{{ e($b->item_name) }}')">
-                                        <i class="bi bi-trash"></i>
+                                    <button class="btn btn-sm btn-outline-danger" title="Void expired batch"
+                                            onclick="voidBatch({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
+                                        <i class="bi bi-x-octagon"></i>
                                     </button>
                                     @endif
                                 </div>
@@ -582,34 +582,50 @@
     </div>
 </div>
 
-{{-- ═══ EDIT BATCH MODAL ══════════════════════════════════ --}}
+{{-- ═══ STOCK ADJUSTMENT MODAL ═════════════════════════════ --}}
 @if($canEditBatches)
-<div class="modal fade" id="editModal" tabindex="-1">
+<div class="modal fade" id="adjustModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-pencil me-1"></i> Edit Batch
+                    <i class="bi bi-sliders me-1"></i> Adjust Stock Quantity
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="eBatchId">
-                <div class="mb-2 fw-semibold" id="eItemName" style="color:var(--maroon);"></div>
+                <input type="hidden" id="aBatchId">
+                <div class="mb-2 fw-semibold" id="aItemName" style="color:var(--maroon);"></div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Quantity Left</label>
-                    <input type="number" class="form-control" id="eQty" min="0">
+                    <label class="form-label fw-semibold">Current Quantity</label>
+                    <input type="number" class="form-control" id="aCurrentQty" readonly style="background:#f5f5f5;">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Expiry Date</label>
-                    <input type="date" class="form-control" id="eExpiry">
-                    <small class="text-muted">Changing expiry will regenerate the batch QR code.</small>
+                    <label class="form-label fw-semibold">New Quantity <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="aNewQty" min="0" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                    <select class="form-select" id="aReason" required>
+                        <option value="">— Select reason —</option>
+                        <option value="Physical Count Correction">Physical Count Correction</option>
+                        <option value="Damaged">Damaged</option>
+                        <option value="Spoilage">Spoilage</option>
+                        <option value="Expired">Expired</option>
+                        <option value="Missing">Missing</option>
+                        <option value="Encoding Error">Encoding Error</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Remarks</label>
+                    <textarea class="form-control" id="aRemarks" rows="2" placeholder="Optional notes..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-maroon" id="btnEdit" onclick="submitEdit()">
-                    <i class="bi bi-check-lg me-1"></i> Save Changes
+                <button type="button" class="btn btn-maroon" id="btnAdjust" onclick="submitAdjust()">
+                    <i class="bi bi-check-lg me-1"></i> Submit Adjustment
                 </button>
             </div>
         </div>
@@ -716,12 +732,12 @@ const API  = '{{ route("warehouse.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 
 let createModal;
-@if($canEditBatches) let editModal; @endif
+@if($canEditBatches) let adjustModal; @endif
 @if($canManageProducts) let productModal; @endif
 
 document.addEventListener('DOMContentLoaded', function () {
     createModal  = new bootstrap.Modal(document.getElementById('createModal'));
-    @if($canEditBatches) editModal = new bootstrap.Modal(document.getElementById('editModal')); @endif
+    @if($canEditBatches) adjustModal = new bootstrap.Modal(document.getElementById('adjustModal')); @endif
     @if($canManageProducts) productModal = new bootstrap.Modal(document.getElementById('productModal')); @endif
 
     document.getElementById('cItem').addEventListener('change', function () {
@@ -798,42 +814,48 @@ async function submitCreate() {
     finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Receive Stock'; }
 }
 
-// -- Edit Batch --
+// -- Adjust Batch --
 @if($canEditBatches)
-function openEditModal(batchId, itemName, qty, expiry) {
-    document.getElementById('eBatchId').value = batchId;
-    document.getElementById('eItemName').textContent = itemName;
-    document.getElementById('eQty').value = qty;
-    document.getElementById('eExpiry').value = expiry || '';
-    editModal.show();
+function openAdjustModal(batchId, itemName, qty) {
+    document.getElementById('aBatchId').value = batchId;
+    document.getElementById('aItemName').textContent = itemName;
+    document.getElementById('aCurrentQty').value = qty;
+    document.getElementById('aNewQty').value = qty;
+    document.getElementById('aReason').value = '';
+    document.getElementById('aRemarks').value = '';
+    adjustModal.show();
 }
 
-async function submitEdit() {
-    var btn = document.getElementById('btnEdit');
+async function submitAdjust() {
+    var reason = document.getElementById('aReason').value;
+    if (!reason) { alert('Please select a reason for the adjustment.'); return; }
+
+    var btn = document.getElementById('btnAdjust');
     btn.disabled = true; btn.textContent = 'Saving...';
 
     try {
         var r = await postAPI({
-            action: 'edit_batch',
-            batch_id: document.getElementById('eBatchId').value,
-            quantity_left: document.getElementById('eQty').value,
-            expiry_date: document.getElementById('eExpiry').value
+            action: 'adjust_batch',
+            batch_id: document.getElementById('aBatchId').value,
+            new_quantity: document.getElementById('aNewQty').value,
+            reason: reason,
+            remarks: document.getElementById('aRemarks').value
         });
-        if (r.ok) { editModal.hide(); location.reload(); }
-        else { alert(r.error || 'Error updating batch.'); }
+        if (r.ok) { adjustModal.hide(); location.reload(); }
+        else { alert(r.error || 'Error adjusting batch.'); }
     } catch (e) { alert('Network error.'); }
-    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save Changes'; }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Submit Adjustment'; }
 }
 @endif
 
-// -- Delete Batch --
-async function deleteBatch(batchId, itemName) {
-    if (!confirm('Delete batch for "' + itemName + '"? This cannot be undone.')) return;
+// -- Void Batch --
+async function voidBatch(batchId, itemName, qty) {
+    if (!confirm('Void batch for "' + itemName + '" (' + qty + ' units)?\n\nThis will zero out the batch quantity and create a reversal transaction. The batch history is preserved.')) return;
 
     try {
-        var r = await postAPI({ action: 'delete_batch', batch_id: batchId });
-        if (r.ok) { location.reload(); }
-        else { alert(r.error || 'Error deleting batch.'); }
+        var r = await postAPI({ action: 'void_batch', batch_id: batchId });
+        if (r.ok) { alert(r.message || 'Batch voided.'); location.reload(); }
+        else { alert(r.error || 'Error voiding batch.'); }
     } catch (e) { alert('Network error.'); }
 }
 

@@ -27,7 +27,7 @@
             $u = Auth::user();
             $isOwner = $u->isOwner();
             $isBM = $u->isBranchManager();
-            $isIT = $u->isItStaff();
+            $isBS = $u->isBranchStaff();
             $isSA = $u->isSuperAdmin();
             $canInv = $u->canManageInventory();
             $isMainBM = $isBM && $u->branch && $u->branch->branch_type === 'main';
@@ -157,7 +157,7 @@
         @else
 
         {{-- Dashboard --}}
-        @unless($isIT)
+        @unless($isBS)
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
             <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
@@ -198,7 +198,7 @@
                 </a>
             </div>
         </div>
-        @elseif($isIT)
+        @elseif($isBS)
         <a href="{{ route('qr') }}"
            class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
             <i class="bi bi-qr-code-scan"></i> <span>Scan Stock In/Out</span>
@@ -206,7 +206,7 @@
         @endif
 
         {{-- ── Sales & Orders ▾ ──────────────────────────── --}}
-        @unless($isIT)
+        @unless($isBS)
         @php
             $odActive = request()->routeIs('orders*','ordering*');
         @endphp
@@ -375,7 +375,7 @@
             @endif
 
             {{-- Notification bell --}}
-            @unless(Auth::user()->isItStaff() || Auth::user()->isWarehouseStaff())
+            @unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
             <div class="dropdown" id="notifDropdown">
                 <button class="btn btn-link position-relative p-1" style="color:var(--ink);font-size:20px;"
                         data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="notifBell">
@@ -510,7 +510,7 @@ function toggleNav(btn) {
 }
 </script>
 {{-- Notification toast container --}}
-@unless(Auth::user()->isItStaff() || Auth::user()->isWarehouseStaff())
+@unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
 <div class="hv-toast-container" id="toastContainer"></div>
 <script>
 (function() {
