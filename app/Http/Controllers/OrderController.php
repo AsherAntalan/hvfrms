@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Branch;
+use App\Models\DeliveryDiscrepancy;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -22,6 +23,10 @@ class OrderController extends Controller
         $user->load('role', 'branch');
         $canManage = $user->isOwner();
         $isBranchScoped = $user->isBranchScoped();
+        $isWarehouse = $user->isWarehouseRole();
+        $isWA = $user->isWarehouseAdmin();
+        $isWS = $user->isWarehouseStaff();
+        $isBM = $user->isBranchManager();
 
         // Fetch orders with branch and user names
         $ordersQuery = Order::select('orders.*', 'branches.branch_name',
@@ -31,7 +36,7 @@ class OrderController extends Controller
             ->leftJoin('users as u_ord', 'u_ord.id', '=', 'orders.ordered_by')
             ->leftJoin('users as u_app', 'u_app.id', '=', 'orders.approved_by');
 
-        if ($isBranchScoped) {
+        if ($isBranchScoped && !$isWarehouse) {
             $ordersQuery->where('orders.branch_id', $user->branch_id);
         }
 
@@ -60,7 +65,7 @@ class OrderController extends Controller
             ];
         });
 
-        return view('orders.index', compact('user', 'canManage', 'isBranchScoped', 'orders', 'items', 'branches', 'productsJson'));
+        return view('orders.index', compact('user', 'canManage', 'isBranchScoped', 'isWarehouse', 'isWA', 'isWS', 'isBM', 'orders', 'items', 'branches', 'productsJson'));
     }
 
     public function api(Request $request)
@@ -117,11 +122,6 @@ class OrderController extends Controller
                 ];
             }
 
-            // Generate order number: ORD-YYYY-NNNN
-            $year = date('Y');
-            $count = Order::where('order_number', 'like', "ORD-{$year}-%")->count();
-            $orderNumber = sprintf('ORD-%s-%04d', $year, $count + 1);
-
             $totalAmount = 0;
             foreach ($validatedItems as $vi) {
                 $totalAmount += $vi['unit_price'] * $vi['quantity'];
@@ -129,6 +129,27 @@ class OrderController extends Controller
 
             DB::beginTransaction();
             try {
+                // Generate order number: ORD-YYYY-NNNN (inside transaction with retry)
+                $year = date('Y');
+                $maxRetries = 5;
+                for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                    $count = Order::where('order_number', 'like', "ORD-{$year}-%")->count();
+                    $orderNumber = sprintf('ORD-%s-%04d', $year, $count + 1);
+
+                    if (!Order::where('order_number', $orderNumber)->exists()) {
+                        break;
+                    }
+
+                    if ($attempt === $maxRetries) {
+                        // Fallback: use max numeric suffix + 1
+                        $last = Order::where('order_number', 'like', "ORD-{$year}-%")
+                            ->orderByDesc('order_number')
+                            ->value('order_number');
+                        $lastNum = $last ? (int)substr($last, -4) : 0;
+                        $orderNumber = sprintf('ORD-%s-%04d', $year, $lastNum + 1);
+                    }
+                }
+
                 $order = Order::create([
                     'order_number' => $orderNumber,
                     'branch_id'    => $branchId,
@@ -180,7 +201,7 @@ class OrderController extends Controller
                 return response()->json(['ok' => false, 'error' => 'Invalid order.'], 422);
             }
 
-            $validStatuses = ['approved', 'delivering', 'delivered', 'settled', 'cancelled'];
+            $validStatuses = ['approved', 'preparing', 'delivering', 'delivered', 'settled', 'cancelled'];
             if (!in_array($newStatus, $validStatuses)) {
                 return response()->json(['ok' => false, 'error' => 'Invalid status.'], 422);
             }
@@ -196,7 +217,8 @@ class OrderController extends Controller
 
             $allowedTransitions = [
                 'pending'    => ['approved', 'cancelled'],
-                'approved'   => ['delivering', 'cancelled'],
+                'approved'   => ['preparing', 'delivering', 'cancelled'],
+                'preparing'  => ['delivering'],
                 'delivering' => ['delivered'],
                 'delivered'  => ['settled'],
                 'settled'    => [],
@@ -208,15 +230,37 @@ class OrderController extends Controller
                 return response()->json(['ok' => false, 'error' => "Cannot change from '{$current}' to '{$newStatus}'."], 422);
             }
 
-            // Branch managers: own branch only, limited transitions
-            if (!$user->isOwner()) {
+            $isWarehouseAdmin = $user->isWarehouseAdmin();
+            $isWarehouseStaff = $user->isWarehouseStaff();
+            $isWarehouse = $isWarehouseAdmin || $isWarehouseStaff;
+
+            // Role-based permission checks
+            if (!$user->isOwner() && !$isWarehouse) {
                 $managerTransitions = [
                     'pending'    => ['cancelled'],
                     'delivering' => ['delivered'],
                 ];
                 if ((int) $order->branch_id !== $user->branch_id
                     || !in_array($newStatus, $managerTransitions[$current] ?? [], true)) {
-                    return response()->json(['ok' => false, 'error' => 'Only the owner can make this change to the order.'], 403);
+                    return response()->json(['ok' => false, 'error' => 'You do not have permission for this transition.'], 403);
+                }
+            }
+
+            // Warehouse staff: can only do approved->preparing
+            if ($isWarehouseStaff && !$isWarehouseAdmin) {
+                if (!($current === 'approved' && $newStatus === 'preparing')) {
+                    return response()->json(['ok' => false, 'error' => 'Warehouse staff can only start order preparation.'], 403);
+                }
+            }
+
+            // Warehouse admin: can do approved->preparing, preparing->delivering
+            if ($isWarehouseAdmin && !$user->isOwner()) {
+                $waTransitions = [
+                    'approved'  => ['preparing'],
+                    'preparing' => ['delivering'],
+                ];
+                if (!in_array($newStatus, $waTransitions[$current] ?? [], true)) {
+                    return response()->json(['ok' => false, 'error' => 'You do not have permission for this transition.'], 403);
                 }
             }
 
@@ -237,16 +281,21 @@ class OrderController extends Controller
                 if ($newStatus === 'approved') {
                     $updateData['approved_by'] = $user->id;
                     $updateData['approved_at'] = now();
+                } elseif ($newStatus === 'preparing') {
+                    $updateData['prepared_by'] = $user->id;
+                    $updateData['prepared_at'] = now();
                 } elseif ($newStatus === 'delivered') {
                     $updateData['delivered_at'] = now();
+                    $updateData['confirmed_by'] = $user->id;
+                    $updateData['confirmed_at'] = now();
                 } elseif ($newStatus === 'settled') {
                     $updateData['settled_at'] = now();
                 }
 
                 Order::where('id', $orderId)->update($updateData);
 
-                // On cancelled from approved: restore warehouse stock
-                if ($newStatus === 'cancelled' && $current === 'approved') {
+                // On cancelled from approved/preparing: restore warehouse stock
+                if ($newStatus === 'cancelled' && in_array($current, ['approved', 'preparing'])) {
                     $stockService = new StockService();
                     $stockService->restoreOrderStock($orderId, $order->order_number, $mainBid, $user->id);
                 }
@@ -267,9 +316,43 @@ class OrderController extends Controller
                     }
                 }
 
-                // On "delivered": auto stock-in at receiving branch preserving source expiry
+                // On "delivered": branch confirmation with received quantities
                 if ($newStatus === 'delivered') {
+                    $receivedItems = json_decode($request->input('received_items', '[]'), true);
+                    $receivedMap = [];
+                    if (is_array($receivedItems)) {
+                        foreach ($receivedItems as $ri) {
+                            $receivedMap[(int) ($ri['order_item_id'] ?? 0)] = (int) ($ri['received_quantity'] ?? 0);
+                        }
+                    }
+
                     foreach ($orderItems as $oi) {
+                        $receivedQty = $receivedMap[$oi->id] ?? $oi->quantity;
+                        OrderItem::where('id', $oi->id)->update(['received_quantity' => $receivedQty]);
+
+                        // Record discrepancy if quantities differ
+                        if ($receivedQty != $oi->quantity) {
+                            $reason = trim($request->input("discrepancy_reason_{$oi->id}", ''));
+                            $remarks = trim($request->input("discrepancy_remarks_{$oi->id}", ''));
+                            if (!$reason) {
+                                $reason = $receivedQty < $oi->quantity ? 'Missing Quantity' : 'Incorrect Quantity';
+                            }
+
+                            DeliveryDiscrepancy::create([
+                                'order_id'          => $orderId,
+                                'order_item_id'     => $oi->id,
+                                'expected_quantity'  => $oi->quantity,
+                                'received_quantity'  => $receivedQty,
+                                'reason'            => $reason,
+                                'remarks'           => $remarks ?: null,
+                                'reported_by'       => $user->id,
+                            ]);
+                        }
+
+                        // Stock-in at branch for RECEIVED quantity (not ordered)
+                        $stockInQty = $receivedQty;
+                        if ($stockInQty <= 0) continue;
+
                         $sourceTxs = StockTransaction::where('type', 'out')
                             ->where('item_id', $oi->item_id)
                             ->where('branch_id', $mainBid)
@@ -281,15 +364,21 @@ class OrderController extends Controller
                             $expiryDate = $oi->shelf_life_days
                                 ? now()->addDays((int) $oi->shelf_life_days)->toDateString()
                                 : null;
-                            $sourceTxs = collect([['qty' => $oi->quantity, 'expiry' => $expiryDate]]);
+                            $sourceTxs = collect([['qty' => $stockInQty, 'expiry' => $expiryDate]]);
                         } else {
-                            $sourceTxs = $sourceTxs->map(function ($tx) {
+                            $remaining = $stockInQty;
+                            $mapped = [];
+                            foreach ($sourceTxs as $tx) {
+                                if ($remaining <= 0) break;
                                 $sourceBatch = StockBatch::find($tx->batch_id);
-                                return [
-                                    'qty'    => abs($tx->quantity),
+                                $take = min(abs($tx->quantity), $remaining);
+                                $mapped[] = [
+                                    'qty'    => $take,
                                     'expiry' => $sourceBatch ? $sourceBatch->expiry_date : null,
                                 ];
-                            });
+                                $remaining -= $take;
+                            }
+                            $sourceTxs = collect($mapped);
                         }
 
                         foreach ($sourceTxs as $src) {
@@ -321,12 +410,15 @@ class OrderController extends Controller
                         }
                     }
 
+                    $discrepancyCount = DeliveryDiscrepancy::where('order_id', $orderId)->count();
+                    $discNote = $discrepancyCount > 0 ? " ({$discrepancyCount} discrepanc" . ($discrepancyCount > 1 ? 'ies' : 'y') . " reported)" : '';
+
                     AuditLog::create([
                         'user_id'    => $user->id,
-                        'action'     => 'order delivered + stock in',
+                        'action'     => 'order delivered + confirmed',
                         'table_name' => 'orders',
                         'record_id'  => $orderId,
-                        'details'    => "Order {$order->order_number} delivered to {$order->branch_name}. Auto stock-in for {$orderItems->count()} item(s).",
+                        'details'    => "Order {$order->order_number} delivered to {$order->branch_name}. Confirmed by branch.{$discNote}",
                         'ip_address' => $request->ip(),
                     ]);
                 }
@@ -345,9 +437,10 @@ class OrderController extends Controller
                 }
 
                 $labels = [
-                    'approved'   => 'approved',
-                    'delivering' => 'marked as delivering',
-                    'delivered'  => 'marked as delivered (stock added to branch)',
+                    'approved'   => 'approved (warehouse stock allocated)',
+                    'preparing'  => 'marked as preparing',
+                    'delivering' => 'released for delivery',
+                    'delivered'  => 'confirmed as delivered (stock added to branch)',
                     'settled'    => 'settled',
                     'cancelled'  => 'cancelled',
                 ];
@@ -378,7 +471,7 @@ class OrderController extends Controller
                 ->leftJoin('users as u_app', 'u_app.id', '=', 'orders.approved_by')
                 ->where('orders.id', $orderId);
 
-            if ($user->isBranchScoped()) {
+            if ($user->isBranchScoped() && !$user->isWarehouseRole()) {
                 $orderQuery->where('orders.branch_id', $user->branch_id);
             }
 
@@ -398,27 +491,53 @@ class OrderController extends Controller
                 return $dt ? \Carbon\Carbon::parse($dt)->format('M j, Y g:i A') : null;
             };
 
+            $preparedBy = $order->prepared_by
+                ? \App\Models\User::where('id', $order->prepared_by)->value('full_name')
+                : null;
+            $confirmedBy = $order->confirmed_by
+                ? \App\Models\User::where('id', $order->confirmed_by)->value('full_name')
+                : null;
+
+            $discrepancies = DeliveryDiscrepancy::select('delivery_discrepancies.*', 'items.item_name')
+                ->join('order_items', 'order_items.id', '=', 'delivery_discrepancies.order_item_id')
+                ->join('items', 'items.id', '=', 'order_items.item_id')
+                ->where('delivery_discrepancies.order_id', $orderId)
+                ->get();
+
             return response()->json([
                 'ok'    => true,
                 'order' => [
-                    'id'               => $order->id,
-                    'order_number'     => $order->order_number,
-                    'branch_name'      => $order->branch_name,
-                    'status'           => $order->status,
-                    'ordered_by_name'  => $order->ordered_by_name,
-                    'approved_by_name' => $order->approved_by_name,
-                    'total_amount'     => $order->total_amount,
-                    'remarks'          => $order->remarks,
-                    'created_at'       => $fmt($order->created_at),
-                    'approved_at'      => $fmt($order->approved_at),
-                    'delivered_at'     => $fmt($order->delivered_at),
-                    'settled_at'       => $fmt($order->settled_at),
-                    'items'            => $items->map(fn($i) => [
-                        'item_name'  => $i->item_name,
-                        'unit'       => $i->unit,
-                        'quantity'   => (int) $i->quantity,
-                        'unit_price' => (float) $i->unit_price,
-                        'subtotal'   => (float) $i->subtotal,
+                    'id'                => $order->id,
+                    'order_number'      => $order->order_number,
+                    'branch_name'       => $order->branch_name,
+                    'status'            => $order->status,
+                    'ordered_by_name'   => $order->ordered_by_name,
+                    'approved_by_name'  => $order->approved_by_name,
+                    'prepared_by_name'  => $preparedBy,
+                    'confirmed_by_name' => $confirmedBy,
+                    'total_amount'      => $order->total_amount,
+                    'remarks'           => $order->remarks,
+                    'created_at'        => $fmt($order->created_at),
+                    'approved_at'       => $fmt($order->approved_at),
+                    'prepared_at'       => $fmt($order->prepared_at),
+                    'delivered_at'      => $fmt($order->delivered_at),
+                    'confirmed_at'      => $fmt($order->confirmed_at),
+                    'settled_at'        => $fmt($order->settled_at),
+                    'items'             => $items->map(fn($i) => [
+                        'id'                => $i->id,
+                        'item_name'         => $i->item_name,
+                        'unit'              => $i->unit,
+                        'quantity'          => (int) $i->quantity,
+                        'received_quantity' => $i->received_quantity !== null ? (int) $i->received_quantity : null,
+                        'unit_price'        => (float) $i->unit_price,
+                        'subtotal'          => (float) $i->subtotal,
+                    ])->toArray(),
+                    'discrepancies' => $discrepancies->map(fn($d) => [
+                        'item_name'         => $d->item_name,
+                        'expected_quantity'  => (int) $d->expected_quantity,
+                        'received_quantity'  => (int) $d->received_quantity,
+                        'reason'            => $d->reason,
+                        'remarks'           => $d->remarks,
                     ])->toArray(),
                 ],
             ]);

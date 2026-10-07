@@ -12,17 +12,21 @@ class DeliveryController extends Controller
         $user = Auth::user();
         $user->load('role', 'branch');
         $isBranchScoped = $user->isBranchScoped();
+        $isWarehouse = $user->isWarehouseRole();
 
-        $query = Order::select('orders.*', 'branches.branch_name', 'u.full_name as ordered_by_name')
+        $query = Order::select('orders.*', 'branches.branch_name',
+                'u.full_name as ordered_by_name',
+                'u_prep.full_name as prepared_by_name')
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
             ->leftJoin('users as u', 'u.id', '=', 'orders.ordered_by')
-            ->whereIn('orders.status', ['pending', 'approved', 'delivering']);
+            ->leftJoin('users as u_prep', 'u_prep.id', '=', 'orders.prepared_by')
+            ->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering']);
 
-        if ($isBranchScoped) {
+        if ($isBranchScoped && !$isWarehouse) {
             $query->where('orders.branch_id', $user->branch_id);
         }
 
-        $active = $query->orderByRaw("FIELD(orders.status, 'pending', 'approved', 'delivering')")
+        $active = $query->orderByRaw("FIELD(orders.status, 'pending', 'approved', 'preparing', 'delivering')")
             ->orderByDesc('orders.updated_at')
             ->get();
 
@@ -34,13 +38,14 @@ class DeliveryController extends Controller
         $user = Auth::user();
         $user->load('role', 'branch');
         $isBranchScoped = $user->isBranchScoped();
+        $isWarehouse = $user->isWarehouseRole();
 
         $query = Order::select('orders.*', 'branches.branch_name', 'u.full_name as ordered_by_name')
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
             ->leftJoin('users as u', 'u.id', '=', 'orders.ordered_by')
             ->whereIn('orders.status', ['delivered', 'settled', 'cancelled']);
 
-        if ($isBranchScoped) {
+        if ($isBranchScoped && !$isWarehouse) {
             $query->where('orders.branch_id', $user->branch_id);
         }
 

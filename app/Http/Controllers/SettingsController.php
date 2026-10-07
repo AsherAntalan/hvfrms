@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 
 class SettingsController extends Controller
@@ -59,5 +60,20 @@ class SettingsController extends Controller
         ]);
 
         return redirect()->route('settings')->with('success', 'Settings saved successfully.');
+    }
+
+    /**
+     * Trigger a database backup (super_admin/owner only).
+     */
+    public function backup()
+    {
+        Artisan::call('db:backup');
+        $output = Artisan::output();
+
+        if (str_contains($output, 'successfully')) {
+            return redirect()->route('settings')->with('success', trim($output));
+        }
+
+        return redirect()->route('settings')->with('error', trim($output));
     }
 }

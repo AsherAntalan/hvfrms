@@ -126,4 +126,44 @@ class StockController extends Controller
 
         return response()->json($result);
     }
+
+    public function history(Item $item)
+    {
+        $user = Auth::user();
+
+        $query = StockTransaction::where('item_id', $item->id)
+            ->with(['branch', 'batch', 'performer']);
+
+        if ($user->isBranchScoped()) {
+            $query->where('branch_id', $user->branch_id);
+        }
+
+        $transactions = $query->orderByDesc('created_at')->paginate(50);
+
+        $batches = StockBatch::where('item_id', $item->id)
+            ->when($user->isBranchScoped(), fn($q) => $q->where('branch_id', $user->branch_id))
+            ->with('branch')
+            ->orderByDesc('id')
+            ->get();
+
+        return view('stock.history', compact('item', 'transactions', 'batches'));
+    }
+
+    public function batchDetail(StockBatch $batch)
+    {
+        $user = Auth::user();
+
+        if ($user->isBranchScoped() && $batch->branch_id !== $user->branch_id) {
+            abort(403);
+        }
+
+        $batch->load(['item', 'branch', 'creator']);
+
+        $transactions = StockTransaction::where('batch_id', $batch->id)
+            ->with('performer')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('stock.batch-detail', compact('batch', 'transactions'));
+    }
 }

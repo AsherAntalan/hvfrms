@@ -14,6 +14,7 @@ class OrderItem extends Model
         'item_id',
         'quantity',
         'unit_price',
+        'received_quantity',
     ];
 
     protected function casts(): array

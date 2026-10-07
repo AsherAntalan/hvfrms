@@ -80,7 +80,7 @@
                         $lowStock = $fc['stock_on_hand'] > 0 && $fc['stock_on_hand'] <= ($item->reorder_level ?? 0);
                         $needOrder = $fc['recommend_qty'] > 0;
                     @endphp
-                <tr class="{{ $needOrder ? 'table-warning' : '' }}">
+                <tr class="{{ $needOrder ? 'table-warning' : '' }}" style="cursor:pointer" onclick="let r=document.getElementById('detail-{{ $loop->index }}');r.style.display=r.style.display==='none'?'':'none';this.querySelector('.chevron').classList.toggle('bi-chevron-down');this.querySelector('.chevron').classList.toggle('bi-chevron-up');">
                     <td class="ps-3">
                         <span class="fw-semibold">{{ $item->item_name }}</span>
                         <span class="text-muted small ms-1">({{ $item->unit }})</span>
@@ -106,6 +106,52 @@
                         @else
                             <span class="text-success"><i class="bi bi-check-circle me-1"></i>Stocked</span>
                         @endif
+                        <i class="bi bi-chevron-down chevron text-muted ms-1 small"></i>
+                    </td>
+                </tr>
+                {{-- Expandable "Why?" detail row --}}
+                <tr id="detail-{{ $loop->index }}" style="display:none">
+                    <td colspan="9" class="bg-light px-4 py-3">
+                        <div class="row small">
+                            <div class="col-md-6">
+                                <h6 class="mb-2" style="color:var(--maroon);"><i class="bi bi-lightbulb me-1"></i>Why this recommendation?</h6>
+                                <p class="mb-1"><strong>Historical period (8 weeks):</strong></p>
+                                <ul class="mb-2 ps-3">
+                                    @foreach($fc['weekly'] as $wi => $wv)
+                                        <li>Week {{ $wi + 1 }}: <strong>{{ $wv }}</strong> {{ $item->unit }}</li>
+                                    @endforeach
+                                </ul>
+                                <p class="mb-1"><strong>Simple average demand:</strong> {{ $fc['avg_weekly'] }} {{ $item->unit }}/week</p>
+                                <p class="mb-1"><strong>Weighted moving average (WMA):</strong> {{ $fc['wma'] }} {{ $item->unit }}/week</p>
+                                <p class="mb-2 text-muted" style="font-size:0.8em;">WMA weights: most recent 4 weeks at 4x, 3x, 2x, 1x; older weeks at 1x.</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Trend:</strong>
+                                    <span class="hv-badge {{ $tb[0] }}">{{ $tb[2] }}</span>
+                                    @if($fc['trend'] === 'up')
+                                        &mdash; Demand is increasing (last 4 weeks &gt; first 4 weeks).
+                                    @elseif($fc['trend'] === 'down')
+                                        &mdash; Demand is decreasing (last 4 weeks &lt; first 4 weeks).
+                                    @elseif($fc['trend'] === 'stable')
+                                        &mdash; Demand is steady across the 8-week window.
+                                    @else
+                                        &mdash; Not enough data to determine a trend.
+                                    @endif
+                                </p>
+                                <p class="mb-1"><strong>Safety factor:</strong> 1.5&times; (applied to WMA to buffer against demand spikes)</p>
+                                <p class="mb-1"><strong>Forecast demand (next week):</strong> {{ $fc['forecast_qty'] }} {{ $item->unit }}</p>
+                                <p class="mb-1"><strong>Current usable stock on hand:</strong> {{ $fc['stock_on_hand'] }} {{ $item->unit }}</p>
+                                <hr class="my-2">
+                                <p class="mb-0"><strong>Recommended restock:</strong>
+                                    @if($fc['recommend_qty'] > 0)
+                                        <span class="text-danger fw-bold">{{ $fc['recommend_qty'] }} {{ $item->unit }}</span><br>
+                                        <span class="text-muted">= Forecast ({{ $fc['forecast_qty'] }}) &minus; On Hand ({{ $fc['stock_on_hand'] }})</span>
+                                    @else
+                                        <span class="text-success">None needed</span> &mdash; stock on hand covers forecasted demand.
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
                     </td>
                 </tr>
                 @endforeach

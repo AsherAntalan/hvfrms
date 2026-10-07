@@ -174,6 +174,9 @@
                         </td>
                         <td class="text-center">
                             <div class="d-flex gap-1 justify-content-center">
+                                <a href="{{ route('stock.history', $item->id) }}" class="btn btn-sm btn-outline-primary" title="Movement History">
+                                    <i class="bi bi-clock-history"></i>
+                                </a>
                                 <button class="btn btn-sm btn-outline-secondary" title="Edit"
                                         onclick="openModal(@js($item))">
                                     <i class="bi bi-pencil"></i>

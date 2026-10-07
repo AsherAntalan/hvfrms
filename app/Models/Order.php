@@ -15,7 +15,11 @@ class Order extends Model
         'ordered_by',
         'approved_by',
         'approved_at',
+        'prepared_by',
+        'prepared_at',
         'delivered_at',
+        'confirmed_by',
+        'confirmed_at',
         'settled_at',
         'remarks',
         'total_amount',
@@ -26,7 +30,9 @@ class Order extends Model
         return [
             'total_amount' => 'decimal:2',
             'approved_at' => 'datetime',
+            'prepared_at' => 'datetime',
             'delivered_at' => 'datetime',
+            'confirmed_at' => 'datetime',
             'settled_at' => 'datetime',
         ];
     }
@@ -49,5 +55,20 @@ class Order extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function preparedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'prepared_by');
+    }
+
+    public function confirmedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'confirmed_by');
+    }
+
+    public function discrepancies(): HasMany
+    {
+        return $this->hasMany(DeliveryDiscrepancy::class);
     }
 }

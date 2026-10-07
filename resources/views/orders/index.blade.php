@@ -31,6 +31,7 @@
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
+                <option value="preparing">Preparing</option>
                 <option value="delivering">Delivering</option>
                 <option value="delivered">Delivered</option>
                 <option value="settled">Settled</option>
@@ -66,6 +67,7 @@
                     $statusBadges = [
                         'pending'    => ['hv-badge-warning',  'bi-clock'],
                         'approved'   => ['hv-badge-info',     'bi-check-circle'],
+                        'preparing'  => ['hv-badge-info',     'bi-box-seam'],
                         'delivering' => ['hv-badge-info',     'bi-truck'],
                         'delivered'  => ['hv-badge-success',  'bi-box-seam-fill'],
                         'settled'    => ['hv-badge-success',  'bi-check-all'],
@@ -110,7 +112,12 @@
                                         <i class="bi bi-x-lg"></i>
                                     </button>
                                 @elseif($o->status === 'approved')
-                                    <button class="btn btn-sm btn-outline-info" title="Mark Delivering"
+                                    <button class="btn btn-sm btn-outline-info" title="Start Preparing"
+                                            onclick="updateStatus({{ $o->id }}, 'preparing')">
+                                        <i class="bi bi-box-seam"></i>
+                                    </button>
+                                @elseif($o->status === 'preparing')
+                                    <button class="btn btn-sm btn-outline-info" title="Ship / Mark Delivering"
                                             onclick="updateStatus({{ $o->id }}, 'delivering')">
                                         <i class="bi bi-truck"></i>
                                     </button>
@@ -125,13 +132,25 @@
                                         <i class="bi bi-check-all"></i>
                                     </button>
                                 @endif
+                            @elseif($isWarehouse)
+                                @if($o->status === 'approved')
+                                    <button class="btn btn-sm btn-outline-info" title="Start Preparing"
+                                            onclick="updateStatus({{ $o->id }}, 'preparing')">
+                                        <i class="bi bi-box-seam"></i>
+                                    </button>
+                                @elseif($o->status === 'preparing' && $isWA)
+                                    <button class="btn btn-sm btn-outline-info" title="Ship / Mark Delivering"
+                                            onclick="updateStatus({{ $o->id }}, 'delivering')">
+                                        <i class="bi bi-truck"></i>
+                                    </button>
+                                @endif
                             @elseif((int)$o->branch_id === $user->branch_id)
                                 @if($o->status === 'pending')
                                     <button class="btn btn-sm btn-outline-danger" title="Cancel my order"
                                             onclick="updateStatus({{ $o->id }}, 'cancelled')">
                                         <i class="bi bi-x-lg"></i>
                                     </button>
-                                @elseif($o->status === 'delivering')
+                                @elseif($o->status === 'delivering' && $isBM)
                                     <button class="btn btn-sm btn-success" title="Confirm Received"
                                             onclick="updateStatus({{ $o->id }}, 'delivered')">
                                         <i class="bi bi-box-seam-fill me-1"></i> Received
@@ -367,7 +386,7 @@ async function submitOrder(e) {
 }
 
 async function updateStatus(orderId, newStatus) {
-    const labels = { approved: 'approve', delivering: 'mark as delivering', delivered: 'mark as delivered (stock will be added to the branch)', settled: 'settle', cancelled: 'cancel' };
+    const labels = { approved: 'approve', preparing: 'start preparing', delivering: 'mark as delivering', delivered: 'mark as delivered (stock will be added to the branch)', settled: 'settle', cancelled: 'cancel' };
     if (!confirm('Are you sure you want to ' + (labels[newStatus] || newStatus) + ' this order?')) return;
 
     const data = new FormData();
@@ -398,7 +417,7 @@ async function viewOrder(orderId) {
         const json = await res.json();
         if (json.ok) {
             const o = json.order;
-            const statusColors = { pending: 'warning', approved: 'info', delivering: 'info', delivered: 'success', settled: 'success', cancelled: 'danger' };
+            const statusColors = { pending: 'warning', approved: 'info', preparing: 'info', delivering: 'info', delivered: 'success', settled: 'success', cancelled: 'danger' };
             let html = '<div class="row mb-3"><div class="col-md-6">';
             html += '<p class="mb-1"><strong>Order #:</strong> ' + o.order_number + '</p>';
             html += '<p class="mb-1"><strong>Branch:</strong> ' + o.branch_name + '</p>';
@@ -408,19 +427,41 @@ async function viewOrder(orderId) {
             html += '<p class="mb-1"><strong>Status:</strong> <span class="hv-badge hv-badge-' + (statusColors[o.status] || 'info') + '">' + o.status.charAt(0).toUpperCase() + o.status.slice(1) + '</span></p>';
             if (o.approved_by_name) html += '<p class="mb-1"><strong>Approved by:</strong> ' + o.approved_by_name + '</p>';
             if (o.approved_at) html += '<p class="mb-1"><strong>Approved at:</strong> ' + o.approved_at + '</p>';
+            if (o.prepared_by_name) html += '<p class="mb-1"><strong>Prepared by:</strong> ' + o.prepared_by_name + '</p>';
+            if (o.prepared_at) html += '<p class="mb-1"><strong>Prepared at:</strong> ' + o.prepared_at + '</p>';
             if (o.delivered_at) html += '<p class="mb-1"><strong>Delivered at:</strong> ' + o.delivered_at + '</p>';
+            if (o.confirmed_by_name) html += '<p class="mb-1"><strong>Confirmed by:</strong> ' + o.confirmed_by_name + '</p>';
             if (o.settled_at) html += '<p class="mb-1"><strong>Settled at:</strong> ' + o.settled_at + '</p>';
             if (o.remarks) html += '<p class="mb-1"><strong>Remarks:</strong> ' + o.remarks + '</p>';
             html += '</div></div>';
-            html += '<table class="table table-sm align-middle mb-0"><thead><tr><th>Product</th><th class="text-center">Qty</th><th class="text-end">Price</th><th class="text-end">Subtotal</th></tr></thead><tbody>';
+            var hasReceived = o.items.some(function(i) { return i.received_quantity !== null; });
+            var cols = hasReceived ? 5 : 4;
+            html += '<table class="table table-sm align-middle mb-0"><thead><tr><th>Product</th><th class="text-center">Qty</th>';
+            if (hasReceived) html += '<th class="text-center">Received</th>';
+            html += '<th class="text-end">Price</th><th class="text-end">Subtotal</th></tr></thead><tbody>';
             o.items.forEach(function(item) {
                 html += '<tr><td>' + item.item_name + ' <span class="text-muted small">(' + item.unit + ')</span></td>';
                 html += '<td class="text-center">' + item.quantity + '</td>';
+                if (hasReceived) {
+                    var rcv = item.received_quantity !== null ? item.received_quantity : '—';
+                    var cls = (item.received_quantity !== null && item.received_quantity != item.quantity) ? ' class="text-danger fw-semibold"' : '';
+                    html += '<td class="text-center"' + cls + '>' + rcv + '</td>';
+                }
                 html += '<td class="text-end">&#8369;' + parseFloat(item.unit_price).toFixed(2) + '</td>';
                 html += '<td class="text-end fw-semibold">&#8369;' + parseFloat(item.subtotal).toFixed(2) + '</td></tr>';
             });
-            html += '</tbody><tfoot><tr><td colspan="3" class="text-end fw-bold">Total:</td>';
+            html += '</tbody><tfoot><tr><td colspan="' + (cols - 1) + '" class="text-end fw-bold">Total:</td>';
             html += '<td class="text-end fw-bold">&#8369;' + parseFloat(o.total_amount).toFixed(2) + '</td></tr></tfoot></table>';
+
+            if (o.discrepancies && o.discrepancies.length > 0) {
+                html += '<div class="mt-3"><h6 class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Delivery Discrepancies</h6>';
+                html += '<table class="table table-sm table-bordered mb-0"><thead><tr><th>Item</th><th class="text-center">Expected</th><th class="text-center">Received</th><th>Reason</th><th>Remarks</th></tr></thead><tbody>';
+                o.discrepancies.forEach(function(d) {
+                    html += '<tr><td>' + d.item_name + '</td><td class="text-center">' + d.expected_quantity + '</td><td class="text-center text-danger fw-semibold">' + d.received_quantity + '</td><td>' + d.reason + '</td><td>' + (d.remarks || '—') + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+
             body.innerHTML = html;
         } else {
             body.innerHTML = '<div class="text-danger py-3">' + (json.error || 'Failed to load.') + '</div>';

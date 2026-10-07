@@ -37,6 +37,16 @@
     </form>
 </div>
 
+<!-- Export buttons -->
+<div class="d-flex justify-content-end gap-2 mb-3 no-print">
+    <a id="csvExportBtn" href="#" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-filetype-csv me-1"></i> Export CSV
+    </a>
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print
+    </button>
+</div>
+
 <!-- Report Tabs -->
 <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item">
@@ -229,6 +239,7 @@
                         <th class="text-center">Total</th>
                         <th class="text-center">Pending</th>
                         <th class="text-center">Approved</th>
+                        <th class="text-center">Preparing</th>
                         <th class="text-center">Delivering</th>
                         <th class="text-center">Delivered</th>
                         <th class="text-center">Settled</th>
@@ -238,7 +249,7 @@
                 </thead>
                 <tbody>
                 @if(empty($orderRows))
-                    <tr><td colspan="9" class="text-center text-muted py-4">No orders in this period.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-4">No orders in this period.</td></tr>
                 @else
                     @foreach($orderRows as $or)
                     <tr>
@@ -246,6 +257,7 @@
                         <td class="text-center fw-bold">{{ $or->total_orders }}</td>
                         <td class="text-center">{{ $or->pending_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->approved_count ?: '&mdash;' }}</td>
+                        <td class="text-center">{{ $or->preparing_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->delivering_count ?: '&mdash;' }}</td>
                         <td class="text-center">{{ $or->delivered_count ?: '&mdash;' }}</td>
                         <td class="text-center text-success fw-semibold">{{ $or->settled_count ?: '&mdash;' }}</td>
@@ -375,5 +387,36 @@
 </div>
 
 </div><!-- /tab-content -->
+
+@push('styles')
+<style>
+@media print {
+    .hv-sidebar, .hv-topbar, .no-print, .nav-tabs, form, .alert { display: none !important; }
+    .tab-pane { display: block !important; opacity: 1 !important; }
+    .tab-pane:not(.active) { display: none !important; }
+    .hv-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+    body { font-size: 12px; }
+}
+</style>
+@endpush
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var typeMap = {tabStock:'stock', tabMovement:'movements', tabOrders:'orders', tabExpiry:'expiry'};
+    function updateCsvLink() {
+        var active = document.querySelector('.tab-pane.active');
+        var type = active ? (typeMap[active.id] || 'stock') : 'stock';
+        var params = new URLSearchParams(window.location.search);
+        params.set('type', type);
+        document.getElementById('csvExportBtn').href = "{{ route('reports.export') }}?" + params.toString();
+    }
+    updateCsvLink();
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', updateCsvLink);
+    });
+});
+</script>
+@endpush
 
 @endsection
