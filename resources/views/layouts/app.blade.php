@@ -108,7 +108,7 @@
         </a>
 
         {{-- Warehouse ▾ --}}
-        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*','qr*'); @endphp
+        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*'); @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="bi bi-building hv-nav-icon"></i>
@@ -127,10 +127,6 @@
                 <a href="{{ route('stock') }}"
                    class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
                     <span>Stock Management</span>
-                </a>
-                <a href="{{ route('qr') }}"
-                   class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-                    <span>QR Management</span>
                 </a>
             </div>
         </div>
@@ -209,7 +205,7 @@
         {{-- ── Inventory ▾ ──────────────────────────────── --}}
         @if($canInv)
         @php
-            $invActive = request()->routeIs('inventory*','stock*','warehouse*','qr*');
+            $invActive = request()->routeIs('inventory*','stock*','warehouse*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $invActive ? 'active' : '' }}" onclick="toggleNav(this)">
@@ -218,12 +214,10 @@
                 <i class="bi {{ $invActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $invActive ? 'open' : '' }}">
-                @if($isFranchiseBM)
                 <a href="{{ route('inventory') }}"
                    class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
                     <span>Inventory</span>
                 </a>
-                @endif
                 <a href="{{ route('stock') }}"
                    class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
                     <span>Stock Management</span>
@@ -234,10 +228,6 @@
                     <span>Warehouse</span>
                 </a>
                 @endif
-                <a href="{{ route('qr') }}"
-                   class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-                    <span>QR / Stock Scanning</span>
-                </a>
             </div>
         </div>
         @endif
