@@ -8,6 +8,7 @@
     $statusMap = [
         'pending'    => ['hv-badge-warning',  'Pending'],
         'approved'   => ['hv-badge-info',     'Approved'],
+        'preparing'  => ['hv-badge-info',     'Preparing'],
         'delivering' => ['hv-badge-info',     'Delivering'],
         'delivered'  => ['hv-badge-success',  'Delivered'],
         'settled'    => ['hv-badge-success',  'Settled'],
@@ -45,7 +46,7 @@
         </a>
     </div>
 
-    {{-- Deliveries --}}
+    {{-- Deliveries / In Transit --}}
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
             <div class="hv-stat-icon" style="background:#E3EEF5;color:#2C6E8F;">
@@ -58,10 +59,25 @@
         </a>
     </div>
 
-    {{-- Low Stock --}}
-    @if($user->canManageInventory())
+    {{-- Preparing (warehouse roles) --}}
+    @if($isWarehouse || $isOwner)
     <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('reports') }}" class="hv-stat hv-stat-link">
+        <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
+            <div class="hv-stat-icon" style="background:#E8F5E9;color:#2E7D32;">
+                <i class="bi bi-box-seam"></i>
+            </div>
+            <div>
+                <div class="hv-stat-value">{{ $stats['preparing'] }}</div>
+                <div class="hv-stat-label">Preparing</div>
+            </div>
+        </a>
+    </div>
+    @endif
+
+    {{-- Low Stock --}}
+    @if($user->canManageInventory() || $isWarehouse)
+    <div class="col-6 col-md-4 col-xl-2">
+        <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="hv-stat hv-stat-link">
             <div class="hv-stat-icon" style="background:#FBEED3;color:#9A6B00;">
                 <i class="bi bi-exclamation-triangle"></i>
             </div>
@@ -73,8 +89,23 @@
     </div>
     @endif
 
+    {{-- Expired (warehouse/owner) --}}
+    @if(($isWarehouse || $isOwner) && isset($stats['expired']) && $stats['expired'] > 0)
+    <div class="col-6 col-md-4 col-xl-2">
+        <a href="{{ route('warehouse') }}" class="hv-stat hv-stat-link">
+            <div class="hv-stat-icon" style="background:#F6DED9;color:var(--danger);">
+                <i class="bi bi-calendar-x"></i>
+            </div>
+            <div>
+                <div class="hv-stat-value">{{ $stats['expired'] }}</div>
+                <div class="hv-stat-label">Expired</div>
+            </div>
+        </a>
+    </div>
+    @endif
+
     {{-- Alerts --}}
-    @if($user->canManageInventory())
+    @if($user->canManageInventory() || $isWarehouse)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('alerts') }}" class="hv-stat hv-stat-link">
             <div class="hv-stat-icon" style="background:#F6DED9;color:var(--danger);">
@@ -89,13 +120,14 @@
     @endif
 
     {{-- Branches --}}
+    @unless($isWS)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ $isOwner ? route('branches') : '#' }}" class="hv-stat hv-stat-link">
             <div class="hv-stat-icon" style="background:#E3EEF5;color:#2C6E8F;">
                 <i class="bi bi-building"></i>
             </div>
             <div>
-                @if($isBranchScoped)
+                @if($isBranchScoped && !$isWarehouse)
                     <div class="hv-stat-value" style="font-size:1.1rem;">{{ $branchName }}</div>
                     <div class="hv-stat-label">My Branch</div>
                 @else
@@ -105,6 +137,7 @@
             </div>
         </a>
     </div>
+    @endunless
 
     {{-- Users (Owner only) --}}
     @if($isOwner)
@@ -123,17 +156,23 @@
 </div>
 
 {{-- ═══ NEEDS YOUR ATTENTION ═════════════════════════════ --}}
-@if($isOwner || $user->canManageInventory())
+@if($isOwner || $user->canManageInventory() || $isWarehouse)
 @php
     $attention = [];
-    if ($stats['pending'] > 0)
+    if ($stats['pending'] > 0 && ($isOwner || $isWA))
         $attention[] = ['icon' => 'bi-hourglass-split', 'text' => $stats['pending'] . ' order' . ($stats['pending'] > 1 ? 's' : '') . ' waiting for approval', 'link' => route('orders'), 'color' => '#856404'];
+    if (($stats['approved'] ?? 0) > 0 && ($isWarehouse || $isOwner))
+        $attention[] = ['icon' => 'bi-box-arrow-in-down', 'text' => $stats['approved'] . ' approved order' . ($stats['approved'] > 1 ? 's' : '') . ' to prepare', 'link' => route('delivery'), 'color' => '#2E7D32'];
+    if (($stats['preparing'] ?? 0) > 0 && ($isWarehouse || $isOwner))
+        $attention[] = ['icon' => 'bi-box-seam', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('delivery'), 'color' => '#2C6E8F'];
     if ($stats['delivering'] > 0)
         $attention[] = ['icon' => 'bi-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('delivery'), 'color' => '#2C6E8F'];
     if ($stats['low_stock'] > 0)
-        $attention[] = ['icon' => 'bi-exclamation-triangle', 'text' => $stats['low_stock'] . ' low-stock product' . ($stats['low_stock'] > 1 ? 's' : ''), 'link' => route('reports'), 'color' => '#9A6B00'];
+        $attention[] = ['icon' => 'bi-exclamation-triangle', 'text' => $stats['low_stock'] . ' low-stock product' . ($stats['low_stock'] > 1 ? 's' : ''), 'link' => $isWarehouse ? route('warehouse') : route('reports'), 'color' => '#9A6B00'];
     if ($stats['alerts_critical'] > 0)
         $attention[] = ['icon' => 'bi-exclamation-circle', 'text' => $stats['alerts_critical'] . ' critical alert' . ($stats['alerts_critical'] > 1 ? 's' : ''), 'link' => route('alerts'), 'color' => 'var(--danger)'];
+    if (isset($stats['expired']) && $stats['expired'] > 0)
+        $attention[] = ['icon' => 'bi-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse'), 'color' => 'var(--danger)'];
     if ($isOwner && isset($stats['inactive_branches']) && $stats['inactive_branches'] > 0)
         $attention[] = ['icon' => 'bi-building-x', 'text' => $stats['inactive_branches'] . ' inactive branch' . ($stats['inactive_branches'] > 1 ? 'es' : ''), 'link' => route('branches'), 'color' => 'var(--muted)'];
 @endphp
@@ -158,7 +197,7 @@
 
 {{-- ═══ MAIN CONTENT ROW ════════════════════════════════ --}}
 <div class="row g-3">
-    {{-- Left column: Orders, Delivery, Low Stock --}}
+    {{-- Left column: Orders, Low Stock --}}
     <div class="col-lg-8">
 
         {{-- Recent Orders --}}
@@ -204,16 +243,18 @@
             @endif
         </div>
 
-        {{-- Low Stock (management only) --}}
-        @if($user->canManageInventory() && !empty($lowStock))
+        {{-- Low Stock --}}
+        @if(($user->canManageInventory() || $isWarehouse) && !empty($lowStock))
         <div class="hv-card p-3 mt-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 style="color:var(--maroon);font-weight:700;" class="mb-0">
                     <i class="bi bi-exclamation-triangle me-1"></i> Low Stock Items
                 </h6>
-                <a href="{{ route('reports') }}" class="btn btn-sm btn-outline-secondary">
+                @if(!$isWS)
+                <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="btn btn-sm btn-outline-secondary">
                     Full Report <i class="bi bi-arrow-right ms-1"></i>
                 </a>
+                @endif
             </div>
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0" style="font-size:13px;">
@@ -251,46 +292,86 @@
                 <i class="bi bi-lightning me-1"></i> Quick Actions
             </h6>
             <div class="d-grid gap-2">
-                <a href="{{ route('orders') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-cart-plus me-2"></i> New Order
-                </a>
-                @if($user->canManageInventory())
-                <a href="{{ route('stock') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-box-arrow-in-down me-2"></i> Stock Management
-                </a>
-                @endif
-                <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-truck me-2"></i> Manage Deliveries
-                </a>
-                @if($isOwner)
-                <a href="{{ route('users') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-person-plus me-2"></i> Manage Users
-                </a>
-                <a href="{{ route('branches') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-building me-2"></i> Manage Branches
-                </a>
-                @endif
-                @if($user->canManageInventory())
-                <a href="{{ route('forecast') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-graph-up-arrow me-2"></i> Forecast & DSS
-                </a>
-                <a href="{{ route('reports') }}" class="btn btn-sm btn-outline-secondary text-start">
-                    <i class="bi bi-file-earmark-bar-graph me-2"></i> Reports
-                </a>
+                @if($isWS)
+                    <a href="{{ route('warehouse') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Receive Stock
+                    </a>
+                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-qr-code-scan me-2"></i> Scan QR
+                    </a>
+                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-seam me-2"></i> Orders to Prepare
+                    </a>
+                @elseif($isWA)
+                    <a href="{{ route('warehouse') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Receive Stock
+                    </a>
+                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-seam me-2"></i> Prepare Deliveries
+                    </a>
+                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-qr-code-scan me-2"></i> QR Management
+                    </a>
+                    <a href="{{ route('alerts') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-bell me-2"></i> View Alerts
+                    </a>
+                @elseif($isBM)
+                    <a href="{{ route('ordering') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-cart-plus me-2"></i> Order Supplies
+                    </a>
+                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-truck me-2"></i> Incoming Deliveries
+                    </a>
+                    <a href="{{ route('inventory') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-seam me-2"></i> My Inventory
+                    </a>
+                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-qr-code-scan me-2"></i> QR / Scanning
+                    </a>
+                @else
+                    <a href="{{ route('orders') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-cart-plus me-2"></i> New Order
+                    </a>
+                    @if($user->canManageInventory())
+                    <a href="{{ route('stock') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-box-arrow-in-down me-2"></i> Stock Management
+                    </a>
+                    @endif
+                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-truck me-2"></i> Manage Deliveries
+                    </a>
+                    @if($isOwner)
+                    <a href="{{ route('users') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-person-plus me-2"></i> Manage Users
+                    </a>
+                    <a href="{{ route('branches') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-building me-2"></i> Manage Branches
+                    </a>
+                    @endif
+                    @if($user->canManageInventory())
+                    <a href="{{ route('forecast') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-graph-up-arrow me-2"></i> Forecast & DSS
+                    </a>
+                    <a href="{{ route('reports') }}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Reports
+                    </a>
+                    @endif
                 @endif
             </div>
         </div>
 
         {{-- Active Alerts --}}
-        @if($user->canManageInventory())
+        @if($user->canManageInventory() || $isWarehouse)
         <div class="hv-card p-3">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 style="color:var(--maroon);font-weight:700;" class="mb-0">
                     <i class="bi bi-bell me-1"></i> Active Alerts
                 </h6>
+                @if(!$isWS)
                 <a href="{{ route('alerts') }}" class="btn btn-sm btn-outline-secondary">
                     All <i class="bi bi-arrow-right ms-1"></i>
                 </a>
+                @endif
             </div>
             @if(empty($activeAlerts) || (is_countable($activeAlerts) && count($activeAlerts) === 0) || ($activeAlerts instanceof \Illuminate\Support\Collection && $activeAlerts->isEmpty()))
                 <div class="text-center text-muted small py-3">

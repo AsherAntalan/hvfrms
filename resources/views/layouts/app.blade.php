@@ -38,9 +38,15 @@
         @endphp
 
         {{-- ══════════════════════════════════════════════ --}}
-        {{-- WAREHOUSE STAFF — minimal operational nav     --}}
+        {{-- WAREHOUSE STAFF — operational nav               --}}
         {{-- ══════════════════════════════════════════════ --}}
         @if($isWS)
+
+        {{-- Dashboard --}}
+        <a href="{{ route('dashboard') }}"
+           class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+        </a>
 
         {{-- Warehouse ▾ --}}
         @php $whActive = request()->routeIs('warehouse*','qr*'); @endphp
@@ -53,11 +59,31 @@
             <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
                 <a href="{{ route('warehouse') }}"
                    class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
-                    <span>Stock / Receive</span>
+                    <span>Receive Stock</span>
                 </a>
                 <a href="{{ route('qr') }}"
                    class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
                     <span>QR Scanner</span>
+                </a>
+            </div>
+        </div>
+
+        {{-- Delivery ▾ --}}
+        @php $dlActive = request()->routeIs('orders*','delivery*'); @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="bi bi-truck hv-nav-icon"></i>
+                <span>Delivery</span>
+                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
+                <a href="{{ route('delivery') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
+                    <span>Prepare Deliveries</span>
+                </a>
+                <a href="{{ route('delivery.history') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
+                    <span>Delivery History</span>
                 </a>
             </div>
         </div>
@@ -71,7 +97,7 @@
         </a>
 
         {{-- ══════════════════════════════════════════════ --}}
-        {{-- WAREHOUSE ADMIN — full warehouse nav          --}}
+        {{-- WAREHOUSE ADMIN — full warehouse nav            --}}
         {{-- ══════════════════════════════════════════════ --}}
         @elseif($isWA)
 
@@ -125,7 +151,7 @@
                 </a>
                 <a href="{{ route('delivery') }}"
                    class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
-                    <span>Active Deliveries</span>
+                    <span>Prepare Deliveries</span>
                 </a>
                 <a href="{{ route('delivery.history') }}"
                    class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
@@ -152,17 +178,33 @@
         </a>
 
         {{-- ══════════════════════════════════════════════ --}}
-        {{-- OWNER / SUPER_ADMIN / BRANCH_MANAGER nav      --}}
+        {{-- BRANCH STAFF — minimal branch nav               --}}
+        {{-- ══════════════════════════════════════════════ --}}
+        @elseif($isBS)
+
+        <a href="{{ route('qr') }}"
+           class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
+            <i class="bi bi-qr-code-scan"></i> <span>QR Scan</span>
+        </a>
+
+        <hr class="hv-sidebar-divider">
+
+        {{-- My Profile --}}
+        <a href="{{ route('profile') }}"
+           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
+            <i class="bi bi-person-circle"></i> <span>My Profile</span>
+        </a>
+
+        {{-- ══════════════════════════════════════════════ --}}
+        {{-- OWNER / SUPER_ADMIN / BRANCH_MANAGER nav        --}}
         {{-- ══════════════════════════════════════════════ --}}
         @else
 
         {{-- Dashboard --}}
-        @unless($isBS)
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
             <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
         </a>
-        @endunless
 
         {{-- ── Inventory ▾ ──────────────────────────────── --}}
         @if($canInv)
@@ -198,15 +240,9 @@
                 </a>
             </div>
         </div>
-        @elseif($isBS)
-        <a href="{{ route('qr') }}"
-           class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-            <i class="bi bi-qr-code-scan"></i> <span>Scan Stock In/Out</span>
-        </a>
         @endif
 
-        {{-- ── Sales & Orders ▾ ──────────────────────────── --}}
-        @unless($isBS)
+        {{-- ── Orders ▾ ─────────────────────────────────── --}}
         @php
             $odActive = request()->routeIs('orders*','ordering*');
         @endphp
@@ -252,7 +288,6 @@
                 </a>
             </div>
         </div>
-        @endunless
 
         <hr class="hv-sidebar-divider">
 

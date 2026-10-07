@@ -49,9 +49,6 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     // Root redirect — role-aware landing page
     Route::get('/', function () {
         $user = auth()->user();
-        if ($user?->isWarehouseStaff()) {
-            return redirect('/warehouse');
-        }
         if ($user?->isBranchStaff()) {
             return redirect('/qr');
         }
@@ -59,9 +56,9 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     });
 
     // ---------------------------------------------------------------
-    // Dashboard — all management roles + warehouse_admin
+    // Dashboard — all management roles + warehouse roles
     // ---------------------------------------------------------------
-    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin')->group(function () {
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin,warehouse_staff')->group(function () {
         Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
             ->name('dashboard');
     });
@@ -82,12 +79,6 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
             ->name('stock');
         Route::post('stock/api', [\App\Http\Controllers\StockController::class, 'api'])
             ->name('stock.api');
-
-        // Orders
-        Route::get('orders', [\App\Http\Controllers\OrderController::class, 'index'])
-            ->name('orders');
-        Route::post('orders/api', [\App\Http\Controllers\OrderController::class, 'api'])
-            ->name('orders.api');
 
         // Ordering (branch managers only)
         Route::get('ordering', [\App\Http\Controllers\OrderingController::class, 'index'])
@@ -114,8 +105,17 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         // Reports
         Route::get('reports', [\App\Http\Controllers\ReportController::class, 'index'])
             ->name('reports');
+    });
 
-        // Delivery
+    // ---------------------------------------------------------------
+    // Orders & Delivery — accessible to warehouse roles too
+    // ---------------------------------------------------------------
+    Route::middleware('role:super_admin,owner,branch_manager,warehouse_admin,warehouse_staff')->group(function () {
+        Route::get('orders', [\App\Http\Controllers\OrderController::class, 'index'])
+            ->name('orders');
+        Route::post('orders/api', [\App\Http\Controllers\OrderController::class, 'api'])
+            ->name('orders.api');
+
         Route::get('delivery', [\App\Http\Controllers\DeliveryController::class, 'index'])
             ->name('delivery');
         Route::get('delivery/history', [\App\Http\Controllers\DeliveryController::class, 'history'])
