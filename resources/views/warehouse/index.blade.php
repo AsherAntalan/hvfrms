@@ -11,11 +11,13 @@
             <i class="bi bi-printer me-1"></i> Print Selected QR
         </button>
         <button class="btn btn-maroon btn-sm" onclick="openCreateModal()">
-            <i class="bi bi-plus-lg me-1"></i> Create Stock
+            <i class="bi bi-plus-lg me-1"></i> Receive Stock
         </button>
+        @if($canManageProducts)
         <button class="btn btn-outline-maroon btn-sm" onclick="openProductModal()">
             <i class="bi bi-plus-lg me-1"></i> Add Product
         </button>
+        @endif
     </div>
 </div>
 
@@ -61,16 +63,26 @@
             <span class="badge bg-danger ms-1">{{ count($expiredBatches) }}</span>
         </button>
     </li>
+    @unless($isWarehouseStaff)
     <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabOrders" type="button">
             <i class="bi bi-cart me-1"></i> Pending Orders
             <span class="badge bg-warning text-dark ms-1">{{ count($pendingOrders) }}</span>
         </button>
     </li>
+    @endunless
+    @if($canManageProducts)
     <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabProducts" type="button">
             <i class="bi bi-box-seam me-1"></i> Products
             <span class="badge bg-secondary ms-1">{{ count($allItems) }}</span>
+        </button>
+    </li>
+    @endif
+    <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDisposal" type="button">
+            <i class="bi bi-recycle me-1"></i> Disposal Records
+            <span class="badge bg-secondary ms-1">{{ count($disposalRecords) }}</span>
         </button>
     </li>
 </ul>
@@ -147,23 +159,27 @@
                             <td class="text-center"><span class="hv-badge hv-badge-success">Active</span></td>
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center">
-                                    <button class="btn btn-sm btn-outline-secondary" title="Edit"
-                                            onclick="openEditModal({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }}, '{{ $b->expiry_date ?? '' }}')">
+                                    @if($canEditBatches)
+                                    <button class="btn btn-sm btn-outline-secondary" title="Adjust Quantity"
+                                            onclick="openAdjustModal({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
                                         <i class="bi bi-pencil"></i>
                                     </button>
+                                    @endif
                                     <button class="btn btn-sm btn-outline-secondary" title="Print QR"
                                             onclick="printSingleQR('{{ e($b->qr_code) }}', '{{ e($b->item_name) }}', '{{ e($b->unit) }}')">
                                         <i class="bi bi-printer"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" title="Delete"
-                                            onclick="deleteBatch({{ $b->id }}, '{{ e($b->item_name) }}')">
-                                        <i class="bi bi-trash"></i>
+                                    @if($canManageProducts)
+                                    <button class="btn btn-sm btn-outline-danger" title="Void Batch"
+                                            onclick="voidBatch({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
+                                        <i class="bi bi-x-octagon"></i>
                                     </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="text-center text-muted py-4">No active stock. Click "Create Stock" to add.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">No active stock. Click "Receive Stock" to add.</td></tr>
                     @endforelse
                     </tbody>
                 </table>
@@ -171,7 +187,7 @@
         </div>
     </div>
 
-    {{-- ═══ EXPIRED STOCK (ARCHIVE) ═══════════════════════ --}}
+    {{-- ═══ EXPIRED STOCK ═══════════════════════════════════ --}}
     <div class="tab-pane fade" id="tabExpired">
         <div class="hv-card p-0" style="border-top-left-radius:0;">
             <div class="p-3 border-bottom">
@@ -211,10 +227,18 @@
                             </td>
                             <td class="small text-muted">{{ $b->received_at ? date('M j, Y', strtotime($b->received_at)) : '—' }}</td>
                             <td class="text-center">
-                                <button class="btn btn-sm btn-outline-danger" title="Delete expired batch"
-                                        onclick="deleteBatch({{ $b->id }}, '{{ e($b->item_name) }}')">
-                                    <i class="bi bi-trash me-1"></i> Delete
-                                </button>
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <button class="btn btn-sm btn-warning" title="Dispose expired batch"
+                                            onclick="disposeBatch({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
+                                        <i class="bi bi-recycle me-1"></i> Dispose
+                                    </button>
+                                    @if($canManageProducts)
+                                    <button class="btn btn-sm btn-outline-danger" title="Void expired batch"
+                                            onclick="voidBatch({{ $b->id }}, '{{ e($b->item_name) }}', {{ $b->quantity_left }})">
+                                        <i class="bi bi-x-octagon"></i>
+                                    </button>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty
@@ -227,6 +251,7 @@
     </div>
 
     {{-- ═══ PENDING ORDERS ════════════════════════════════ --}}
+    @unless($isWarehouseStaff)
     <div class="tab-pane fade" id="tabOrders">
         <div class="hv-card p-0" style="border-top-left-radius:0;">
             <div class="table-responsive">
@@ -240,7 +265,9 @@
                             <th class="text-end">Total</th>
                             <th>Date</th>
                             <th class="text-center">Status</th>
+                            @if($canFulfillOrders)
                             <th class="text-center">Actions</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -271,6 +298,7 @@
                                 @endphp
                                 <span class="hv-badge {{ $statusBadge }}">{{ ucfirst($o->status) }}</span>
                             </td>
+                            @if($canFulfillOrders)
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center flex-wrap">
                                     @if($o->status === 'pending')
@@ -291,17 +319,20 @@
                                     @endif
                                 </div>
                             </td>
+                            @endif
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="text-center text-muted py-4">No pending orders from branches.</td></tr>
+                        <tr><td colspan="{{ $canFulfillOrders ? 8 : 7 }}" class="text-center text-muted py-4">No pending orders from branches.</td></tr>
                     @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+    @endunless
 
     {{-- ═══ PRODUCTS ═════════════════════════════════════════ --}}
+    @if($canManageProducts)
     <div class="tab-pane fade" id="tabProducts">
         <div class="hv-card p-0" style="border-top-left-radius:0;">
             <div class="p-3 border-bottom">
@@ -439,6 +470,62 @@
             </div>
         </div>
     </div>
+    @endif
+
+    {{-- ═══ DISPOSAL RECORDS ═══════════════════════════════ --}}
+    <div class="tab-pane fade" id="tabDisposal">
+        <div class="hv-card p-0" style="border-top-left-radius:0;">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Product</th>
+                            <th>Type</th>
+                            <th class="text-center">Qty</th>
+                            <th>Reason</th>
+                            <th>Remarks</th>
+                            <th>Batch QR</th>
+                            <th>Batch Expiry</th>
+                            <th>Performed By</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($disposalRecords as $d)
+                        <tr>
+                            <td class="ps-3 fw-semibold">{{ e($d->item_name) }}</td>
+                            <td>
+                                @php
+                                    $typeBadge = match($d->type) {
+                                        'expired' => 'hv-badge-danger',
+                                        'damaged' => 'hv-badge-warning',
+                                        default => 'hv-badge-secondary',
+                                    };
+                                @endphp
+                                <span class="hv-badge {{ $typeBadge }}">{{ ucfirst($d->type) }}</span>
+                            </td>
+                            <td class="text-center fw-bold text-danger">{{ abs($d->quantity) }} <span class="text-muted small fw-normal">{{ $d->unit }}</span></td>
+                            <td class="small">{{ e($d->reason) }}</td>
+                            <td class="small text-muted">{{ $d->remarks ? e($d->remarks) : '—' }}</td>
+                            <td><code class="small">{{ $d->batch_qr ?? '—' }}</code></td>
+                            <td class="small">
+                                @if($d->batch_expiry)
+                                    {{ date('M j, Y', strtotime($d->batch_expiry)) }}
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="small">{{ $d->performed_by_name ?? '—' }}</td>
+                            <td class="small text-muted">{{ \Carbon\Carbon::parse($d->created_at)->format('M j, g:i A') }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="9" class="text-center text-muted py-4">No disposal records yet.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
 </div>
 
@@ -448,7 +535,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-plus-circle me-1"></i> Create Stock
+                    <i class="bi bi-plus-circle me-1"></i> Receive Stock
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -487,7 +574,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-maroon" id="btnCreate" onclick="submitCreate()">
-                        <i class="bi bi-check-lg me-1"></i> Create Stock
+                        <i class="bi bi-check-lg me-1"></i> Receive Stock
                     </button>
                 </div>
             </form>
@@ -495,40 +582,59 @@
     </div>
 </div>
 
-{{-- ═══ EDIT BATCH MODAL ══════════════════════════════════ --}}
-<div class="modal fade" id="editModal" tabindex="-1">
+{{-- ═══ STOCK ADJUSTMENT MODAL ═════════════════════════════ --}}
+@if($canEditBatches)
+<div class="modal fade" id="adjustModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-pencil me-1"></i> Edit Batch
+                    <i class="bi bi-sliders me-1"></i> Adjust Stock Quantity
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="eBatchId">
-                <div class="mb-2 fw-semibold" id="eItemName" style="color:var(--maroon);"></div>
+                <input type="hidden" id="aBatchId">
+                <div class="mb-2 fw-semibold" id="aItemName" style="color:var(--maroon);"></div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Quantity Left</label>
-                    <input type="number" class="form-control" id="eQty" min="0">
+                    <label class="form-label fw-semibold">Current Quantity</label>
+                    <input type="number" class="form-control" id="aCurrentQty" readonly style="background:#f5f5f5;">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Expiry Date</label>
-                    <input type="date" class="form-control" id="eExpiry">
-                    <small class="text-muted">Changing expiry will regenerate the batch QR code.</small>
+                    <label class="form-label fw-semibold">New Quantity <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="aNewQty" min="0" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Reason <span class="text-danger">*</span></label>
+                    <select class="form-select" id="aReason" required>
+                        <option value="">— Select reason —</option>
+                        <option value="Physical Count Correction">Physical Count Correction</option>
+                        <option value="Damaged">Damaged</option>
+                        <option value="Spoilage">Spoilage</option>
+                        <option value="Expired">Expired</option>
+                        <option value="Missing">Missing</option>
+                        <option value="Encoding Error">Encoding Error</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Remarks</label>
+                    <textarea class="form-control" id="aRemarks" rows="2" placeholder="Optional notes..."></textarea>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-maroon" id="btnEdit" onclick="submitEdit()">
-                    <i class="bi bi-check-lg me-1"></i> Save Changes
+                <button type="button" class="btn btn-maroon" id="btnAdjust" onclick="submitAdjust()">
+                    <i class="bi bi-check-lg me-1"></i> Submit Adjustment
                 </button>
             </div>
         </div>
     </div>
 </div>
+@endif
 
 {{-- ═══ ADD / EDIT PRODUCT MODAL ══════════════════════════ --}}
+@if($canManageProducts)
 <div class="modal fade" id="productModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -616,6 +722,7 @@
         </div>
     </div>
 </div>
+@endif
 
 @endsection
 
@@ -624,11 +731,14 @@
 const API  = '{{ route("warehouse.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 
-let createModal, editModal, productModal;
+let createModal;
+@if($canEditBatches) let adjustModal; @endif
+@if($canManageProducts) let productModal; @endif
+
 document.addEventListener('DOMContentLoaded', function () {
     createModal  = new bootstrap.Modal(document.getElementById('createModal'));
-    editModal    = new bootstrap.Modal(document.getElementById('editModal'));
-    productModal = new bootstrap.Modal(document.getElementById('productModal'));
+    @if($canEditBatches) adjustModal = new bootstrap.Modal(document.getElementById('adjustModal')); @endif
+    @if($canManageProducts) productModal = new bootstrap.Modal(document.getElementById('productModal')); @endif
 
     document.getElementById('cItem').addEventListener('change', function () {
         var opt = this.options[this.selectedIndex];
@@ -701,47 +811,68 @@ async function submitCreate() {
         if (r.ok) { createModal.hide(); location.reload(); }
         else { alert(r.error || 'Error creating stock.'); }
     } catch (e) { alert('Network error.'); }
-    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Create Stock'; }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Receive Stock'; }
 }
 
-// -- Edit Batch --
-function openEditModal(batchId, itemName, qty, expiry) {
-    document.getElementById('eBatchId').value = batchId;
-    document.getElementById('eItemName').textContent = itemName;
-    document.getElementById('eQty').value = qty;
-    document.getElementById('eExpiry').value = expiry || '';
-    editModal.show();
+// -- Adjust Batch --
+@if($canEditBatches)
+function openAdjustModal(batchId, itemName, qty) {
+    document.getElementById('aBatchId').value = batchId;
+    document.getElementById('aItemName').textContent = itemName;
+    document.getElementById('aCurrentQty').value = qty;
+    document.getElementById('aNewQty').value = qty;
+    document.getElementById('aReason').value = '';
+    document.getElementById('aRemarks').value = '';
+    adjustModal.show();
 }
 
-async function submitEdit() {
-    var btn = document.getElementById('btnEdit');
+async function submitAdjust() {
+    var reason = document.getElementById('aReason').value;
+    if (!reason) { alert('Please select a reason for the adjustment.'); return; }
+
+    var btn = document.getElementById('btnAdjust');
     btn.disabled = true; btn.textContent = 'Saving...';
 
     try {
         var r = await postAPI({
-            action: 'edit_batch',
-            batch_id: document.getElementById('eBatchId').value,
-            quantity_left: document.getElementById('eQty').value,
-            expiry_date: document.getElementById('eExpiry').value
+            action: 'adjust_batch',
+            batch_id: document.getElementById('aBatchId').value,
+            new_quantity: document.getElementById('aNewQty').value,
+            reason: reason,
+            remarks: document.getElementById('aRemarks').value
         });
-        if (r.ok) { editModal.hide(); location.reload(); }
-        else { alert(r.error || 'Error updating batch.'); }
+        if (r.ok) { adjustModal.hide(); location.reload(); }
+        else { alert(r.error || 'Error adjusting batch.'); }
     } catch (e) { alert('Network error.'); }
-    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save Changes'; }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Submit Adjustment'; }
 }
+@endif
 
-// -- Delete Batch --
-async function deleteBatch(batchId, itemName) {
-    if (!confirm('Delete batch for "' + itemName + '"? This cannot be undone.')) return;
+// -- Void Batch --
+async function voidBatch(batchId, itemName, qty) {
+    if (!confirm('Void batch for "' + itemName + '" (' + qty + ' units)?\n\nThis will zero out the batch quantity and create a reversal transaction. The batch history is preserved.')) return;
 
     try {
-        var r = await postAPI({ action: 'delete_batch', batch_id: batchId });
-        if (r.ok) { location.reload(); }
-        else { alert(r.error || 'Error deleting batch.'); }
+        var r = await postAPI({ action: 'void_batch', batch_id: batchId });
+        if (r.ok) { alert(r.message || 'Batch voided.'); location.reload(); }
+        else { alert(r.error || 'Error voiding batch.'); }
+    } catch (e) { alert('Network error.'); }
+}
+
+// -- Dispose Batch --
+async function disposeBatch(batchId, itemName, qty) {
+    var remarks = prompt('Dispose ' + qty + ' unit(s) of "' + itemName + '" as expired?\n\nOptional remarks:');
+    if (remarks === null) return; // cancelled
+
+    try {
+        var r = await postAPI({ action: 'dispose_batch', batch_id: batchId, remarks: remarks });
+        if (r.ok) { alert(r.message); location.reload(); }
+        else { alert(r.error || 'Error disposing batch.'); }
     } catch (e) { alert('Network error.'); }
 }
 
 // -- Fulfill Order --
+@unless($isWarehouseStaff)
 async function fulfillOrder(orderId, status) {
     var labels = { approved: 'approve', delivering: 'send out', delivered: 'mark as delivered', cancelled: 'cancel' };
     if (!confirm('Are you sure you want to ' + labels[status] + ' this order?')) return;
@@ -752,6 +883,7 @@ async function fulfillOrder(orderId, status) {
         else { alert(r.error || 'Error updating order.'); }
     } catch (e) { alert('Network error.'); }
 }
+@endunless
 
 // -- QR Printing --
 function toggleAll(el) {
@@ -789,6 +921,7 @@ function printSelectedQR() {
 }
 
 // -- Products --
+@if($canManageProducts)
 function openProductModal(data) {
     var form  = document.getElementById('productForm');
     var title = document.getElementById('productModalTitle');
@@ -850,6 +983,7 @@ async function toggleProduct(id, newStatus) {
         else { alert(r.error || 'Something went wrong.'); }
     } catch (err) { alert('Network error.'); }
 }
+@endif
 
 function filterProducts() {
     var search   = document.getElementById('searchProducts').value.toLowerCase();
@@ -867,8 +1001,8 @@ function filterProducts() {
         if (show) visible++;
     });
 
-    document.getElementById('productItemCount').textContent =
-        'Showing ' + visible + ' item' + (visible !== 1 ? 's' : '');
+    var countEl = document.getElementById('productItemCount');
+    if (countEl) countEl.textContent = 'Showing ' + visible + ' item' + (visible !== 1 ? 's' : '');
 }
 
 function printQRLabels(labels) {

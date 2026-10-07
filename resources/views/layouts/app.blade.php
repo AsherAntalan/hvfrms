@@ -27,15 +27,137 @@
             $u = Auth::user();
             $isOwner = $u->isOwner();
             $isBM = $u->isBranchManager();
-            $isIT = $u->isItStaff();
+            $isBS = $u->isBranchStaff();
             $isSA = $u->isSuperAdmin();
             $canInv = $u->canManageInventory();
             $isMainBM = $isBM && $u->branch && $u->branch->branch_type === 'main';
             $isFranchiseBM = $isBM && $u->branch && $u->branch->branch_type !== 'main';
+            $isWA = $u->isWarehouseAdmin();
+            $isWS = $u->isWarehouseStaff();
+            $isWarehouse = $u->isWarehouseRole();
         @endphp
 
+        {{-- ══════════════════════════════════════════════ --}}
+        {{-- WAREHOUSE STAFF — minimal operational nav     --}}
+        {{-- ══════════════════════════════════════════════ --}}
+        @if($isWS)
+
+        {{-- Warehouse ▾ --}}
+        @php $whActive = request()->routeIs('warehouse*','qr*'); @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="bi bi-building hv-nav-icon"></i>
+                <span>Warehouse</span>
+                <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
+                <a href="{{ route('warehouse') }}"
+                   class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
+                    <span>Stock / Receive</span>
+                </a>
+                <a href="{{ route('qr') }}"
+                   class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
+                    <span>QR Scanner</span>
+                </a>
+            </div>
+        </div>
+
+        <hr class="hv-sidebar-divider">
+
+        {{-- My Profile --}}
+        <a href="{{ route('profile') }}"
+           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
+            <i class="bi bi-person-circle"></i> <span>My Profile</span>
+        </a>
+
+        {{-- ══════════════════════════════════════════════ --}}
+        {{-- WAREHOUSE ADMIN — full warehouse nav          --}}
+        {{-- ══════════════════════════════════════════════ --}}
+        @elseif($isWA)
+
         {{-- Dashboard --}}
-        @unless($isIT)
+        <a href="{{ route('dashboard') }}"
+           class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+        </a>
+
+        {{-- Warehouse ▾ --}}
+        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*','qr*'); @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="bi bi-building hv-nav-icon"></i>
+                <span>Warehouse</span>
+                <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
+                <a href="{{ route('inventory') }}"
+                   class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
+                    <span>Stock / Inventory</span>
+                </a>
+                <a href="{{ route('warehouse') }}"
+                   class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
+                    <span>Receive Stock</span>
+                </a>
+                <a href="{{ route('stock') }}"
+                   class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
+                    <span>Stock Management</span>
+                </a>
+                <a href="{{ route('qr') }}"
+                   class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
+                    <span>QR Management</span>
+                </a>
+            </div>
+        </div>
+
+        {{-- Delivery ▾ --}}
+        @php $dlActive = request()->routeIs('orders*','delivery*'); @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="bi bi-truck hv-nav-icon"></i>
+                <span>Delivery</span>
+                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
+                <a href="{{ route('orders') }}"
+                   class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
+                    <span>Pending Orders</span>
+                </a>
+                <a href="{{ route('delivery') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
+                    <span>Active Deliveries</span>
+                </a>
+                <a href="{{ route('delivery.history') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
+                    <span>Delivery History</span>
+                </a>
+            </div>
+        </div>
+
+        <hr class="hv-sidebar-divider">
+
+        {{-- Alerts --}}
+        <a href="{{ route('alerts') }}"
+           class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
+            <i class="bi bi-bell"></i> <span>Alerts</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeAlerts" style="display:none;">0</span>
+        </a>
+
+        <hr class="hv-sidebar-divider">
+
+        {{-- My Profile --}}
+        <a href="{{ route('profile') }}"
+           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
+            <i class="bi bi-person-circle"></i> <span>My Profile</span>
+        </a>
+
+        {{-- ══════════════════════════════════════════════ --}}
+        {{-- OWNER / SUPER_ADMIN / BRANCH_MANAGER nav      --}}
+        {{-- ══════════════════════════════════════════════ --}}
+        @else
+
+        {{-- Dashboard --}}
+        @unless($isBS)
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
             <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
@@ -70,31 +192,28 @@
                     <span>Warehouse</span>
                 </a>
                 @endif
-                @if($isFranchiseBM || $isIT)
                 <a href="{{ route('qr') }}"
                    class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-                    <span>Scan Stock In/Out</span>
+                    <span>QR / Stock Scanning</span>
                 </a>
-                @endif
             </div>
         </div>
-        @elseif($isIT)
+        @elseif($isBS)
         <a href="{{ route('qr') }}"
            class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
             <i class="bi bi-qr-code-scan"></i> <span>Scan Stock In/Out</span>
         </a>
         @endif
 
-        {{-- ── Orders & Delivery ▾ ────────────────────────── --}}
-        @unless($isIT)
+        {{-- ── Sales & Orders ▾ ──────────────────────────── --}}
+        @unless($isBS)
         @php
-            $odActive = request()->routeIs('orders*','ordering*','delivery*');
+            $odActive = request()->routeIs('orders*','ordering*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="bi bi-cart3 hv-nav-icon"></i>
-                <span>Orders & Delivery</span>
-                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+                <span>Orders</span>
                 <i class="bi {{ $odActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $odActive ? 'open' : '' }}">
@@ -108,6 +227,21 @@
                     <span>Order Supplies</span>
                 </a>
                 @endif
+            </div>
+        </div>
+
+        {{-- ── Delivery ▾ ──────────────────────────────── --}}
+        @php
+            $dlActive = request()->routeIs('delivery*');
+        @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="bi bi-truck hv-nav-icon"></i>
+                <span>Delivery</span>
+                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
                 <a href="{{ route('delivery') }}"
                    class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
                     <span>Active Deliveries</span>
@@ -158,7 +292,7 @@
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $mgtActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-building hv-nav-icon"></i>
+                <i class="bi bi-people hv-nav-icon"></i>
                 <span>Management</span>
                 <i class="bi {{ $mgtActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
             </button>
@@ -209,6 +343,8 @@
             <i class="bi bi-person-circle"></i> <span>My Profile</span>
         </a>
 
+        @endif {{-- end role sections --}}
+
     </nav>
 
 </aside>
@@ -239,7 +375,7 @@
             @endif
 
             {{-- Notification bell --}}
-            @unless(Auth::user()->isItStaff())
+            @unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
             <div class="dropdown" id="notifDropdown">
                 <button class="btn btn-link position-relative p-1" style="color:var(--ink);font-size:20px;"
                         data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="notifBell">
@@ -374,7 +510,7 @@ function toggleNav(btn) {
 }
 </script>
 {{-- Notification toast container --}}
-@unless(Auth::user()->isItStaff())
+@unless(Auth::user()->isBranchStaff() || Auth::user()->isWarehouseStaff())
 <div class="hv-toast-container" id="toastContainer"></div>
 <script>
 (function() {

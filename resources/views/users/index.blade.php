@@ -40,10 +40,12 @@
                     <td>
                         @php
                             $role_badges = [
-                                'super_admin'    => 'hv-badge-warning',
-                                'owner'          => 'hv-badge-success',
-                                'branch_manager' => 'hv-badge-info',
-                                'it_staff'       => 'hv-badge-secondary',
+                                'super_admin'      => 'hv-badge-warning',
+                                'owner'            => 'hv-badge-success',
+                                'branch_manager'   => 'hv-badge-info',
+                                'branch_staff'     => 'hv-badge-secondary',
+                                'warehouse_admin'  => 'hv-badge-info',
+                                'warehouse_staff'  => 'hv-badge-secondary',
                             ];
                             $badge_class = $role_badges[$u->role_name] ?? 'hv-badge-info';
                             $role_label  = ucwords(str_replace('_', ' ', $u->role_name));
@@ -300,7 +302,9 @@ function viewUser(data) {
         'super_admin': 'hv-badge-warning',
         'owner': 'hv-badge-success',
         'branch_manager': 'hv-badge-info',
-        'it_staff': 'hv-badge-secondary'
+        'branch_staff': 'hv-badge-secondary',
+        'warehouse_admin': 'hv-badge-info',
+        'warehouse_staff': 'hv-badge-secondary'
     };
     var roleLabel = (data.role_name || '').replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
     var badgeClass = roleBadges[data.role_name] || 'hv-badge-info';

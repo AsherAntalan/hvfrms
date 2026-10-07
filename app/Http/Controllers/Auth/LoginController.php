@@ -135,7 +135,11 @@ class LoginController extends Controller
      */
     protected function redirectPath(User $user): string
     {
-        if ($user->isItStaff()) {
+        if ($user->isWarehouseStaff()) {
+            return '/warehouse';
+        }
+
+        if ($user->isBranchStaff()) {
             return '/qr';
         }
 

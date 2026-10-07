@@ -29,7 +29,8 @@ class WarehouseController extends Controller
 
         $mainBid = $mainBranch ? $mainBranch->id : 0;
 
-        if (!$user->isOwner() && $user->branch_id !== $mainBid) {
+        // Warehouse roles are always main-branch; owners can view from anywhere
+        if (!$user->isOwner() && !$user->isWarehouseRole() && $user->branch_id !== $mainBid) {
             abort(403, 'This module is only available at the main branch.');
         }
 
@@ -125,6 +126,24 @@ class WarehouseController extends Controller
             }
         }
 
+        // Disposal records (recent disposed/expired transactions)
+        $disposalRecords = DB::table('stock_transactions as st')
+            ->join('items as i', 'i.id', '=', 'st.item_id')
+            ->leftJoin('users as u', 'u.id', '=', 'st.performed_by')
+            ->leftJoin('stock_batches as sb', 'sb.id', '=', 'st.batch_id')
+            ->where('st.branch_id', $mainBid)
+            ->whereIn('st.type', ['expired', 'damaged', 'adjustment'])
+            ->where('st.quantity', '<', 0)
+            ->select(
+                'st.id', 'st.item_id', 'i.item_name', 'i.unit',
+                'st.type', 'st.quantity', 'st.reason', 'st.remarks',
+                'st.created_at', 'u.full_name as performed_by_name',
+                'sb.qr_code as batch_qr', 'sb.expiry_date as batch_expiry'
+            )
+            ->orderByDesc('st.created_at')
+            ->limit(50)
+            ->get();
+
         // Stats
         $totalStock = $activeBatches->sum('quantity_left');
         $productCount = $products->count();
@@ -139,6 +158,13 @@ class WarehouseController extends Controller
             }
         }
 
+        // Role flags for view
+        $isWarehouseStaff = $user->isWarehouseStaff();
+        $isWarehouseAdmin = $user->isWarehouseAdmin();
+        $canManageProducts = $user->isOwner(); // Only owners can add/edit products
+        $canEditBatches = !$isWarehouseStaff; // Staff cannot freely edit batch quantities
+        $canFulfillOrders = !$isWarehouseStaff; // Staff picks items; admin/owner fulfills
+
         return view('warehouse.index', compact(
             'products',
             'categories',
@@ -147,10 +173,16 @@ class WarehouseController extends Controller
             'expiredBatches',
             'pendingOrders',
             'orderItems',
+            'disposalRecords',
             'totalStock',
             'productCount',
             'lowStockCount',
-            'mainBid'
+            'mainBid',
+            'isWarehouseStaff',
+            'isWarehouseAdmin',
+            'canManageProducts',
+            'canEditBatches',
+            'canFulfillOrders'
         ));
     }
 
@@ -162,20 +194,36 @@ class WarehouseController extends Controller
         $mainBranch = Branch::where('branch_type', 'main')->where('is_active', true)->first();
         $mainBid = $mainBranch ? $mainBranch->id : 0;
 
-        if (!$user->isOwner() && $user->branch_id !== $mainBid) {
+        if (!$user->isOwner() && !$user->isWarehouseRole() && $user->branch_id !== $mainBid) {
             return response()->json(['ok' => false, 'error' => 'Access denied.'], 403);
+        }
+
+        // Warehouse staff can only: create_stock (receive), dispose_batch
+        if ($user->isWarehouseStaff()) {
+            if (!in_array($action, ['create_stock', 'dispose_batch'])) {
+                return response()->json(['ok' => false, 'error' => 'You do not have permission for this action.'], 403);
+            }
         }
 
         if ($action === 'create_stock') {
             return $this->createStock($request, $mainBid, $user);
         }
 
+        if ($action === 'adjust_batch') {
+            return $this->adjustBatch($request, $mainBid, $user);
+        }
+
+        if ($action === 'void_batch') {
+            return $this->voidBatch($request, $mainBid, $user);
+        }
+
+        // Legacy aliases
         if ($action === 'edit_batch') {
-            return $this->editBatch($request, $mainBid, $user);
+            return $this->adjustBatch($request, $mainBid, $user);
         }
 
         if ($action === 'delete_batch') {
-            return $this->deleteBatch($request, $mainBid, $user);
+            return $this->voidBatch($request, $mainBid, $user);
         }
 
         if ($action === 'fulfill_order') {
@@ -183,11 +231,21 @@ class WarehouseController extends Controller
         }
 
         if ($action === 'save_product') {
+            if (!$user->isOwner()) {
+                return response()->json(['ok' => false, 'error' => 'Only owners can manage products.'], 403);
+            }
             return $this->saveProduct($request, $user);
         }
 
         if ($action === 'toggle_product') {
+            if (!$user->isOwner()) {
+                return response()->json(['ok' => false, 'error' => 'Only owners can manage products.'], 403);
+            }
             return $this->toggleProduct($request, $user);
+        }
+
+        if ($action === 'dispose_batch') {
+            return $this->disposeBatch($request, $mainBid, $user);
         }
 
         return response()->json(['ok' => false, 'error' => 'Unknown action.'], 400);
@@ -228,17 +286,22 @@ class WarehouseController extends Controller
         $stockService = new StockService();
         $result = $stockService->stockIn(
             $itemId, $mainBid, $quantity, $user->id,
-            $parsedExpiry, $remarks ?: 'Stock created (warehouse)', null
+            $parsedExpiry, $remarks ?: 'Stock received (warehouse)', null
         );
 
         return response()->json($result);
     }
 
-    protected function editBatch(Request $request, int $mainBid, $user): JsonResponse
+    protected function adjustBatch(Request $request, int $mainBid, $user): JsonResponse
     {
+        if ($user->isWarehouseStaff()) {
+            return response()->json(['ok' => false, 'error' => 'You do not have permission to adjust batches.'], 403);
+        }
+
         $batchId = (int) $request->input('batch_id', 0);
         $newQty = (int) $request->input('quantity_left', 0);
-        $newExpiry = trim($request->input('expiry_date', ''));
+        $reason = trim($request->input('reason', 'Physical Count Correction'));
+        $remarks = trim($request->input('remarks', ''));
 
         $batch = StockBatch::where('id', $batchId)->where('branch_id', $mainBid)->first();
         if (!$batch) {
@@ -249,53 +312,68 @@ class WarehouseController extends Controller
             return response()->json(['ok' => false, 'error' => 'Quantity cannot be negative.'], 422);
         }
 
-        $updates = [];
-        $details = [];
+        $oldQty = (int) $batch->quantity_left;
+        $diff = $newQty - $oldQty;
 
-        if ($newQty !== (int) $batch->quantity_left) {
-            $updates['quantity_left'] = $newQty;
-            $details[] = "Qty: {$batch->quantity_left} → {$newQty}";
+        if ($diff === 0) {
+            return response()->json(['ok' => true, 'message' => 'No quantity change.']);
         }
 
-        if ($newExpiry !== '') {
-            $parsed = DateTime::createFromFormat('Y-m-d', $newExpiry);
-            if ($parsed) {
-                $updates['expiry_date'] = $parsed->format('Y-m-d');
-                $oldExp = $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : 'none';
-                $details[] = "Expiry: {$oldExp} → {$newExpiry}";
-
-                // Regenerate QR code when expiry changes
-                $item = Item::find($batch->item_id);
-                if ($item) {
-                    $clean = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', substr($item->item_name, 0, 8)));
-                    $expTag = str_replace('-', '', substr($newExpiry, 5));
-                    $batchQr = 'HV-' . $clean . '-' . $expTag . '-B' . str_pad($batch->id, 3, '0', STR_PAD_LEFT);
-                    $updates['qr_code'] = $batchQr;
-                    $details[] = "QR: {$batchQr}";
-                }
-            }
+        $validReasons = [
+            'Physical Count Correction', 'Damaged', 'Spoilage',
+            'Expired', 'Missing', 'Encoding Error', 'Other',
+        ];
+        if (!in_array($reason, $validReasons, true)) {
+            $reason = 'Other';
         }
 
-        if (empty($updates)) {
-            return response()->json(['ok' => true, 'message' => 'No changes made.']);
+        $item = Item::find($batch->item_id);
+        $itemName = $item ? $item->item_name : 'Unknown';
+
+        DB::beginTransaction();
+        try {
+            StockTransaction::create([
+                'item_id'      => $batch->item_id,
+                'branch_id'    => $mainBid,
+                'batch_id'     => $batch->id,
+                'type'         => 'adjustment',
+                'quantity'     => $diff,
+                'reason'       => $reason,
+                'remarks'      => $remarks ?: "Adjusted by {$user->full_name}: {$oldQty} → {$newQty}",
+                'performed_by' => $user->id,
+            ]);
+
+            $batch->update(['quantity_left' => $newQty]);
+
+            AuditLog::create([
+                'user_id'    => $user->id,
+                'action'     => 'stock adjustment',
+                'table_name' => 'stock_batches',
+                'record_id'  => $batchId,
+                'details'    => "Item: {$itemName}, Qty: {$oldQty} → {$newQty} (diff: {$diff}), Reason: {$reason}",
+            ]);
+
+            DB::commit();
+
+            $direction = $diff > 0 ? 'increased' : 'decreased';
+            return response()->json([
+                'ok'      => true,
+                'message' => "Batch adjusted: {$itemName} {$direction} by " . abs($diff) . ". Transaction recorded.",
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['ok' => false, 'error' => 'Failed to process adjustment. Please try again.'], 500);
         }
-
-        StockBatch::where('id', $batchId)->update($updates);
-
-        AuditLog::create([
-            'user_id'    => $user->id,
-            'action'     => 'edited batch',
-            'table_name' => 'stock_batches',
-            'record_id'  => $batchId,
-            'details'    => implode(', ', $details),
-        ]);
-
-        return response()->json(['ok' => true, 'message' => 'Batch updated successfully.']);
     }
 
-    protected function deleteBatch(Request $request, int $mainBid, $user): JsonResponse
+    protected function voidBatch(Request $request, int $mainBid, $user): JsonResponse
     {
+        if (!$user->isOwner()) {
+            return response()->json(['ok' => false, 'error' => 'Only owners can void batches.'], 403);
+        }
+
         $batchId = (int) $request->input('batch_id', 0);
+        $remarks = trim($request->input('remarks', ''));
 
         $batch = StockBatch::where('id', $batchId)->where('branch_id', $mainBid)->first();
         if (!$batch) {
@@ -304,19 +382,106 @@ class WarehouseController extends Controller
 
         $item = Item::find($batch->item_id);
         $itemName = $item ? $item->item_name : 'Unknown';
+        $remainingQty = (int) $batch->quantity_left;
 
-        DB::table('stock_transactions')->where('batch_id', $batchId)->delete();
-        StockBatch::where('id', $batchId)->delete();
+        DB::beginTransaction();
+        try {
+            if ($remainingQty > 0) {
+                StockTransaction::create([
+                    'item_id'      => $batch->item_id,
+                    'branch_id'    => $mainBid,
+                    'batch_id'     => $batch->id,
+                    'type'         => 'adjustment',
+                    'quantity'     => -$remainingQty,
+                    'reason'       => 'Batch voided',
+                    'remarks'      => $remarks ?: "Voided by {$user->full_name}",
+                    'performed_by' => $user->id,
+                ]);
 
-        AuditLog::create([
-            'user_id'    => $user->id,
-            'action'     => 'deleted batch',
-            'table_name' => 'stock_batches',
-            'record_id'  => $batchId,
-            'details'    => "Item: {$itemName}, Qty was: {$batch->quantity_left}",
-        ]);
+                $batch->update(['quantity_left' => 0]);
+            }
 
-        return response()->json(['ok' => true, 'message' => 'Batch deleted.']);
+            AuditLog::create([
+                'user_id'    => $user->id,
+                'action'     => 'voided batch',
+                'table_name' => 'stock_batches',
+                'record_id'  => $batchId,
+                'details'    => "Item: {$itemName}, Qty zeroed: {$remainingQty}. Batch and history preserved.",
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'ok'      => true,
+                'message' => "Batch voided. {$remainingQty} {$item->unit}(s) removed from usable stock. History preserved.",
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['ok' => false, 'error' => 'Failed to void batch. Please try again.'], 500);
+        }
+    }
+
+    /**
+     * Dispose of an expired batch.
+     * Both warehouse_admin and warehouse_staff can initiate, but it records a transaction.
+     */
+    protected function disposeBatch(Request $request, int $mainBid, $user): JsonResponse
+    {
+        $batchId = (int) $request->input('batch_id', 0);
+        $remarks = trim($request->input('remarks', ''));
+
+        $batch = StockBatch::where('id', $batchId)->where('branch_id', $mainBid)->first();
+        if (!$batch) {
+            return response()->json(['ok' => false, 'error' => 'Batch not found.'], 422);
+        }
+
+        if ($batch->quantity_left <= 0) {
+            return response()->json(['ok' => false, 'error' => 'Batch has no remaining stock to dispose.'], 422);
+        }
+
+        $item = Item::find($batch->item_id);
+        $itemName = $item ? $item->item_name : 'Unknown';
+        $qty = $batch->quantity_left;
+
+        // Check if batch is actually expired
+        $isExpired = $batch->expiry_date && $batch->expiry_date <= now()->startOfDay();
+        $reason = $isExpired ? 'Expired stock disposal' : 'Stock disposal (manual)';
+
+        DB::beginTransaction();
+        try {
+            // Record the disposal transaction
+            StockTransaction::create([
+                'item_id'      => $batch->item_id,
+                'branch_id'    => $mainBid,
+                'batch_id'     => $batch->id,
+                'type'         => $isExpired ? 'expired' : 'adjustment',
+                'quantity'     => -$qty,
+                'reason'       => $reason,
+                'remarks'      => $remarks ?: "Disposed by " . $user->full_name,
+                'performed_by' => $user->id,
+            ]);
+
+            // Zero out the batch
+            $batch->update(['quantity_left' => 0]);
+
+            AuditLog::create([
+                'user_id'    => $user->id,
+                'action'     => 'disposed batch',
+                'table_name' => 'stock_batches',
+                'record_id'  => $batchId,
+                'details'    => "Item: {$itemName}, Qty disposed: {$qty}, Reason: {$reason}",
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'ok'      => true,
+                'message' => "Disposed {$qty} {$item->unit}(s) of {$itemName}. Transaction recorded.",
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['ok' => false, 'error' => 'Failed to process disposal. Please try again.'], 500);
+        }
     }
 
     protected function saveProduct(Request $request, $user): JsonResponse
