@@ -366,6 +366,12 @@
                    class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
                     <span>Settings</span>
                 </a>
+                @if($isSA)
+                <a href="{{ route('settings') }}#backup"
+                   class="hv-nav-link">
+                    <i class="bi bi-database-down"></i> <span>Database Backup</span>
+                </a>
+                @endif
             </div>
         </div>
         @endif

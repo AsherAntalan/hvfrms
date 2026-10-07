@@ -37,6 +37,16 @@
     </form>
 </div>
 
+<!-- Export buttons -->
+<div class="d-flex justify-content-end gap-2 mb-3 no-print">
+    <a id="csvExportBtn" href="#" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-filetype-csv me-1"></i> Export CSV
+    </a>
+    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print
+    </button>
+</div>
+
 <!-- Report Tabs -->
 <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item">
@@ -377,5 +387,36 @@
 </div>
 
 </div><!-- /tab-content -->
+
+@push('styles')
+<style>
+@media print {
+    .hv-sidebar, .hv-topbar, .no-print, .nav-tabs, form, .alert { display: none !important; }
+    .tab-pane { display: block !important; opacity: 1 !important; }
+    .tab-pane:not(.active) { display: none !important; }
+    .hv-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+    body { font-size: 12px; }
+}
+</style>
+@endpush
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var typeMap = {tabStock:'stock', tabMovement:'movements', tabOrders:'orders', tabExpiry:'expiry'};
+    function updateCsvLink() {
+        var active = document.querySelector('.tab-pane.active');
+        var type = active ? (typeMap[active.id] || 'stock') : 'stock';
+        var params = new URLSearchParams(window.location.search);
+        params.set('type', type);
+        document.getElementById('csvExportBtn').href = "{{ route('reports.export') }}?" + params.toString();
+    }
+    updateCsvLink();
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', updateCsvLink);
+    });
+});
+</script>
+@endpush
 
 @endsection

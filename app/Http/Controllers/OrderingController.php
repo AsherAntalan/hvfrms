@@ -99,13 +99,29 @@ class OrderingController extends Controller
 
             $remarks = trim($request->input('remarks', ''));
 
-            // Generate order number: ORD-YYYY-NNNN
-            $year = date('Y');
-            $count = Order::where('order_number', 'like', "ORD-{$year}-%")->count();
-            $orderNumber = sprintf('ORD-%s-%04d', $year, $count + 1);
-
             DB::beginTransaction();
             try {
+                // Generate order number: ORD-YYYY-NNNN (inside transaction with retry)
+                $year = date('Y');
+                $maxRetries = 5;
+                for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                    $count = Order::where('order_number', 'like', "ORD-{$year}-%")->count();
+                    $orderNumber = sprintf('ORD-%s-%04d', $year, $count + 1);
+
+                    if (!Order::where('order_number', $orderNumber)->exists()) {
+                        break;
+                    }
+
+                    if ($attempt === $maxRetries) {
+                        // Fallback: use max numeric suffix + 1
+                        $last = Order::where('order_number', 'like', "ORD-{$year}-%")
+                            ->orderByDesc('order_number')
+                            ->value('order_number');
+                        $lastNum = $last ? (int)substr($last, -4) : 0;
+                        $orderNumber = sprintf('ORD-%s-%04d', $year, $lastNum + 1);
+                    }
+                }
+
                 $total = 0;
                 $lineItems = [];
 

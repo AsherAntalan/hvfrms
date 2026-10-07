@@ -106,6 +106,8 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         Route::post('alerts', [\App\Http\Controllers\AlertController::class, 'index'])
             ->name('alerts.action');
         // Reports
+        Route::get('reports/export', [\App\Http\Controllers\ReportController::class, 'export'])
+            ->name('reports.export');
         Route::get('reports', [\App\Http\Controllers\ReportController::class, 'index'])
             ->name('reports');
 
@@ -163,6 +165,10 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
             ->name('settings');
         Route::post('settings', [\App\Http\Controllers\SettingsController::class, 'update'])
             ->name('settings.update');
+
+        // Database backup
+        Route::post('backup', [\App\Http\Controllers\SettingsController::class, 'backup'])
+            ->name('backup');
 
         // Audit log
         Route::get('audit', [\App\Http\Controllers\AuditController::class, 'index'])
