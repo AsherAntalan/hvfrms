@@ -5,10 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Alert;
 use App\Models\AuditLog;
 use App\Models\Branch;
-use App\Models\Item;
 use App\Models\Order;
 use App\Models\Setting;
-use App\Models\StockBatch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -41,24 +39,27 @@ class AlertController extends Controller
         $this->generateAlerts($user);
 
         // Filters
-        $filterType     = $request->input('type', '');
+        $filterType = $request->input('type', '');
         $filterResolved = $request->input('resolved', '0');
-        $filterBranch   = $request->input('branch', '');
+        $filterBranch = $request->input('branch', '');
 
-        // Per-branch alert counts (for the branch filter pills)
-        $branchCounts = [];
-        if (!$user->isBranchScoped()) {
+        // Per-branch alert counts (for the branch filter chips)
+        $branchCounts = collect();
+        if (! $user->isBranchScoped()) {
             $branchCounts = Alert::select('branch_id', DB::raw('COUNT(*) as cnt'))
                 ->where('is_resolved', false)
                 ->groupBy('branch_id')
                 ->pluck('cnt', 'branch_id');
         }
 
-        // All branches for filter (owners only)
-        $branches = [];
-        if (!$user->isBranchScoped()) {
+        // Branches for the filter chips (aggregate users only; a scoped user is
+        // locked to their own branch server-side and sees no chips).
+        $branches = collect();
+        if (! $user->isBranchScoped()) {
             $branches = Branch::where('is_active', true)->orderBy('branch_name')->get();
         }
+        $mainBranch = Branch::where('branch_type', 'main')->where('is_active', true)->orderBy('id')->first();
+        $allowAllBranches = ! $user->isBranchScoped();
 
         // Build query
         $query = Alert::with(['item', 'branch', 'resolvedByUser']);
@@ -86,21 +87,21 @@ class AlertController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $countOpen     = $alerts->where('is_resolved', false)->count();
+        $countOpen = $alerts->where('is_resolved', false)->count();
         $countCritical = $alerts->where('is_resolved', false)->where('severity', 'critical')->count();
 
         $typeBadges = [
-            'low_stock'     => ['hv-badge-warning', 'bi-exclamation-triangle', 'Low Stock'],
+            'low_stock' => ['hv-badge-warning', 'bi-exclamation-triangle', 'Low Stock'],
             'expiring_soon' => ['hv-badge-warning', 'bi-clock-history',        'Expiring Soon'],
-            'expired'       => ['hv-badge-danger',  'bi-x-octagon',            'Expired'],
+            'expired' => ['hv-badge-danger',  'bi-x-octagon',            'Expired'],
             'unusual_sales' => ['hv-badge-info',    'bi-activity',             'Unusual Sales'],
-            'operational'   => ['hv-badge-info',    'bi-gear',                 'Operational'],
+            'operational' => ['hv-badge-info',    'bi-gear',                 'Operational'],
         ];
 
         $sevBadges = [
             'critical' => 'hv-badge-danger',
-            'warning'  => 'hv-badge-warning',
-            'info'     => 'hv-badge-info',
+            'warning' => 'hv-badge-warning',
+            'info' => 'hv-badge-info',
         ];
 
         return view('alerts.index', compact(
@@ -112,6 +113,8 @@ class AlertController extends Controller
             'filterBranch',
             'branches',
             'branchCounts',
+            'mainBranch',
+            'allowAllBranches',
             'typeBadges',
             'sevBadges'
         ));
@@ -131,7 +134,7 @@ class AlertController extends Controller
         }
 
         return response()->json([
-            'ok'    => true,
+            'ok' => true,
             'count' => $query->count(),
         ]);
     }
@@ -144,9 +147,13 @@ class AlertController extends Controller
     {
         $user = Auth::user();
         $items = [];
+        // Commissary roles (like Owner/Admin) oversee every branch's orders, so
+        // their order notifications are NOT scoped to their own location — a new
+        // order for any branch reaches the Commissary bell.
+        $scopeOrders = $user->isBranchScoped() && ! $user->isCommissaryRole();
 
-        // Unresolved alerts (up to 5)
-        $alertQuery = Alert::select('alerts.*', 'items.item_name', 'branches.branch_name')
+        // Keep order decisions visible alongside the inventory alerts.
+        $alertQuery = Alert::with('order:id,order_number,decline_reason,status,archived_at')->select('alerts.*', 'items.item_name', 'branches.branch_name')
             ->leftJoin('items', 'items.id', '=', 'alerts.item_id')
             ->leftJoin('branches', 'branches.id', '=', 'alerts.branch_id')
             ->where('alerts.is_resolved', false);
@@ -155,20 +162,23 @@ class AlertController extends Controller
             $alertQuery->where('alerts.branch_id', $user->branch_id);
         }
 
-        $alerts = $alertQuery
-            ->orderByRaw("FIELD(alerts.severity, 'critical', 'warning', 'info')")
-            ->orderByDesc('alerts.created_at')
-            ->limit(5)
-            ->get();
+        $orderAlerts = (clone $alertQuery)->whereNotNull('alerts.order_id')
+            ->orderByDesc('alerts.created_at')->orderByDesc('alerts.id')->limit(5)->get();
+        $inventoryAlerts = (clone $alertQuery)->whereNull('alerts.order_id')
+            ->orderByRaw("CASE alerts.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END")
+            ->orderByDesc('alerts.created_at')->limit(5)->get();
+        $alerts = $orderAlerts->concat($inventoryAlerts);
 
         foreach ($alerts as $a) {
+            $declinedOrder = $a->order?->status === 'declined' ? $a->order : null;
             $items[] = [
-                'type'     => 'alert',
+                'id' => 'alert-'.$a->id,
+                'type' => $declinedOrder ? 'order_declined' : 'alert',
                 'severity' => $a->severity,
-                'message'  => $a->message,
-                'context'  => $a->branch_name ?? '',
-                'time'     => $a->created_at->diffForHumans(),
-                'link'     => route('alerts'),
+                'message' => $declinedOrder ? 'Order '.$declinedOrder->order_number.' was declined. Reason: '.$declinedOrder->decline_reason : $a->message,
+                'context' => $a->branch_name ?? '',
+                'time' => $a->created_at->diffForHumans(),
+                'link' => $declinedOrder ? route('orders', array_filter(['order' => $declinedOrder->id, 'queue' => 'history', 'archived' => $declinedOrder->archived_at ? 1 : null])) : route('alerts'),
             ];
         }
 
@@ -177,7 +187,7 @@ class AlertController extends Controller
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
             ->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering']);
 
-        if ($user->isBranchScoped()) {
+        if ($scopeOrders) {
             $orderQuery->where('orders.branch_id', $user->branch_id);
         }
 
@@ -185,19 +195,20 @@ class AlertController extends Controller
 
         foreach ($orders as $o) {
             $msg = match ($o->status) {
-                'pending'    => "Order {$o->order_number} awaiting approval",
-                'approved'   => "Order {$o->order_number} approved, awaiting preparation",
-                'preparing'  => "Order {$o->order_number} is being prepared",
+                'pending' => "Order {$o->order_number} awaiting approval",
+                'approved' => "Order {$o->order_number} approved, awaiting preparation",
+                'preparing' => "Order {$o->order_number} is being prepared",
                 'delivering' => "Order {$o->order_number} is being delivered",
-                default      => "Order {$o->order_number} — {$o->status}",
+                default => "Order {$o->order_number} — {$o->status}",
             };
             $items[] = [
-                'type'     => 'delivery',
+                'id' => 'order-'.$o->id.'-'.$o->status,
+                'type' => 'delivery',
                 'severity' => $o->status === 'pending' ? 'warning' : 'info',
-                'message'  => $msg,
-                'context'  => $o->branch_name,
-                'time'     => $o->updated_at->diffForHumans(),
-                'link'     => route('delivery'),
+                'message' => $msg,
+                'context' => $o->branch_name,
+                'time' => $o->updated_at->diffForHumans(),
+                'link' => route('delivery'),
             ];
         }
 
@@ -208,7 +219,7 @@ class AlertController extends Controller
         }
 
         $orderCount = Order::whereIn('status', ['pending', 'delivering']);
-        if ($user->isBranchScoped()) {
+        if ($scopeOrders) {
             $orderCount->where('branch_id', $user->branch_id);
         }
 
@@ -216,17 +227,17 @@ class AlertController extends Controller
         $orderTotal = $orderCount->count();
 
         $pendingDeliveryCount = Order::whereIn('status', ['pending', 'approved', 'delivering']);
-        if ($user->isBranchScoped()) {
+        if ($scopeOrders) {
             $pendingDeliveryCount->where('branch_id', $user->branch_id);
         }
 
         return response()->json([
-            'ok'    => true,
+            'ok' => true,
             'total' => $alertTotal + $orderTotal,
             'items' => $items,
             'sidebar' => [
-                'orders'   => $pendingDeliveryCount->count(),
-                'alerts'   => $alertTotal,
+                'orders' => $pendingDeliveryCount->count(),
+                'alerts' => $alertTotal,
             ],
         ]);
     }
@@ -236,7 +247,7 @@ class AlertController extends Controller
      */
     protected function resolveAlert(Request $request)
     {
-        $resolveId = (int)$request->input('resolve_id');
+        $resolveId = (int) $request->input('resolve_id');
         $user = Auth::user();
 
         $query = Alert::where('id', $resolveId)->where('is_resolved', false);
@@ -253,10 +264,10 @@ class AlertController extends Controller
 
         if ($updated > 0) {
             AuditLog::create([
-                'user_id'    => $user->id,
-                'action'     => 'alert resolved',
+                'user_id' => $user->id,
+                'action' => 'alert resolved',
                 'table_name' => 'alerts',
-                'record_id'  => $resolveId,
+                'record_id' => $resolveId,
             ]);
 
             return redirect()->back()->with('success', 'Alert marked as resolved.');
@@ -286,11 +297,11 @@ class AlertController extends Controller
 
         if ($count > 0) {
             AuditLog::create([
-                'user_id'    => $user->id,
-                'action'     => 'resolved all alerts',
+                'user_id' => $user->id,
+                'action' => 'resolved all alerts',
                 'table_name' => 'alerts',
-                'record_id'  => 0,
-                'details'    => "{$count} alert(s) resolved.",
+                'record_id' => 0,
+                'details' => "{$count} alert(s) resolved.",
             ]);
         }
 
@@ -308,7 +319,7 @@ class AlertController extends Controller
         $suppressWindow = now()->subHours(24);
 
         // 1. LOW STOCK ALERTS
-        $lowStock = DB::select("
+        $lowStock = DB::select('
             SELECT sub.* FROM (
                 SELECT i.id AS item_id, i.item_name, i.unit, i.reorder_level,
                        b.id AS branch_id, b.branch_name,
@@ -321,7 +332,7 @@ class AlertController extends Controller
             ) sub
             WHERE sub.total_qty > 0 AND sub.total_qty <= sub.reorder_level
             ORDER BY sub.total_qty ASC
-        ");
+        ');
 
         foreach ($lowStock as $ls) {
             $exists = Alert::where('alert_type', 'low_stock')
@@ -331,20 +342,20 @@ class AlertController extends Controller
                     ->orWhere('resolved_at', '>=', $suppressWindow))
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 $sev = $ls->total_qty <= ($ls->reorder_level / 2) ? 'critical' : 'warning';
                 Alert::create([
                     'alert_type' => 'low_stock',
-                    'severity'   => $sev,
-                    'message'    => "{$ls->item_name} is low at {$ls->branch_name}: {$ls->total_qty} {$ls->unit}(s) remaining (reorder level: {$ls->reorder_level}).",
-                    'item_id'    => $ls->item_id,
-                    'branch_id'  => $ls->branch_id,
+                    'severity' => $sev,
+                    'message' => "{$ls->item_name} is low at {$ls->branch_name}: {$ls->total_qty} {$ls->unit}(s) remaining (reorder level: {$ls->reorder_level}).",
+                    'item_id' => $ls->item_id,
+                    'branch_id' => $ls->branch_id,
                 ]);
             }
         }
 
         // 2. EXPIRING SOON ALERTS (within 7 days)
-        $expiring = DB::select("
+        $expiring = DB::select('
             SELECT sb.id AS batch_id, sb.item_id, sb.branch_id, sb.quantity_left, sb.expiry_date,
                    i.item_name, i.unit, b.branch_name,
                    DATEDIFF(sb.expiry_date, CURDATE()) AS days_left
@@ -355,7 +366,7 @@ class AlertController extends Controller
               AND sb.expiry_date IS NOT NULL
               AND sb.expiry_date > CURDATE()
               AND DATEDIFF(sb.expiry_date, CURDATE()) <= ?
-        ", [$expiryWarningDays]);
+        ', [$expiryWarningDays]);
 
         foreach ($expiring as $ex) {
             $exists = Alert::where('alert_type', 'expiring_soon')
@@ -364,21 +375,21 @@ class AlertController extends Controller
                     ->orWhere('resolved_at', '>=', $suppressWindow))
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 $sev = $ex->days_left <= 2 ? 'critical' : 'warning';
                 Alert::create([
                     'alert_type' => 'expiring_soon',
-                    'severity'   => $sev,
-                    'message'    => "{$ex->item_name} (Batch #{$ex->batch_id}) at {$ex->branch_name} expires in {$ex->days_left} day(s) - {$ex->quantity_left} {$ex->unit}(s) remaining.",
-                    'item_id'    => $ex->item_id,
-                    'branch_id'  => $ex->branch_id,
-                    'batch_id'   => $ex->batch_id,
+                    'severity' => $sev,
+                    'message' => "{$ex->item_name} (Batch #{$ex->batch_id}) at {$ex->branch_name} expires in {$ex->days_left} day(s) - {$ex->quantity_left} {$ex->unit}(s) remaining.",
+                    'item_id' => $ex->item_id,
+                    'branch_id' => $ex->branch_id,
+                    'batch_id' => $ex->batch_id,
                 ]);
             }
         }
 
         // 3. EXPIRED ALERTS
-        $expired = DB::select("
+        $expired = DB::select('
             SELECT sb.id AS batch_id, sb.item_id, sb.branch_id, sb.quantity_left, sb.expiry_date,
                    i.item_name, i.unit, b.branch_name,
                    ABS(DATEDIFF(sb.expiry_date, CURDATE())) AS days_overdue
@@ -388,7 +399,7 @@ class AlertController extends Controller
             WHERE sb.quantity_left > 0
               AND sb.expiry_date IS NOT NULL
               AND sb.expiry_date < CURDATE()
-        ");
+        ');
 
         foreach ($expired as $eb) {
             $exists = Alert::where('alert_type', 'expired')
@@ -397,14 +408,14 @@ class AlertController extends Controller
                     ->orWhere('resolved_at', '>=', $suppressWindow))
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 Alert::create([
                     'alert_type' => 'expired',
-                    'severity'   => 'critical',
-                    'message'    => "{$eb->item_name} (Batch #{$eb->batch_id}) at {$eb->branch_name} has EXPIRED ({$eb->days_overdue} day(s) ago) - {$eb->quantity_left} {$eb->unit}(s) still in stock.",
-                    'item_id'    => $eb->item_id,
-                    'branch_id'  => $eb->branch_id,
-                    'batch_id'   => $eb->batch_id,
+                    'severity' => 'critical',
+                    'message' => "{$eb->item_name} (Batch #{$eb->batch_id}) at {$eb->branch_name} has EXPIRED ({$eb->days_overdue} day(s) ago) - {$eb->quantity_left} {$eb->unit}(s) still in stock.",
+                    'item_id' => $eb->item_id,
+                    'branch_id' => $eb->branch_id,
+                    'batch_id' => $eb->batch_id,
                 ]);
             }
         }
@@ -424,7 +435,7 @@ class AlertController extends Controller
 
         $grouped = [];
         foreach ($weeklyUsage as $row) {
-            $key = $row->item_id . '-' . $row->branch_id;
+            $key = $row->item_id.'-'.$row->branch_id;
             $grouped[$key]['item_id'] = $row->item_id;
             $grouped[$key]['branch_id'] = $row->branch_id;
             $grouped[$key]['item_name'] = $row->item_name;
@@ -434,12 +445,16 @@ class AlertController extends Controller
 
         foreach ($grouped as $g) {
             $vals = $g['weeks'];
-            if (count($vals) < 3) continue;
+            if (count($vals) < 3) {
+                continue;
+            }
 
             $mean = array_sum($vals) / count($vals);
-            $variance = array_sum(array_map(fn($v) => ($v - $mean) ** 2, $vals)) / count($vals);
+            $variance = array_sum(array_map(fn ($v) => ($v - $mean) ** 2, $vals)) / count($vals);
             $stdDev = sqrt($variance);
-            if ($stdDev < 1) continue;
+            if ($stdDev < 1) {
+                continue;
+            }
 
             $latest = end($vals);
             if ($latest > $mean + ($unusualSalesSigma * $stdDev)) {
@@ -450,13 +465,13 @@ class AlertController extends Controller
                         ->orWhere('resolved_at', '>=', $suppressWindow))
                     ->exists();
 
-                if (!$exists) {
+                if (! $exists) {
                     Alert::create([
                         'alert_type' => 'unusual_sales',
-                        'severity'   => 'warning',
-                        'message'    => "{$g['item_name']} at {$g['branch_name']} had unusually high consumption this week: " . (int) $latest . " units (avg: " . round($mean, 1) . ").",
-                        'item_id'    => $g['item_id'],
-                        'branch_id'  => $g['branch_id'],
+                        'severity' => 'warning',
+                        'message' => "{$g['item_name']} at {$g['branch_name']} had unusually high consumption this week: ".(int) $latest.' units (avg: '.round($mean, 1).').',
+                        'item_id' => $g['item_id'],
+                        'branch_id' => $g['branch_id'],
                     ]);
                 }
             }
@@ -474,18 +489,18 @@ class AlertController extends Controller
         ", [$idleBranchDays]);
 
         foreach ($idleBranches as $ib) {
-            $exists = Alert::where('alert_type', 'operational')
+            $exists = Alert::where('alert_type', 'operational')->whereNull('order_id')
                 ->where('branch_id', $ib->branch_id)
                 ->where(fn ($q) => $q->where('is_resolved', false)
                     ->orWhere('resolved_at', '>=', $suppressWindow))
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 Alert::create([
                     'alert_type' => 'operational',
-                    'severity'   => 'info',
-                    'message'    => "{$ib->branch_name} has had no stock activity for {$ib->days_idle} day(s).",
-                    'branch_id'  => $ib->branch_id,
+                    'severity' => 'info',
+                    'message' => "{$ib->branch_name} has had no stock activity for {$ib->days_idle} day(s).",
+                    'branch_id' => $ib->branch_id,
                 ]);
             }
         }

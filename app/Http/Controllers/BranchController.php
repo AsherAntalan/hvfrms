@@ -7,7 +7,6 @@ use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 
 class BranchController extends Controller
 {
@@ -55,14 +54,14 @@ class BranchController extends Controller
     {
         $branchName = trim($request->input('branch_name', ''));
         $branchType = trim($request->input('branch_type', ''));
-        $address    = trim($request->input('address', ''));
-        $contact    = trim($request->input('contact_number', ''));
-        $id         = (int) $request->input('id', 0);
+        $address = trim($request->input('address', ''));
+        $contact = trim($request->input('contact_number', ''));
+        $id = (int) $request->input('id', 0);
 
         if ($branchName === '') {
             return response()->json(['ok' => false, 'error' => 'Branch name is required.'], 422);
         }
-        if (!in_array($branchType, ['main', 'franchise'], true)) {
+        if (! in_array($branchType, ['main', 'franchise', 'commissary'], true)) {
             return response()->json(['ok' => false, 'error' => 'Invalid branch type.'], 422);
         }
         if (strlen($branchName) > 100) {
@@ -82,18 +81,18 @@ class BranchController extends Controller
             // Update existing branch
             $branch = Branch::findOrFail($id);
             $branch->update([
-                'branch_name'    => $branchName,
-                'branch_type'    => $branchType,
-                'address'        => $address ?: null,
+                'branch_name' => $branchName,
+                'branch_type' => $branchType,
+                'address' => $address ?: null,
                 'contact_number' => $contact ?: null,
             ]);
 
             AuditLog::create([
-                'user_id'    => Auth::id(),
-                'action'     => 'updated branch',
+                'user_id' => Auth::id(),
+                'action' => 'updated branch',
                 'table_name' => 'branches',
-                'record_id'  => $id,
-                'details'    => "Name: {$branchName}, Type: {$branchType}",
+                'record_id' => $id,
+                'details' => "Name: {$branchName}, Type: {$branchType}",
                 'ip_address' => $request->ip(),
             ]);
 
@@ -101,19 +100,19 @@ class BranchController extends Controller
         } else {
             // Create new branch
             $branch = Branch::create([
-                'branch_name'    => $branchName,
-                'branch_type'    => $branchType,
-                'address'        => $address ?: null,
+                'branch_name' => $branchName,
+                'branch_type' => $branchType,
+                'address' => $address ?: null,
                 'contact_number' => $contact ?: null,
-                'is_active'      => true,
+                'is_active' => true,
             ]);
 
             AuditLog::create([
-                'user_id'    => Auth::id(),
-                'action'     => 'created branch',
+                'user_id' => Auth::id(),
+                'action' => 'created branch',
                 'table_name' => 'branches',
-                'record_id'  => $branch->id,
-                'details'    => "Name: {$branchName}, Type: {$branchType}",
+                'record_id' => $branch->id,
+                'details' => "Name: {$branchName}, Type: {$branchType}",
                 'ip_address' => $request->ip(),
             ]);
 
@@ -126,7 +125,7 @@ class BranchController extends Controller
      */
     protected function toggleBranch(Request $request): JsonResponse
     {
-        $id       = (int) $request->input('id', 0);
+        $id = (int) $request->input('id', 0);
         $isActive = (int) $request->input('is_active', 0);
 
         if ($id <= 0) {
@@ -153,10 +152,10 @@ class BranchController extends Controller
         $statusLabel = $isActive ? 'activated' : 'deactivated';
 
         AuditLog::create([
-            'user_id'    => Auth::id(),
-            'action'     => "{$statusLabel} branch",
+            'user_id' => Auth::id(),
+            'action' => "{$statusLabel} branch",
             'table_name' => 'branches',
-            'record_id'  => $id,
+            'record_id' => $id,
             'ip_address' => $request->ip(),
         ]);
 

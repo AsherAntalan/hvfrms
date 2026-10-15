@@ -15,6 +15,7 @@ class StockBatch extends Model
         'quantity_in',
         'quantity_left',
         'expiry_date',
+        'condition',
         'received_at',
         'created_by',
         'qr_code',

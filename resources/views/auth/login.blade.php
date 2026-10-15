@@ -4,239 +4,103 @@
 
 @push('styles')
 <style>
-/* ── Carousel (left panel) ─────────────────────────── */
-.hv-auth-left {
-    position: relative;
-    overflow: hidden;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-}
+.hv-auth-wrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 100svh; margin: 0; background: var(--cream); }
 
-/* Slide backgrounds */
-.hv-slide {
-    position: absolute;
-    inset: 0;
-    background-size: cover;
-    background-position: center;
-    opacity: 0;
-    transition: opacity 1s ease-in-out;
-    z-index: 1;
-}
+/* ── Left: full-bleed image slider ────────────────────── */
+.hv-auth-left { position: relative; min-width: 0; overflow: hidden; background: var(--maroon-dark); }
+.hv-slide { position: absolute; inset: 0; background-size: cover; background-position: center;
+  opacity: 0; transition: opacity .8s ease; z-index: 1; }
 .hv-slide.active { opacity: 1; z-index: 2; }
-
-/* Dark overlay for readability */
-.hv-slide::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        to bottom,
-        rgba(92,16,16,0.35) 0%,
-        rgba(92,16,16,0.25) 40%,
-        rgba(0,0,0,0.55) 100%
-    );
-}
-
-/* Overlay content on each slide */
-.hv-slide-content {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 2.5rem 2rem 4rem;
-    text-align: center;
-    color: #fff;
-}
-
-/* Branding overlay */
-.hv-slide-brand { letter-spacing: 0.25em; font-weight: 800; font-size: 1.15rem; color: #fff; }
-.hv-slide-script {
-    font-family: Georgia, 'Times New Roman', serif;
-    font-style: italic;
-    font-size: 1.85rem;
-    line-height: 1.25;
-    color: var(--gold-soft);
-    margin-top: 0.75rem;
-}
-
-/* Mission & Vision overlay */
-.hv-slide-mv { width: 100%; max-width: 520px; }
-.hv-slide-mv .hv-mv-label {
-    font-weight: 800;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    font-size: 0.95rem;
-    color: #fff;
-    margin-bottom: 0.5rem;
-}
-.hv-slide-mv .hv-mv-box {
-    background: rgba(255,255,255,0.1);
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 12px;
-    padding: 14px 16px;
-    font-size: 13px;
-    line-height: 1.65;
-    color: rgba(255,255,255,0.93);
-    text-align: justify;
-}
-
-/* Dot navigation */
-.hv-dots {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-    display: flex;
-    gap: 10px;
-}
-.hv-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    background: transparent;
-    cursor: pointer;
-    transition: background 0.3s, transform 0.3s;
-    padding: 0;
-}
-.hv-dot:hover { background: rgba(255,255,255,0.5); transform: scale(1.15); }
+.hv-slide::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(92,16,16,.28), rgba(92,16,16,.34) 45%, rgba(0,0,0,.6)); }
+.hv-slide-content { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 48px 36px 96px; text-align: center; color: #fff; }
+.hv-slide-brand { letter-spacing: .3em; text-indent: .3em; font-weight: 800; font-size: clamp(16px, 1.5vw, 22px); color: #fff; }
+.hv-slide-script { font-family: Georgia, 'Times New Roman', serif; font-style: italic;
+  font-size: clamp(26px, 2.8vw, 40px); line-height: 1.25; color: var(--gold-soft);
+  text-shadow: 0 2px 18px rgba(0,0,0,.35); margin-top: 18px; }
+.hv-slide-mv { width: 100%; max-width: 580px; }
+.hv-slide-mv .hv-mv-label { font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; color: var(--gold-soft); margin-bottom: 10px; }
+.hv-slide-mv .hv-mv-box { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); border-radius: 14px; padding: 16px; font-size: 13px; line-height: 1.65; color: #fff; text-align: left; }
+.hv-dots { position: absolute; bottom: 30px; left: 0; right: 0; z-index: 10;
+  display: flex; justify-content: center; align-items: center; gap: 10px; }
+.hv-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,.9);
+  background: transparent; padding: 0; cursor: pointer; transition: background .2s, width .2s, border-radius .2s; }
 .hv-dot.active { background: #fff; }
+.hv-dot:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
 
-/* ── Right panel adjustments ───────────────────────── */
-.hv-auth-right {
-    flex-direction: column;
-    padding: 2.5rem 3rem;
-    border-radius: 40px 0 0 40px;
-    overflow: hidden;
-    position: relative;
-    margin-left: -30px;
-    box-shadow: -6px 0 24px rgba(0,0,0,0.10);
-    background: var(--cream);
-}
-.hv-login-logo {
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    border: 3px solid var(--gold);
-    object-fit: cover;
-    margin-bottom: 1.25rem;
-}
-.hv-login-extras {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-    margin-bottom: 1rem;
-}
-.hv-login-extras a { color: var(--maroon); text-decoration: none; font-weight: 600; }
+/* ── Right: floating cream sign-in card (overlaps slider) ─ */
+.hv-auth-right { min-width: 0; display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 3; margin: 0 0 0 clamp(-64px, -2.6vw, -36px);
+  padding: clamp(30px, 3vw, 56px) clamp(26px, 3vw, 60px); background: var(--cream);
+  border-radius: 30px 0 0 30px; box-shadow: -20px 0 54px -30px rgba(60,8,8,.5); }
+.hv-login-content { width: 100%; max-width: 420px; text-align: center; }
+.hv-login-logo { width: 104px; height: 104px; border-radius: 50%; object-fit: cover;
+  border: 3px solid var(--gold); box-shadow: 0 8px 26px rgba(92,16,16,.18); margin: 0 auto 20px; display: block; }
+.hv-login-content h1 { color: var(--maroon); font-size: clamp(28px, 2.6vw, 38px); font-weight: 800;
+  letter-spacing: -.035em; margin: 0 0 4px; }
+.hv-login-content .hv-login-sub { color: var(--ink); font-size: 15px; margin: 0 0 22px; }
+.hv-login-card { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 26px;
+  text-align: left; box-shadow: 0 1px 2px rgba(60,8,8,.04), 0 18px 44px -28px rgba(60,8,8,.3); }
+.hv-login-card .form-label { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 7px; }
+.hv-login-card .form-control { height: 48px; padding: 10px 14px 10px 42px; border: 1px solid var(--border);
+  border-radius: 11px; font-size: 16px; }
+.hv-login-card .form-control:focus { border-color: var(--maroon); box-shadow: 0 0 0 3px rgba(122,23,23,.1); }
+.hv-login-card .hv-input-icon > i { left: 14px; pointer-events: none; }
+.hv-password-field .form-control { padding-right: 74px; }
+.hv-password-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0;
+  border-radius: 7px; background: transparent; color: var(--maroon); font-size: 12px; font-weight: 600; padding: 7px 10px; }
+.hv-password-toggle:hover { background: var(--gold-soft); }
+.hv-password-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.hv-login-extras { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+  gap: 12px; font-size: 13px; margin: 20px 0; }
+.hv-login-extras a { color: var(--maroon); font-weight: 600; text-decoration: none; }
 .hv-login-extras a:hover { text-decoration: underline; }
-.hv-login-extras label { color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.hv-login-extras label { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.hv-login-extras .form-check-input { margin: 0; }
+.hv-login-card .btn-maroon { min-height: 48px; border-radius: 11px; font-size: 14px; font-weight: 700; letter-spacing: .05em; }
+.hv-login-help { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 22px 4px 0; }
+.hv-login-help strong { font-weight: 600; color: var(--maroon); }
+.hv-login-alert { text-align: left; margin-bottom: 16px; }
 
-/* Glass card around form */
-.hv-glass {
-    background: rgba(255,255,255,0.75);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1.5px solid rgba(122,23,23,0.15);
-    border-radius: 20px;
-    padding: 2.25rem 2rem;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06);
-}
-.hv-glass .form-control {
-    font-size: 16px;
-    padding: 0.85rem 0.85rem 0.85rem 44px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border);
-    height: auto;
-}
-.hv-glass .form-control:focus {
-    border-color: var(--maroon);
-    box-shadow: 0 0 0 3px rgba(122,23,23,0.1);
-}
-.hv-glass .btn-maroon {
-    font-size: 17px;
-    padding: 0.85rem;
-    border-radius: 12px;
-    letter-spacing: 0.08em;
-}
-
-/* Mobile: stack vertically */
-/* Tablet */
 @media (max-width: 991.98px) {
-    .hv-auth-wrap { flex-direction: column !important; }
-    .hv-auth-left,
-    .hv-auth-right {
-        flex: 0 0 100% !important;
-        max-width: 100% !important;
-        margin-left: 0 !important;
-        border-radius: 0 !important;
-    }
-    .hv-auth-left { min-height: 40vh; }
-    .hv-auth-right {
-        padding: 2rem 1.5rem;
-        box-shadow: none !important;
-    }
-    .hv-slide-script { font-size: 1.4rem; }
-    .hv-slide-mv .hv-mv-box { font-size: 12px; padding: 10px 12px; }
-    .hv-slide-brand { font-size: 1rem; }
+    .hv-auth-wrap { display: flex; flex-direction: column; }
+    .hv-auth-right { order: 1; margin: 0; padding: 34px 24px; border-radius: 0; box-shadow: none; }
+    .hv-auth-left { order: 2; min-height: 320px; width: 100%; }
+    .hv-slide-content { padding: 34px 26px 72px; }
+    .hv-slide-mv { max-width: 660px; }
 }
-
-/* Phone */
 @media (max-width: 575.98px) {
-    .hv-auth-left { min-height: 35vh; }
-    .hv-auth-right { padding: 1.5rem 1rem; }
-    .hv-glass {
-        padding: 1.5rem 1.25rem !important;
-        border-radius: 16px !important;
-    }
-    .hv-glass .form-control {
-        font-size: 15px !important;
-        padding: 0.7rem 0.7rem 0.7rem 40px !important;
-    }
-    .hv-glass .btn-maroon {
-        font-size: 15px !important;
-        padding: 0.7rem !important;
-    }
-    .hv-login-logo {
-        width: 70px !important;
-        height: 70px !important;
-    }
-    h3 { font-size: 1.4rem !important; }
-    .hv-slide-content { padding: 1.5rem 1rem 3rem; }
-    .hv-slide-brand { font-size: 0.85rem; letter-spacing: 0.15em; }
-    .hv-slide-script { font-size: 1.1rem; }
+    .hv-auth-right { margin: 0; padding: 26px 20px; }
+    .hv-login-logo { width: 84px; height: 84px; }
+    .hv-login-card { padding: 21px; border-radius: 15px; }
+    .hv-auth-left { min-height: 240px; }
+    .hv-slide-script { font-size: 25px; }
     .hv-slide-mv { display: none; }
-    .hv-dots { bottom: 12px; }
-    .hv-dot { width: 10px; height: 10px; }
 }
+@media (prefers-reduced-motion: reduce) { .hv-slide { transition: none; } }
 </style>
 @endpush
 
 @section('content')
-<div class="hv-auth-wrap row g-0">
+<main class="hv-auth-wrap" aria-label="Hidden Vietnam sign in">
 
-    {{-- ═══ LEFT PANEL: Image Carousel ═══════════════════ --}}
-    <div class="col-lg-5 hv-auth-left" style="flex:0 0 50%;max-width:50%">
+    {{-- ═══ LEFT: image slider ══════════════════════════ --}}
+    <section class="hv-auth-left" aria-label="About Hidden Vietnam" aria-roledescription="carousel">
 
-        {{-- Slide 1: Restaurant storefront — branding --}}
+        {{-- Slide 1: storefront --}}
         <div class="hv-slide active" style="background-image:url('{{ asset('assets/img/carousel/slide-storefront.png') }}')">
             <div class="hv-slide-content">
-                <div class="hv-slide-brand">H I D D E N &nbsp; V I E T N A M</div>
+                <div class="hv-slide-brand">HIDDEN VIETNAM</div>
                 <div class="hv-slide-script">Affordable Vietnamese<br>Street Food</div>
             </div>
         </div>
 
-        {{-- Slide 2: Restaurant interior — Mission & Vision --}}
+        {{-- Slide 2: Mission & Vision --}}
         <div class="hv-slide" style="background-image:url('{{ asset('assets/img/carousel/slide-interior.png') }}')">
             <div class="hv-slide-content">
-                <div class="hv-slide-brand mb-3">H I D D E N &nbsp; V I E T N A M</div>
+                <div class="hv-slide-brand mb-3">HIDDEN VIETNAM</div>
                 <div class="hv-slide-mv">
                     <div class="row g-3">
                         <div class="col-6">
@@ -264,120 +128,122 @@
             </div>
         </div>
 
-        {{-- Slide 3: Logo only --}}
+        {{-- Slide 3: logo lockup --}}
         <div class="hv-slide" style="background:linear-gradient(135deg,var(--maroon-dark),var(--maroon))">
             <div class="hv-slide-content">
                 <img src="{{ asset('assets/img/logo.jpg') }}" style="width:120px;height:120px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;margin-bottom:1.25rem;"
                      alt="Hidden Vietnam logo" onerror="this.src='https://placehold.co/120x120/5C1010/D4A94A?text=HV'">
-                <div class="hv-slide-brand">H I D D E N &nbsp; V I E T N A M</div>
+                <div class="hv-slide-brand">HIDDEN VIETNAM</div>
                 <div class="hv-slide-script">Affordable Vietnamese<br>Street Food</div>
             </div>
         </div>
 
         {{-- Dot indicators --}}
         <div class="hv-dots">
-            <button class="hv-dot active" data-slide="0" aria-label="Slide 1"></button>
-            <button class="hv-dot" data-slide="1" aria-label="Slide 2"></button>
-            <button class="hv-dot" data-slide="2" aria-label="Slide 3"></button>
+            <button type="button" class="hv-dot active" data-slide="0" aria-label="Show Hidden Vietnam storefront" aria-current="true"></button>
+            <button type="button" class="hv-dot" data-slide="1" aria-label="Show mission and vision" aria-current="false"></button>
+            <button type="button" class="hv-dot" data-slide="2" aria-label="Show Hidden Vietnam brand" aria-current="false"></button>
         </div>
-    </div>
+    </section>
 
-    {{-- ═══ RIGHT PANEL: Login Form ═════════════════════ --}}
-    <div class="col-lg-7 hv-auth-right" style="flex:0 0 calc(50% + 30px);max-width:calc(50% + 30px);border-radius:40px 0 0 40px;z-index:5">
-        <div style="width:100%; max-width:440px;">
-            <div class="text-center mb-4">
-                <img src="{{ asset('assets/img/logo.jpg') }}" class="hv-login-logo" alt="Hidden Vietnam logo"
-                     onerror="this.src='https://placehold.co/90x90/5C1010/D4A94A?text=HV'">
-                <h3 class="mb-1" style="color:var(--maroon); font-weight:800;">WELCOME BACK!</h3>
-                <p class="text-muted small mb-0">Login to your account</p>
-            </div>
+    {{-- ═══ RIGHT: floating sign-in card ════════════════ --}}
+    <section class="hv-auth-right" aria-labelledby="loginTitle">
+        <div class="hv-login-content">
+            <img src="{{ asset('assets/img/logo.jpg') }}" class="hv-login-logo" alt="Hidden Vietnam logo"
+                 onerror="this.src='https://placehold.co/120x120/5C1010/D4A94A?text=HV'">
+            <h1 id="loginTitle">WELCOME BACK!</h1>
+            <p class="hv-login-sub">Login to your account</p>
 
-            {{-- Flash messages --}}
             @if(session('success'))
-                <div class="alert alert-success py-2 small">{{ session('success') }}</div>
+                <div class="alert alert-success py-2 small hv-login-alert" role="status">{{ session('success') }}</div>
             @endif
-
             @if(session('warning'))
-                <div class="alert alert-warning py-2 small">{{ session('warning') }}</div>
+                <div class="alert alert-warning py-2 small hv-login-alert" role="alert">{{ session('warning') }}</div>
             @endif
-
             @if(session('error'))
-                <div class="alert alert-danger py-2 small">{{ session('error') }}</div>
+                <div class="alert alert-danger py-2 small hv-login-alert" role="alert">{{ session('error') }}</div>
             @endif
-
             @if($errors->any())
-                <div class="alert alert-danger py-2 small">{{ $errors->first() }}</div>
+                <div class="alert alert-danger py-2 small hv-login-alert" role="alert">{{ $errors->first() }}</div>
             @endif
 
-            <div class="hv-glass">
-                <form method="POST" action="{{ route('login.submit') }}">
+            <div class="hv-login-card">
+                <form method="POST" action="{{ route('login.submit') }}" id="loginForm">
                     @csrf
-                    <div class="hv-input-icon mb-3">
-                        <i class="bi bi-person"></i>
-                        <input type="email" name="email" class="form-control py-2"
-                               placeholder="Email" value="{{ old('email') }}" required autofocus>
+                    <div class="mb-3">
+                        <label for="loginEmail" class="form-label">Email address</label>
+                        <div class="hv-input-icon">
+                            <i class="bi bi-person" aria-hidden="true"></i>
+                            <input id="loginEmail" type="email" name="email" class="form-control"
+                                   placeholder="Enter your registered email" value="{{ old('email') }}" autocomplete="username" spellcheck="false" required>
+                        </div>
                     </div>
-                    <div class="hv-input-icon mb-3">
-                        <i class="bi bi-lock"></i>
-                        <input type="password" name="password" class="form-control py-2"
-                               placeholder="Password" required>
+                    <div>
+                        <label for="loginPassword" class="form-label">Password</label>
+                        <div class="hv-input-icon hv-password-field">
+                            <i class="bi bi-lock" aria-hidden="true"></i>
+                            <input id="loginPassword" type="password" name="password" class="form-control"
+                                   placeholder="Enter your password" autocomplete="current-password" required>
+                            <button type="button" class="hv-password-toggle" id="toggleLoginPassword" aria-controls="loginPassword" aria-label="Show password" aria-pressed="false">Show</button>
+                        </div>
                     </div>
                     <div class="hv-login-extras">
-                        <label><input type="checkbox" name="remember" class="form-check-input" style="margin-top:0"> Remember me</label>
-                        <a href="{{ url('modules/auth/forgot_password.php') }}">Forgot password?</a>
+                        <label for="loginRemember"><input id="loginRemember" type="checkbox" name="remember" class="form-check-input"> Remember me</label>
+                        <a href="{{ route('password.request') }}">Forgot password?</a>
                     </div>
-                    <button type="submit" class="btn btn-maroon w-100 py-2 fw-bold">LOGIN</button>
+                    <button type="submit" class="btn btn-maroon w-100">LOGIN</button>
                 </form>
             </div>
+
+            <p class="hv-login-help">
+                <strong>Forgot your password or need access?</strong><br>
+                Contact your Owner or Admin to reset your password or check your account and branch assignment.
+            </p>
         </div>
-    </div>
-</div>
+    </section>
+</main>
 @endsection
 
 @push('scripts')
-{{-- ═══ CAROUSEL JS ═══════════════════════════════════════ --}}
 <script>
 (function () {
-    const slides = document.querySelectorAll('.hv-slide');
-    const dots   = document.querySelectorAll('.hv-dot');
-    let current  = 0;
-    let timer    = null;
-    const INTERVAL = 7000;
-
-    function goTo(index) {
-        slides[current].classList.remove('active');
-        dots[current].classList.remove('active');
-        current = (index + slides.length) % slides.length;
-        slides[current].classList.add('active');
-        dots[current].classList.add('active');
-    }
-
-    function next() { goTo(current + 1); }
-
-    function startAuto() {
-        stopAuto();
-        timer = setInterval(next, INTERVAL);
-    }
-
-    function stopAuto() {
-        if (timer) { clearInterval(timer); timer = null; }
-    }
-
-    // Dot clicks
-    dots.forEach(function (dot) {
-        dot.addEventListener('click', function () {
-            goTo(parseInt(this.dataset.slide, 10));
-            startAuto();
-        });
+    const password = document.getElementById('loginPassword');
+    const toggle = document.getElementById('toggleLoginPassword');
+    toggle.addEventListener('click', function () {
+        const visible = password.type === 'password';
+        password.type = visible ? 'text' : 'password';
+        toggle.textContent = visible ? 'Hide' : 'Show';
+        toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+        toggle.setAttribute('aria-pressed', visible ? 'true' : 'false');
     });
 
-    // Pause auto-slide when user hovers the left panel
-    var panel = document.querySelector('.hv-auth-left');
+    const slides = [...document.querySelectorAll('.hv-slide')];
+    const dots = [...document.querySelectorAll('.hv-dot')];
+    const panel = document.querySelector('.hv-auth-left');
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let current = 0, timer = null;
+
+    function goTo(index) {
+        current = (index + slides.length) % slides.length;
+        slides.forEach((slide, number) => {
+            slide.classList.toggle('active', number === current);
+            slide.setAttribute('aria-hidden', number === current ? 'false' : 'true');
+            dots[number].classList.toggle('active', number === current);
+            dots[number].setAttribute('aria-current', number === current ? 'true' : 'false');
+        });
+    }
+    function stopAuto() { if (timer) clearInterval(timer); timer = null; }
+    function startAuto() {
+        stopAuto();
+        if (!motion.matches && !document.hidden) timer = setInterval(() => goTo(current + 1), 7000);
+    }
+    dots.forEach(dot => dot.addEventListener('click', () => { goTo(Number(dot.dataset.slide)); startAuto(); }));
     panel.addEventListener('mouseenter', stopAuto);
     panel.addEventListener('mouseleave', startAuto);
-
-    // Start
-    startAuto();
+    panel.addEventListener('focusin', stopAuto);
+    panel.addEventListener('focusout', event => { if (!panel.contains(event.relatedTarget)) startAuto(); });
+    document.addEventListener('visibilitychange', startAuto);
+    goTo(0); startAuto();
 })();
 </script>
 @endpush

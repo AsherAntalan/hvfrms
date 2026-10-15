@@ -27,7 +27,7 @@ class ForecastController extends Controller
             $branches = Branch::where('is_active', true)
                 ->orderBy('branch_name')
                 ->get();
-            $selBranch = (int)$request->input('branch', 0);
+            $selBranch = (int) $request->input('branch', 0);
         }
 
         // Handle save action
@@ -44,16 +44,19 @@ class ForecastController extends Controller
 
         // Trend badge mapping
         $trendBadges = [
-            'rising'       => ['hv-badge-success',   'bi-graph-up-arrow',   'Rising'],
-            'falling'      => ['hv-badge-danger',    'bi-graph-down-arrow', 'Falling'],
-            'stable'       => ['hv-badge-info',      'bi-dash-lg',          'Stable'],
-            'flat'         => ['hv-badge-warning',   'bi-dash',             'No Activity'],
+            'rising' => ['hv-badge-success',   'bi-graph-up-arrow',   'Rising'],
+            'falling' => ['hv-badge-danger',    'bi-graph-down-arrow', 'Falling'],
+            'stable' => ['hv-badge-info',      'bi-dash-lg',          'Stable'],
+            'flat' => ['hv-badge-warning',   'bi-dash',             'No Activity'],
             'insufficient' => ['hv-badge-secondary', 'bi-question-circle',  'Insufficient Data'],
         ];
 
         // Stats for summary cards
-        $needsReorder = count(array_filter($forecasts, fn($f) => $f['recommend_qty'] > 0));
-        $totalUnits   = array_sum(array_column($forecasts, 'recommend_qty'));
+        $needsReorder = count(array_filter($forecasts, fn ($f) => $f['recommend_qty'] > 0));
+        $totalUnits = array_sum(array_column($forecasts, 'recommend_qty'));
+
+        $mainBranch = Branch::where('branch_type', 'main')->where('is_active', true)->orderBy('id')->first();
+        $allowAllBranches = ! $user->isBranchScoped();
 
         return view('forecast.index', compact(
             'forecasts',
@@ -61,7 +64,9 @@ class ForecastController extends Controller
             'selBranch',
             'trendBadges',
             'needsReorder',
-            'totalUnits'
+            'totalUnits',
+            'mainBranch',
+            'allowAllBranches'
         ));
     }
 }

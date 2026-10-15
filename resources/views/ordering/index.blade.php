@@ -14,8 +14,8 @@
 <div class="hv-card p-4 mb-3" style="background:linear-gradient(135deg, var(--maroon), #5c1010); color:#fff; border:none;">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="mb-1 fw-bold"><i class="bi bi-shop me-2"></i> Main Supply Store</h4>
-            <div class="opacity-75">Browse &amp; order supplies from the main branch</div>
+            <h4 class="mb-1 fw-bold"><i class="bi bi-shop me-2"></i> Main Branch Commissary</h4>
+            <div class="opacity-75">Products are prepared after you place an order.</div>
         </div>
         <div style="width:320px;">
             <div class="input-group">
@@ -70,7 +70,7 @@
     @foreach($items as $item)
     @php
         $myStock = (int)$item->my_stock;
-        $mainStock = (int)$item->main_stock;
+        $isAvailable = (bool)$item->is_active;
         $reorder = (int)$item->reorder_level;
         $lowStock = $myStock > 0 && $myStock <= $reorder;
     @endphp
@@ -78,49 +78,53 @@
          data-name="{{ strtolower($item->item_name) }}"
          data-category="{{ $item->category_name ?? '' }}"
          data-price="{{ $item->price }}"
-         data-id="{{ $item->id }}">
-        <div class="hv-card h-100 p-0 d-flex flex-column" style="overflow:hidden;">
+         data-id="{{ $item->id }}"
+         data-item-name="{{ $item->item_name }}"
+         data-unit="{{ $item->unit }}"
+         data-image="{{ $item->image_path ? asset($item->image_path) : '' }}"
+         data-suggested="{{ (int)($item->suggested_qty ?? 0) }}"
+         data-available="{{ $isAvailable ? '1' : '0' }}">
+        <div class="hv-card hv-prod h-100 p-0 d-flex flex-column {{ $isAvailable ? '' : 'is-off' }}">
             <!-- Product Image -->
-            <div style="height:160px; background:var(--gold-soft); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            <div class="hv-prod-img">
                 @if($item->image_path)
-                    <img src="{{ asset($item->image_path) }}" alt="{{ $item->item_name }}"
-                         style="width:100%; height:100%; object-fit:cover;">
+                    <img src="{{ asset($item->image_path) }}" alt="{{ $item->item_name }}">
                 @else
-                    <i class="bi bi-box" style="font-size:3rem; color:var(--maroon); opacity:0.4;"></i>
+                    <span class="hv-prod-ph" aria-hidden="true"><i class="bi bi-bag"></i></span>
                 @endif
+                @if($item->category_name)
+                    <span class="hv-prod-cat">{{ $item->category_name }}</span>
+                @endif
+                @if($lowStock)<span class="hv-prod-flag">Low stock</span>@endif
             </div>
             <!-- Product Info -->
-            <div class="p-3 d-flex flex-column flex-grow-1">
-                <div class="text-muted small mb-1">{{ $item->category_name ?? '' }} &middot; {{ $item->unit }}</div>
-                <div class="fw-bold mb-0" style="font-size:0.95rem;">{{ $item->item_name }}</div>
-                @if($item->pack_description)
-                    <div class="text-muted small">{{ $item->pack_description }}</div>
-                @endif
-                <div class="fw-bold mt-2" style="color:var(--maroon); font-size:1.1rem;">
-                    &#8369;{{ number_format($item->price, 2) }} <span class="fw-normal text-muted small">/{{ $item->unit }}</span>
-                </div>
-                <div class="mt-1 small">
-                    @if($mainStock > 0)
-                        <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>{{ $mainStock }} available</span>
+            <div class="hv-prod-body d-flex flex-column flex-grow-1">
+                <h3 class="hv-prod-name">{{ $item->item_name }}</h3>
+                <div class="hv-prod-sub">{{ $item->pack_description ?: 'Per '.$item->unit }}</div>
+                <div class="hv-prod-price">&#8369;{{ number_format($item->price, 2) }}<span>/{{ $item->unit }}</span></div>
+
+                <div class="hv-prod-meta">
+                    @if($isAvailable)
+                        <span class="hv-prod-chip ok"><i class="bi bi-check-circle-fill"></i> Made to order</span>
                     @else
-                        <span class="text-muted"><i class="bi bi-x-circle me-1"></i>Out of stock</span>
+                        <span class="hv-prod-chip off"><i class="bi bi-x-circle-fill"></i> Unavailable</span>
+                    @endif
+                    <span class="hv-prod-stock {{ $lowStock ? 'is-low' : '' }}">Your stock: <b>{{ $myStock }}</b></span>
+                    @if((int)($item->suggested_qty ?? 0) > 0)
+                        <span class="hv-prod-sugg" title="Forecast-suggested quantity"><i class="bi bi-graph-up-arrow"></i> Suggested: {{ (int)$item->suggested_qty }}</span>
                     @endif
                 </div>
-                <div class="small {{ $lowStock ? 'text-warning' : 'text-muted' }}">
-                    Your stock: {{ $myStock }}
-                    @if($lowStock)
-                        (Low)
-                    @endif
-                </div>
+
                 <div class="mt-auto pt-2">
-                    @if($mainStock > 0)
+                    @if($isAvailable)
                         <button class="btn btn-maroon btn-sm w-100 btn-add-cart"
                                 id="btnCart{{ $item->id }}"
-                                onclick="openAddModal({{ $item->id }}, '{{ addslashes($item->item_name) }}', {{ $item->price }}, {{ $mainStock }}, '{{ $item->image_path ? asset($item->image_path) : '' }}', '{{ $item->unit }}')">
+                                onclick="openAddModal(this)">
                             <i class="bi bi-cart-plus me-1"></i> Add to Cart
                         </button>
                     @else
-                        <button class="btn btn-outline-secondary btn-sm w-100" disabled>
+                        <button class="btn btn-outline-secondary btn-sm w-100" disabled
+                                title="Marked unavailable by the Owner or Main Branch Manager">
                             <i class="bi bi-cart-x me-1"></i> Unavailable
                         </button>
                     @endif
@@ -162,11 +166,17 @@
                 };
             @endphp
                 <tr>
-                    <td class="fw-semibold">{{ $ord->order_number }}</td>
+                    <td class="fw-semibold">{{ $ord->order_number }}<br>
+                        @if($ord->isProformaAvailable())
+                        <a class="small" href="{{ route('orders.proforma', $ord) }}" target="_blank" rel="noopener">Proforma invoice</a>
+                        @elseif($ord->status === 'pending')
+                        <span class="small fw-normal text-muted">Proforma available after approval</span>
+                        @endif
+                    </td>
                     <td>{{ (int)$ord->item_count }} item{{ (int)$ord->item_count !== 1 ? 's' : '' }}</td>
                     <td class="text-end fw-semibold">&#8369;{{ number_format($ord->total_amount, 2) }}</td>
                     <td class="text-center">
-                        <span class="hv-badge {{ $statusBadge }}">{{ ucfirst($ord->status) }}</span>
+                        <span class="hv-badge {{ $statusBadge }}">{{ $ord->status === 'approved' ? 'Awaiting Confirmation' : ucfirst($ord->status) }}</span>
                     </td>
                     <td class="small text-muted">{{ \Carbon\Carbon::parse($ord->created_at)->format('M j, Y g:i A') }}</td>
                 </tr>
@@ -197,17 +207,15 @@
                 </div>
                 <p class="fw-bold mb-1" id="addModalName"></p>
                 <p class="mb-1" style="color:var(--maroon); font-weight:600;" id="addModalPrice"></p>
-                <p class="text-muted small mb-3">
-                    Available at main branch: <strong class="text-success" id="addModalAvail"></strong>
-                </p>
+                <p class="text-muted small mb-3" id="addModalLimit"></p>
+                <label for="addModalQty" class="form-label small">Quantity</label>
                 <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                    <button class="btn btn-outline-secondary btn-sm px-3" onclick="adjustModalQty(-1)"><i class="bi bi-dash"></i></button>
-                    <input type="number" class="form-control text-center" id="addModalQty" min="1" value="1" style="width:70px;">
-                    <button class="btn btn-outline-secondary btn-sm px-3" onclick="adjustModalQty(1)"><i class="bi bi-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalMinus" aria-label="Decrease quantity" onclick="adjustModalQty(-1)"><i class="bi bi-dash"></i></button>
+                    <input type="number" class="form-control text-center" id="addModalQty" min="1" step="1" value="1" oninput="updateModalQtyControls()" style="width:70px;">
+                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalPlus" aria-label="Increase quantity" onclick="adjustModalQty(1)"><i class="bi bi-plus"></i></button>
                 </div>
                 <input type="hidden" id="addModalItemId">
                 <input type="hidden" id="addModalUnitPrice">
-                <input type="hidden" id="addModalMaxQty">
                 <input type="hidden" id="addModalUnit">
             </div>
             <div class="modal-footer py-2 justify-content-center">
@@ -230,11 +238,14 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
     </div>
     <div class="offcanvas-body p-0 d-flex flex-column">
-        <div class="flex-grow-1 overflow-auto p-3" id="cartSidebarBody">
+        <div class="flex-grow-1 overflow-auto">
+        <div class="p-3" id="cartSidebarBody">
             <div class="text-center text-muted py-5" id="cartEmpty">
                 <i class="bi bi-cart" style="font-size:2rem;"></i>
                 <div class="mt-2">Your cart is empty</div>
             </div>
+        </div>
+        <div class="px-3">@include('partials.order-payment-fields', ['paymentPrefix' => 'cart'])</div>
         </div>
         <div class="border-top p-3" id="cartSidebarFooter" style="display:none;">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -285,13 +296,51 @@
     background: rgba(255,255,255,0.3) !important;
     color: #fff !important;
 }
-.product-card .hv-card {
-    transition: transform 0.15s, box-shadow 0.15s;
+/* ── Product cards ─────────────────────────────────────── */
+.hv-prod {
+    overflow: hidden; border-radius: 16px; border: 1px solid var(--border);
+    transition: transform 0.18s cubic-bezier(.2,.7,.2,1), box-shadow 0.18s, border-color 0.18s;
 }
-.product-card .hv-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+.product-card .hv-prod:hover {
+    transform: translateY(-3px); border-color: var(--gold);
+    box-shadow: 0 1px 2px rgba(60,8,8,.05), 0 16px 30px -18px rgba(60,8,8,.35);
 }
+.hv-prod.is-off { opacity: .72; }
+.hv-prod-img {
+    position: relative; height: 128px; overflow: hidden;
+    background: linear-gradient(135deg, var(--gold-soft), #FBF3E0);
+    display: flex; align-items: center; justify-content: center;
+}
+.hv-prod-img img { width: 100%; height: 100%; object-fit: cover; }
+.hv-prod-ph {
+    width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    background: #fff; border: 1px solid rgba(122,23,23,.12); box-shadow: 0 6px 16px -10px rgba(60,8,8,.4);
+}
+.hv-prod-ph .bi { font-size: 1.5rem; color: var(--maroon); opacity: .55; }
+.hv-prod-cat {
+    position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .03em;
+    color: var(--maroon); background: rgba(255,255,255,.9); border-radius: 999px; padding: .12rem .5rem;
+    backdrop-filter: blur(2px);
+}
+.hv-prod-flag {
+    position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 700;
+    color: #8A6D00; background: rgba(255,255,255,.92); border-radius: 999px; padding: .12rem .5rem;
+}
+.hv-prod-body { padding: .85rem .9rem 1rem; }
+.hv-prod-name { font-size: .98rem; font-weight: 700; letter-spacing: -.01em; color: var(--ink); margin: 0; line-height: 1.25; }
+.hv-prod-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.hv-prod-price { font-size: 1.2rem; font-weight: 800; color: var(--maroon); letter-spacing: -.02em; margin-top: .5rem; }
+.hv-prod-price span { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.hv-prod-meta { display: flex; flex-wrap: wrap; gap: .3rem .5rem; align-items: center; margin-top: .5rem; font-size: 11.5px; }
+.hv-prod-chip { display: inline-flex; align-items: center; gap: .25rem; font-weight: 600; border-radius: 999px; padding: .1rem .45rem; }
+.hv-prod-chip.ok { color: var(--success); background: #E6F0E7; }
+.hv-prod-chip.off { color: var(--muted); background: #EFEBE3; }
+.hv-prod-chip .bi { font-size: .78em; }
+.hv-prod-stock { color: var(--muted); }
+.hv-prod-stock.is-low { color: #8A6D00; }
+.hv-prod-stock b { color: var(--ink); }
+.hv-prod-sugg { display: inline-flex; align-items: center; gap: .25rem; color: var(--maroon); font-weight: 600; }
+.hv-prod-sugg .bi { font-size: .82em; }
 .btn-maroon {
     background: var(--maroon);
     border-color: var(--maroon);
@@ -359,6 +408,7 @@
 <script>
 const API  = '{{ route("ordering.api") }}';
 const CSRF = '{{ csrf_token() }}';
+const MAX_ORDER_QUANTITY = @json($maxOrderQuantity);
 
 let cart = [];
 let addModal, cartOffcanvas;
@@ -417,53 +467,84 @@ function sortProducts() {
 }
 
 // ── Add to Cart Modal ────────────────────────────────────
-function openAddModal(id, name, price, maxQty, imgUrl, unit) {
-    document.getElementById('addModalItemId').value    = id;
+function openAddModal(button) {
+    var card = button.closest('.product-card');
+    if (!card || card.dataset.available !== '1') return;
+
+    var id = Number(card.dataset.id);
+    var name = card.dataset.itemName;
+    var price = Number(card.dataset.price);
+    var unit = card.dataset.unit;
+    var imgUrl = card.dataset.image;
+    var input = document.getElementById('addModalQty');
+
+    document.getElementById('addModalItemId').value = id;
     document.getElementById('addModalName').textContent = name;
-    document.getElementById('addModalPrice').innerHTML  = '&#8369;' + price.toFixed(2) + ' / ' + unit;
-    document.getElementById('addModalAvail').textContent = maxQty;
-    document.getElementById('addModalUnitPrice').value   = price;
-    document.getElementById('addModalMaxQty').value      = maxQty;
-    document.getElementById('addModalUnit').value        = unit;
-    document.getElementById('addModalQty').value         = 1;
-    document.getElementById('addModalQty').max           = maxQty;
+    document.getElementById('addModalPrice').textContent = '₱' + price.toFixed(2) + ' / ' + unit;
+    var suggested = Number(card.dataset.suggested) || 0;
+    document.getElementById('addModalLimit').textContent = suggested > 0
+        ? 'Forecast suggests ' + suggested + ' ' + unit + '. Adjust as needed.'
+        : (MAX_ORDER_QUANTITY > 0
+            ? 'Maximum ' + MAX_ORDER_QUANTITY + ' ' + unit + ' per product in each order.'
+            : 'Prepared after your order is confirmed.');
+    document.getElementById('addModalUnitPrice').value = price;
+    document.getElementById('addModalUnit').value = unit;
+    if (MAX_ORDER_QUANTITY > 0) {
+        input.max = MAX_ORDER_QUANTITY;
+    } else {
+        input.removeAttribute('max');
+    }
 
     var imgDiv = document.getElementById('addModalImg');
+    imgDiv.replaceChildren();
     if (imgUrl) {
-        imgDiv.innerHTML = '<img src="' + imgUrl + '" style="max-height:100px; max-width:100%; border-radius:8px; object-fit:cover;">';
+        var image = document.createElement('img');
+        image.src = imgUrl;
+        image.alt = name;
+        image.style.cssText = 'max-height:100px;max-width:100%;border-radius:8px;object-fit:cover;';
+        imgDiv.appendChild(image);
     } else {
-        imgDiv.innerHTML = '<i class="bi bi-box" style="font-size:3rem; color:var(--maroon); opacity:0.3;"></i>';
+        imgDiv.innerHTML = '<i class="bi bi-box" style="font-size:3rem;color:var(--maroon);opacity:0.3;"></i>';
     }
 
     var existing = cart.find(c => c.item_id === id);
-    if (existing) {
-        document.getElementById('addModalQty').value = existing.quantity;
-    }
-
+    var defaultQty = suggested > 0 ? suggested : 1;
+    if (MAX_ORDER_QUANTITY > 0) defaultQty = Math.min(defaultQty, MAX_ORDER_QUANTITY);
+    input.value = existing ? existing.quantity : defaultQty;
+    updateModalQtyControls();
     addModal.show();
+}
+
+function updateModalQtyControls() {
+    var qty = Number(document.getElementById('addModalQty').value);
+    document.getElementById('btnModalMinus').disabled = qty <= 1;
+    document.getElementById('btnModalPlus').disabled = MAX_ORDER_QUANTITY > 0 && qty >= MAX_ORDER_QUANTITY;
 }
 
 function adjustModalQty(delta) {
     var input = document.getElementById('addModalQty');
-    var val   = parseInt(input.value) || 1;
-    var max   = parseInt(document.getElementById('addModalMaxQty').value);
-    val = Math.max(1, Math.min(max, val + delta));
-    input.value = val;
+    var qty = Number(input.value);
+    if (!Number.isSafeInteger(qty)) qty = 1;
+    qty = Math.max(1, qty + delta);
+    if (MAX_ORDER_QUANTITY > 0) qty = Math.min(MAX_ORDER_QUANTITY, qty);
+    input.value = qty;
+    updateModalQtyControls();
 }
 
 function confirmAddToCart() {
-    var itemId = parseInt(document.getElementById('addModalItemId').value);
-    var name   = document.getElementById('addModalName').textContent;
-    var price  = parseFloat(document.getElementById('addModalUnitPrice').value);
-    var qty    = parseInt(document.getElementById('addModalQty').value);
-    var maxQty = parseInt(document.getElementById('addModalMaxQty').value);
-    var unit   = document.getElementById('addModalUnit').value;
-    var imgDiv = document.getElementById('addModalImg');
-    var imgEl  = imgDiv.querySelector('img');
+    var itemId = Number(document.getElementById('addModalItemId').value);
+    var name = document.getElementById('addModalName').textContent;
+    var price = Number(document.getElementById('addModalUnitPrice').value);
+    var qty = Number(document.getElementById('addModalQty').value);
+    var unit = document.getElementById('addModalUnit').value;
+    var imgEl = document.getElementById('addModalImg').querySelector('img');
     var imgUrl = imgEl ? imgEl.src : '';
 
-    if (isNaN(qty) || qty < 1) { alert('Please enter a valid quantity.'); return; }
-    if (qty > maxQty) { alert('Cannot order more than ' + maxQty + ' available.'); return; }
+    if (!Number.isSafeInteger(qty) || qty < 1) { alert('Please enter a positive whole-number quantity.'); return; }
+    if (MAX_ORDER_QUANTITY > 0 && qty > MAX_ORDER_QUANTITY) {
+        alert('Maximum ' + MAX_ORDER_QUANTITY + ' ' + unit + ' per product in each order.');
+        return;
+    }
 
     var existing = cart.find(c => c.item_id === itemId);
     if (existing) {
@@ -476,7 +557,6 @@ function confirmAddToCart() {
     updateCartUI();
 }
 
-// ── Cart UI ──────────────────────────────────────────────
 function updateCartUI() {
     var fab   = document.getElementById('cartFab');
     var badge = document.getElementById('cartFabBadge');
@@ -548,7 +628,8 @@ function renderCartSidebar() {
         html += '<div class="d-flex align-items-center gap-1">';
         html += '<button class="btn btn-outline-secondary cart-qty-btn" onclick="changeCartQty(' + c.item_id + ',-1)"><i class="bi bi-dash"></i></button>';
         html += '<span class="fw-bold" style="min-width:24px; text-align:center;">' + c.quantity + '</span>';
-        html += '<button class="btn btn-outline-secondary cart-qty-btn" onclick="changeCartQty(' + c.item_id + ',1)"><i class="bi bi-plus"></i></button>';
+        var atLimit = MAX_ORDER_QUANTITY > 0 && c.quantity >= MAX_ORDER_QUANTITY;
+        html += '<button class="btn btn-outline-secondary cart-qty-btn" aria-label="Increase quantity" ' + (atLimit ? 'disabled ' : '') + 'onclick="changeCartQty(' + c.item_id + ',1)"><i class="bi bi-plus"></i></button>';
         html += '</div>';
         html += '<button class="btn btn-outline-danger btn-sm px-1 py-0" onclick="removeFromCart(' + c.item_id + ')" title="Remove"><i class="bi bi-trash"></i></button>';
         html += '</div>';
@@ -568,18 +649,13 @@ function changeCartQty(itemId, delta) {
     var item = cart.find(c => c.item_id === itemId);
     if (!item) return;
 
-    var card   = document.querySelector('.product-card[data-id="' + itemId + '"]');
-    var btn    = card ? card.querySelector('.btn-add-cart') : null;
-    var maxQty = btn ? parseInt(btn.getAttribute('onclick').match(/,\s*(\d+)\s*,/)?.[1] || 9999) : 9999;
-
-    item.quantity += delta;
-    if (item.quantity < 1) {
+    var qty = item.quantity + delta;
+    if (!Number.isSafeInteger(qty)) return;
+    if (qty < 1) {
         removeFromCart(itemId);
         return;
     }
-    if (item.quantity > maxQty) {
-        item.quantity = maxQty;
-    }
+    item.quantity = MAX_ORDER_QUANTITY > 0 ? Math.min(MAX_ORDER_QUANTITY, qty) : qty;
     updateCartUI();
 }
 
@@ -598,7 +674,9 @@ function clearCart() {
 // ── Place Order ──────────────────────────────────────────
 async function placeOrder() {
     if (cart.length === 0) { alert('Cart is empty.'); return; }
-    if (!confirm('Place this order? It will be sent to the main branch for approval.')) return;
+    var paymentData = new FormData();
+    if (!appendOrderPayment('cart', paymentData)) return;
+    if (!confirm('Submit this order and payment proof to the Commissary for review?')) return;
 
     var btn = document.getElementById('btnPlaceOrder');
     btn.disabled  = true;
@@ -610,6 +688,7 @@ async function placeOrder() {
     data.append('action', 'place_order');
     data.append('_token', CSRF);
     data.append('cart', JSON.stringify(cart));
+    paymentData.forEach(function(value, key) { data.append(key, value); });
     if (remarks) data.append('remarks', remarks);
 
     try {
@@ -625,7 +704,7 @@ async function placeOrder() {
             cartOffcanvas.hide();
             location.reload();
         } else {
-            alert(json.error || 'Failed to place order.');
+            showOrderPaymentError('cart', orderPaymentError(json));
         }
     } catch (err) {
         alert('Network error. Please check your connection.');

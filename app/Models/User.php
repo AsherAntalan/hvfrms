@@ -83,9 +83,17 @@ class User extends Authenticatable
     // Role helper methods
     // -------------------------------------------------------
 
+    // Owner-level authority. The internal super_admin (developer) and the
+    // business Admin share Owner's application permissions; their distinct
+    // role_id/account keeps attribution and audit traceability separate.
     public function isOwner(): bool
     {
-        return in_array($this->role->role_name, ['super_admin', 'owner']);
+        return in_array($this->role->role_name, ['super_admin', 'owner', 'admin']);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role->role_name === 'admin';
     }
 
     public function isSuperAdmin(): bool
@@ -103,29 +111,62 @@ class User extends Authenticatable
         return $this->role->role_name === 'branch_staff';
     }
 
+    // Commissary (separate production/dispatch location) roles — renamed from
+    // main_branch_* (and warehouse_* before that). Legacy method names are kept
+    // as aliases so every existing call site stays valid.
+    public function isCommissaryManager(): bool
+    {
+        return $this->role->role_name === 'commissary_manager';
+    }
+
+    public function isCommissaryStaff(): bool
+    {
+        return $this->role->role_name === 'commissary_staff';
+    }
+
+    public function isCommissaryRole(): bool
+    {
+        return in_array($this->role->role_name, ['commissary_manager', 'commissary_staff']);
+    }
+
     public function isWarehouseAdmin(): bool
     {
-        return $this->role->role_name === 'warehouse_admin';
+        return $this->isCommissaryManager();
     }
 
     public function isWarehouseStaff(): bool
     {
-        return $this->role->role_name === 'warehouse_staff';
+        return $this->isCommissaryStaff();
     }
 
     public function isWarehouseRole(): bool
     {
-        return in_array($this->role->role_name, ['warehouse_admin', 'warehouse_staff']);
+        return $this->isCommissaryRole();
+    }
+
+    public function isMainBranchManager(): bool
+    {
+        return $this->isCommissaryManager();
+    }
+
+    public function isMainBranchStaff(): bool
+    {
+        return $this->isCommissaryStaff();
+    }
+
+    public function isMainBranchRole(): bool
+    {
+        return $this->isCommissaryRole();
     }
 
     public function isBranchScoped(): bool
     {
-        return !$this->isOwner();
+        return ! $this->isOwner();
     }
 
     public function canManageInventory(): bool
     {
-        return in_array($this->role->role_name, ['super_admin', 'owner', 'branch_manager', 'warehouse_admin']);
+        return $this->isOwner() || $this->isBranchManager() || $this->isCommissaryManager();
     }
 
     public function canManageCatalog(): bool
@@ -133,8 +174,13 @@ class User extends Authenticatable
         return $this->isOwner();
     }
 
+    public function canManageProductAvailability(): bool
+    {
+        return $this->isOwner() || $this->isMainBranchManager();
+    }
+
     public function canAccessWarehouse(): bool
     {
-        return in_array($this->role->role_name, ['super_admin', 'owner', 'warehouse_admin', 'warehouse_staff']);
+        return $this->isOwner() || $this->isCommissaryRole();
     }
 }

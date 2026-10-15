@@ -15,8 +15,9 @@ class DatabaseSeeder extends Seeder
             ['role_name' => 'owner',           'description' => 'Hidden Vietnam main owner — all branches, users, branches, settings, order approval', 'created_at' => now()],
             ['role_name' => 'branch_manager',  'description' => 'Branch manager — dashboard, stock, orders, reports, forecast, alerts for OWN branch only', 'created_at' => now()],
             ['role_name' => 'branch_staff',     'description' => 'Branch staff — QR scanning, usage/spoilage recording, branch inventory tasks', 'created_at' => now()],
-            ['role_name' => 'warehouse_admin', 'description' => 'Warehouse administrator — supervises warehouse operations, receiving, stocking, QR, delivery prep, disposal', 'created_at' => now()],
-            ['role_name' => 'warehouse_staff', 'description' => 'Warehouse staff — performs physical receiving, stocking, QR scanning, picking, delivery prep, expired handling', 'created_at' => now()],
+            ['role_name' => 'commissary_manager', 'description' => 'Commissary manager — encodes branch orders, reviews/prepares requests, sets expiry, prints labels, manages deliveries, monitors branches', 'created_at' => now()],
+            ['role_name' => 'commissary_staff', 'description' => 'Commissary staff — assists preparation and scans prepared goods out for delivery', 'created_at' => now()],
+            ['role_name' => 'admin',           'description' => 'Administrator — same application functions and all-branch access as Owner, with a distinct, traceable account', 'created_at' => now()],
         ]);
 
         // ── Branches ───────────────────────────────────
@@ -56,65 +57,66 @@ class DatabaseSeeder extends Seeder
             ['setting_key' => 'idle_branch_days',     'setting_value' => '3',   'description' => 'Days without activity before branch idle alert', 'updated_at' => $now],
             ['setting_key' => 'expiry_warning_days',  'setting_value' => '7',   'description' => 'Days before expiry to trigger warning alert',   'updated_at' => $now],
             ['setting_key' => 'app_name',             'setting_value' => 'Hidden Vietnam FRMS', 'description' => 'Application display name',     'updated_at' => $now],
+            ['setting_key' => 'order_max_qty_per_line', 'setting_value' => '0', 'description' => 'Maximum quantity per product line on an order (0 = unlimited).', 'updated_at' => $now],
         ]);
 
         // ── Demo Users ─────────────────────────────────
-        // Passwords: admin123 (super_admin), owner123 (owner), staff123 (branch_staff), warehouse123 (warehouse_admin & warehouse_staff)
+        // Passwords: admin123 (super_admin), owner123 (owner), staff123 (branch_staff), warehouse123 (commissary_manager & commissary_staff)
         DB::table('users')->insert([
             [
-                'full_name'     => 'Research Admin',
-                'email'         => 'admin@hiddenvietnam.com',
+                'full_name' => 'Hidden Vietnam Admin',
+                'email' => 'admin@hiddenvietnam.com',
                 'password_hash' => '$2y$12$pcK6LnxhEQ8C.zGGHYEYPemMD2agOe0WHkShoylC7jr/rh4WispcS',
-                'role_id'       => 1, // super_admin
-                'branch_id'     => 1, // Tanza
-                'status'        => 'active',
+                'role_id' => 1, // super_admin
+                'branch_id' => 1, // Tanza
+                'status' => 'active',
                 'failed_attempts' => 0,
-                'created_at'    => $now,
-                'updated_at'    => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
             [
-                'full_name'     => 'System Owner',
-                'email'         => 'owner@hiddenvietnam.com',
+                'full_name' => 'System Owner',
+                'email' => 'owner@hiddenvietnam.com',
                 'password_hash' => '$2y$12$pow.7AFxPm0Tr87rSsLH8.CYUDCjysHctScqZ294G2z8BF5ArnFC.',
-                'role_id'       => 2, // owner
-                'branch_id'     => 1, // Tanza
-                'status'        => 'active',
+                'role_id' => 2, // owner
+                'branch_id' => 1, // Tanza
+                'status' => 'active',
                 'failed_attempts' => 0,
-                'created_at'    => $now,
-                'updated_at'    => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
             [
-                'full_name'     => 'Tanza Staff',
-                'email'         => 'staff.tanza@hiddenvietnam.com',
+                'full_name' => 'Tanza Staff',
+                'email' => 'staff.tanza@hiddenvietnam.com',
                 'password_hash' => '$2y$12$HVeVaWOQZvfHU5mbA8Bf9OEFMltmrkLzhS23nIZ/bgG1C2jXdp9zC',
-                'role_id'       => 4, // branch_staff
-                'branch_id'     => 1, // Tanza
-                'status'        => 'active',
+                'role_id' => 4, // branch_staff
+                'branch_id' => 1, // Tanza
+                'status' => 'active',
                 'failed_attempts' => 0,
-                'created_at'    => $now,
-                'updated_at'    => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
             [
-                'full_name'     => 'Warehouse Admin',
-                'email'         => 'whadmin@hiddenvietnam.com',
+                'full_name' => 'Warehouse Admin',
+                'email' => 'whadmin@hiddenvietnam.com',
                 'password_hash' => '$2y$12$JpvYwbsu7i7DKKHgfmTls.QKjGm9mCa0Etvf91InKD59gEb.NBjJa',
-                'role_id'       => 5, // warehouse_admin
-                'branch_id'     => 1, // Tanza (main)
-                'status'        => 'active',
+                'role_id' => 5, // commissary_manager
+                'branch_id' => 1, // Tanza (main) — reassign to the Commissary once created
+                'status' => 'active',
                 'failed_attempts' => 0,
-                'created_at'    => $now,
-                'updated_at'    => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
             [
-                'full_name'     => 'Warehouse Staff',
-                'email'         => 'whstaff@hiddenvietnam.com',
+                'full_name' => 'Warehouse Staff',
+                'email' => 'whstaff@hiddenvietnam.com',
                 'password_hash' => '$2y$12$JpvYwbsu7i7DKKHgfmTls.QKjGm9mCa0Etvf91InKD59gEb.NBjJa',
-                'role_id'       => 6, // warehouse_staff
-                'branch_id'     => 1, // Tanza (main)
-                'status'        => 'active',
+                'role_id' => 6, // commissary_staff
+                'branch_id' => 1, // Tanza (main) — reassign to the Commissary once created
+                'status' => 'active',
                 'failed_attempts' => 0,
-                'created_at'    => $now,
-                'updated_at'    => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ],
         ]);
     }

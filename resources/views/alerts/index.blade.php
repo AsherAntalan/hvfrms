@@ -29,29 +29,19 @@
 </div>
 @endif
 
-{{-- Branch filter pills (owner/super_admin only) --}}
+{{-- Branch filter chips (aggregate users only; inline navigation, no modal) --}}
 @if($branches->count() > 0)
-<div class="hv-card p-2 mb-3">
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-        <span class="text-muted small me-1"><i class="bi bi-funnel me-1"></i>Branch:</span>
-        <a href="{{ route('alerts', array_merge(request()->only(['type','resolved']), ['branch' => ''])) }}"
-           class="btn btn-sm {{ $filterBranch === '' ? 'btn-maroon' : 'btn-outline-maroon' }}">
-            All
-            @if($branchCounts->sum() > 0)
-                <span class="badge bg-white text-dark ms-1" style="font-size:10px;">{{ $branchCounts->sum() }}</span>
-            @endif
-        </a>
-        @foreach($branches as $b)
-            @php $bCount = $branchCounts->get($b->id, 0); @endphp
-            <a href="{{ route('alerts', array_merge(request()->only(['type','resolved']), ['branch' => $b->id])) }}"
-               class="btn btn-sm {{ (string)$filterBranch === (string)$b->id ? 'btn-maroon' : 'btn-outline-maroon' }}">
-                {{ $b->branch_name }}
-                @if($bCount > 0)
-                    <span class="badge bg-danger text-white ms-1" style="font-size:10px;">{{ $bCount }}</span>
-                @endif
-            </a>
-        @endforeach
-    </div>
+<div class="hv-card p-3 mb-3 no-print">
+    @include('partials.branch-chips', [
+        'chipRoute'    => 'alerts',
+        'chipBranches' => $branches,
+        'chipSelected' => $filterBranch,
+        'chipAllValue' => '',
+        'chipAllowAll' => $allowAllBranches,
+        'chipMainId'   => $mainBranch?->id,
+        'chipPreserve' => request()->only(['type', 'resolved']),
+        'chipCounts'   => $branchCounts,
+    ])
 </div>
 @endif
 

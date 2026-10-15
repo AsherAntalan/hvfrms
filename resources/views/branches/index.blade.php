@@ -42,7 +42,11 @@
                     <td>
                         @if($b->branch_type === 'main')
                             <span class="hv-badge hv-badge-warning">
-                                <i class="bi bi-star-fill me-1"></i>Main
+                                <i class="bi bi-star-fill me-1"></i>Main Store
+                            </span>
+                        @elseif($b->branch_type === 'commissary')
+                            <span class="hv-badge hv-badge-gold">
+                                <i class="bi bi-building me-1"></i>Commissary
                             </span>
                         @else
                             <span class="hv-badge hv-badge-info">Franchise</span>
@@ -118,7 +122,8 @@
                         <label class="form-label fw-semibold">Type <span class="text-danger">*</span></label>
                         <select class="form-select" name="branch_type" id="f_branch_type" required>
                             <option value="franchise">Franchise</option>
-                            <option value="main">Main (Commissary)</option>
+                            <option value="main">Main Store (Tanza)</option>
+                            <option value="commissary">Commissary (production / dispatch source)</option>
                         </select>
                     </div>
 

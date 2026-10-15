@@ -11,6 +11,7 @@ class Alert extends Model
 
     protected $fillable = [
         'alert_type',
+        'order_id',
         'severity',
         'message',
         'item_id',
@@ -27,6 +28,11 @@ class Alert extends Model
             'is_resolved' => 'boolean',
             'resolved_at' => 'datetime',
         ];
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 
     public function item(): BelongsTo

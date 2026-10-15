@@ -9,3 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('alerts:generate')->hourly();
+
+// Soft-remove expired-batch archive entries past their 30-day retention window
+// (Asia/Manila). Reporting lifecycle only — no inventory/audit data is deleted.
+Schedule::command('archives:prune-expired')->dailyAt('01:00');

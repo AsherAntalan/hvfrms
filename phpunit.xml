@@ -20,6 +20,9 @@
     <php>
         <env name="APP_KEY" value="base64:ooUTszMYhtbLpP40bS5XjcYXJQuj/zOOw2+YBFvuQUE="/>
         <env name="APP_ENV" value="testing"/>
+        <!-- Tests exercise routes at the application root, not the /hvfrms/public
+             sub-path used by the Apache dev host, so routing matches cleanly. -->
+        <env name="APP_URL" value="http://localhost"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

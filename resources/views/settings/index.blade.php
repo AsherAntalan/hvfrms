@@ -62,6 +62,12 @@
                                value="{{ $cfg['expiry_warning_days']['value'] ?? '7' }}" min="1" max="30">
                         <div class="form-text">Days before expiry to trigger a warning.</div>
                     </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Order Max Qty / Product Line</label>
+                        <input type="number" class="form-control" name="order_max_qty_per_line"
+                               value="{{ $cfg['order_max_qty_per_line']['value'] ?? '0' }}" min="0" step="1">
+                        <div class="form-text">Max units per product line on an order. <strong>0 = unlimited.</strong></div>
+                    </div>
                 </div>
             </div>
 
@@ -87,6 +93,29 @@
             </div>
         </div>
         @endif
+
+        <div class="hv-card p-3 mb-3">
+            <h6 class="fw-semibold mb-3" style="color:var(--maroon);">GCash receiving QR</h6>
+            <p class="small text-muted">Upload the QR from GCash &gt; Receive Money via QR Code. A Pay QR/Barcode shown to a cashier is a different code.</p>
+            @if(!empty($cfg['gcash_receiving_qr_path']['value']))
+                <a href="{{ route('payments.gcash-qr') }}" target="_blank" rel="noopener"><img src="{{ route('payments.gcash-qr') }}" alt="Current GCash receiving QR" class="mb-2" style="max-width:100%;max-height:220px;"></a>
+                <p class="small">Current recipient: <strong>{{ $cfg['gcash_account_name']['value'] ?? '' }}</strong></p>
+            @else
+                <p class="small text-muted">No receiving QR configured yet.</p>
+            @endif
+            <form method="POST" action="{{ route('settings.gcash-qr') }}" enctype="multipart/form-data">
+                @csrf
+                <label for="gcashAccountName" class="form-label small">Recipient name</label>
+                <input id="gcashAccountName" name="gcash_account_name" class="form-control mb-2" required maxlength="100" value="{{ old('gcash_account_name', $cfg['gcash_account_name']['value'] ?? '') }}">
+                <label for="gcashAccountNumber" class="form-label small">GCash number (optional)</label>
+                <input id="gcashAccountNumber" name="gcash_account_number" class="form-control mb-2" inputmode="numeric" pattern="09[0-9]{9}" maxlength="11" placeholder="09XXXXXXXXX" value="{{ old('gcash_account_number', $cfg['gcash_account_number']['value'] ?? '') }}">
+                <label for="gcashReceivingQr" class="form-label small">Receiving QR image</label>
+                <input id="gcashReceivingQr" name="gcash_receiving_qr" type="file" class="form-control mb-2" required accept="image/jpeg,image/png,image/webp">
+                <p class="small text-muted">JPG, PNG, or WebP, up to 5 MB.</p>
+                <div class="form-check mb-3"><input class="form-check-input" id="confirmReceivingQr" name="confirm_receiving_qr" type="checkbox" value="1" required><label class="form-check-label small" for="confirmReceivingQr">I confirm this is the correct Receive Money QR and recipient for commissary orders.</label></div>
+                <button class="btn btn-maroon" type="submit">Save receiving QR</button>
+            </form>
+        </div>
 
         <div class="hv-card p-3">
             <h6 style="color:var(--maroon);" class="mb-2"><i class="bi bi-info-circle me-1"></i>About</h6>

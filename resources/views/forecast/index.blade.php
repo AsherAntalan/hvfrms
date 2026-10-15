@@ -20,6 +20,22 @@
     </div>
 @endif
 
+{{-- Branch filter chips (inline navigation, no modal) --}}
+<div class="hv-card p-3 mb-3 no-print">
+    @include('partials.branch-chips', [
+        'chipRoute'    => 'forecast',
+        'chipBranches' => $branches,
+        'chipSelected' => $selBranch,
+        'chipAllValue' => 0,
+        'chipAllowAll' => $allowAllBranches,
+        'chipMainId'   => $mainBranch?->id,
+        'chipPreserve' => [],
+    ])
+    <div class="small text-muted mt-2">
+        Forecast figures below are computed from <strong>{{ $selBranch === 0 ? 'all branches (aggregated)' : ($branches->firstWhere('id', $selBranch)->branch_name ?? 'the selected branch') }}</strong>'s own consumption and stock.
+    </div>
+</div>
+
 {{-- Branch filter --}}
 <div class="hv-card p-3 mb-3">
     <form method="GET" action="{{ route('forecast') }}" class="row g-2 align-items-end">
@@ -118,7 +134,7 @@
                                 <p class="mb-1"><strong>Historical period (8 weeks):</strong></p>
                                 <ul class="mb-2 ps-3">
                                     @foreach($fc['weekly'] as $wi => $wv)
-                                        <li>Week {{ $wi + 1 }}: <strong>{{ $wv }}</strong> {{ $item->unit }}</li>
+                                        <li>Week {{ $wi + 1 }}: <strong>{{ is_array($wv) ? ($wv['total'] ?? 0) : $wv }}</strong> {{ $item->unit }}</li>
                                     @endforeach
                                 </ul>
                                 <p class="mb-1"><strong>Simple average demand:</strong> {{ $fc['avg_weekly'] }} {{ $item->unit }}/week</p>

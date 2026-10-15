@@ -7,7 +7,7 @@
 @php
     $statusMap = [
         'pending'    => ['hv-badge-warning',  'Pending'],
-        'approved'   => ['hv-badge-info',     'Approved'],
+        'approved'   => ['hv-badge-info',     'Awaiting Confirmation'],
         'preparing'  => ['hv-badge-info',     'Preparing'],
         'delivering' => ['hv-badge-info',     'Delivering'],
         'delivered'  => ['hv-badge-success',  'Delivered'],
@@ -22,21 +22,27 @@
     ];
 @endphp
 
+<div class="hv-dash">
+
 {{-- Welcome bar --}}
-<div class="hv-page-header">
-    <div>
-        <span class="fw-semibold" style="color:var(--maroon);">Welcome, {{ $user->full_name }}</span>
-        <span class="text-muted small ms-2 d-none d-sm-inline">{{ now()->format('l, F j, Y') }}</span>
+<header class="hv-dash-head">
+    <div class="hv-dash-greeting">
+        <h1 class="hv-dash-title">Welcome back, {{ \Illuminate\Support\Str::of($user->full_name)->trim()->explode(' ')->first() }}</h1>
+        <p class="hv-dash-sub">{{ $branchName ?? 'All branches' }} &middot; {{ \Illuminate\Support\Str::of($user->role->role_name)->replace('_',' ')->title() }}</p>
     </div>
-</div>
+    <time class="hv-dash-date" datetime="{{ now()->toDateString() }}">
+        <span class="hv-dash-dow">{{ now()->format('l') }}</span>
+        {{ now()->format('F j, Y') }}
+    </time>
+</header>
 
 {{-- ═══ STAT CARDS ═══════════════════════════════════════ --}}
-<div class="row g-3 mb-4">
+<div class="row g-4 mb-4">
 
     {{-- Active Orders --}}
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('orders') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#FFF3CD;color:#856404;">
+            <div class="hv-stat-icon" data-tone="base">
                 <i class="bi bi-cart3"></i>
             </div>
             <div>
@@ -49,7 +55,7 @@
     {{-- Deliveries / In Transit --}}
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#E3EEF5;color:#2C6E8F;">
+            <div class="hv-stat-icon" data-tone="base">
                 <i class="bi bi-truck"></i>
             </div>
             <div>
@@ -63,7 +69,7 @@
     @if($isWarehouse || $isOwner)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#E8F5E9;color:#2E7D32;">
+            <div class="hv-stat-icon" data-tone="base">
                 <i class="bi bi-box-seam"></i>
             </div>
             <div>
@@ -78,7 +84,7 @@
     @if($user->canManageInventory() || $isWarehouse)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#FBEED3;color:#9A6B00;">
+            <div class="hv-stat-icon" data-tone="warn">
                 <i class="bi bi-exclamation-triangle"></i>
             </div>
             <div>
@@ -93,7 +99,7 @@
     @if(($isWarehouse || $isOwner) && isset($stats['expired']) && $stats['expired'] > 0)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('warehouse') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#F6DED9;color:var(--danger);">
+            <div class="hv-stat-icon" data-tone="alert">
                 <i class="bi bi-calendar-x"></i>
             </div>
             <div>
@@ -108,7 +114,7 @@
     @if($user->canManageInventory() || $isWarehouse)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('alerts') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#F6DED9;color:var(--danger);">
+            <div class="hv-stat-icon" data-tone="alert">
                 <i class="bi bi-bell"></i>
             </div>
             <div>
@@ -123,7 +129,7 @@
     @unless($isWS)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ $isOwner ? route('branches') : '#' }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:#E3EEF5;color:#2C6E8F;">
+            <div class="hv-stat-icon" data-tone="base">
                 <i class="bi bi-building"></i>
             </div>
             <div>
@@ -143,7 +149,7 @@
     @if($isOwner)
     <div class="col-6 col-md-4 col-xl-2">
         <a href="{{ route('users') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" style="background:var(--gold-soft);color:var(--maroon);">
+            <div class="hv-stat-icon" data-tone="gold">
                 <i class="bi bi-people"></i>
             </div>
             <div>
@@ -183,11 +189,10 @@
     </h6>
     <div class="d-flex flex-wrap gap-2">
         @foreach($attention as $a)
-        <a href="{{ $a['link'] }}" class="d-flex align-items-center gap-2 px-3 py-2 rounded-3 text-decoration-none"
-           style="background:var(--cream);border:1px solid var(--border);color:var(--ink);font-size:13px;">
-            <i class="bi {{ $a['icon'] }}" style="color:{{ $a['color'] }};font-size:16px;"></i>
+        <a href="{{ $a['link'] }}" class="hv-attn-chip">
+            <i class="bi {{ $a['icon'] }} hv-attn-ico" style="color:{{ $a['color'] }};"></i>
             <span>{{ $a['text'] }}</span>
-            <i class="bi bi-chevron-right text-muted" style="font-size:11px;"></i>
+            <i class="bi bi-chevron-right hv-attn-arrow"></i>
         </a>
         @endforeach
     </div>
@@ -196,7 +201,7 @@
 @endif
 
 {{-- ═══ MAIN CONTENT ROW ════════════════════════════════ --}}
-<div class="row g-3">
+<div class="row g-4">
     {{-- Left column: Orders, Low Stock --}}
     <div class="col-lg-8">
 
@@ -380,8 +385,7 @@
                 </div>
             @else
                 @foreach($activeAlerts as $a)
-                <div class="border-bottom py-2"
-                     style="{{ $a->severity === 'critical' ? 'border-left: 3px solid var(--bs-danger); padding-left:8px;' : '' }}">
+                <div class="border-bottom py-2 {{ $a->severity === 'critical' ? 'hv-alert-crit' : '' }}">
                     <div class="d-flex gap-1 mb-1">
                         <span class="hv-badge {{ $sevBadges[$a->severity] ?? 'hv-badge-info' }}" style="font-size:10px;">
                             {{ ucfirst($a->severity) }}
@@ -401,4 +405,105 @@
     </div>
 </div>
 
+</div>{{-- /.hv-dash --}}
+
 @endsection
+
+@push('styles')
+<style>
+/* ══ Dashboard craft layer — scoped to .hv-dash only ══ */
+.hv-dash{ --d-ink:#2B2320; --d-soft:#6E635C; --d-line:var(--border); }
+.hv-dash ::selection{ background:var(--gold-soft); color:var(--maroon-dark); }
+.hv-dash a:focus-visible,.hv-dash .btn:focus-visible,.hv-dash .hv-stat-link:focus-visible{
+  outline:2px solid var(--maroon); outline-offset:3px; border-radius:12px; }
+.hv-dash .table-responsive::-webkit-scrollbar{ height:8px; }
+.hv-dash .table-responsive::-webkit-scrollbar-thumb{ background:rgba(212,169,74,.4); border-radius:8px; }
+
+/* Header */
+.hv-dash-head{ display:flex; align-items:flex-end; justify-content:space-between;
+  gap:1rem; flex-wrap:wrap; padding-bottom:1rem; margin-bottom:1.5rem;
+  border-bottom:1px solid var(--d-line); }
+.hv-dash-title{ font-size:clamp(1.7rem,1.2rem + 1.9vw,2.6rem); font-weight:800;
+  letter-spacing:-0.03em; color:var(--maroon-dark); margin:0; line-height:1.03; }
+.hv-dash-sub{ margin:.35rem 0 0; font-size:12px; font-weight:600; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--d-soft); }
+.hv-dash-date{ text-align:right; font-size:13px; color:var(--d-soft);
+  font-variant-numeric:tabular-nums; line-height:1.3; }
+.hv-dash-date .hv-dash-dow{ display:block; font-weight:800; letter-spacing:-.01em;
+  color:var(--maroon); font-size:15px; }
+
+/* Stat tiles */
+.hv-dash .hv-stat{ position:relative; border-radius:16px; padding:1.15rem 1.2rem;
+  gap:.9rem; box-shadow:var(--shadow-card); overflow:hidden;
+  transition:transform .22s cubic-bezier(.2,.7,.2,1), box-shadow .22s, border-color .22s; }
+.hv-dash .hv-stat::after{ content:""; position:absolute; left:0; right:0; top:0; height:2px;
+  background:linear-gradient(90deg,var(--gold),transparent); transform:scaleX(0);
+  transform-origin:left; transition:transform .25s ease; }
+.hv-dash a.hv-stat-link:hover{ transform:translateY(-2px); border-color:var(--gold);
+  box-shadow:0 1px 2px rgba(60,8,8,.05),0 14px 26px -16px rgba(60,8,8,.35); }
+.hv-dash a.hv-stat-link:hover::after{ transform:scaleX(1); }
+.hv-dash .hv-stat-icon{ width:42px; height:42px; border-radius:11px; font-size:19px;
+  flex-shrink:0; color:var(--maroon); background:var(--gold-soft);
+  box-shadow:inset 0 0 0 1px rgba(122,23,23,.08); }
+.hv-dash .hv-stat-icon[data-tone="warn"]{ color:#9A6B00; background:#FBF0D6;
+  box-shadow:inset 0 0 0 1px rgba(154,107,0,.14); }
+.hv-dash .hv-stat-icon[data-tone="alert"]{ color:var(--danger); background:#FAE6E1;
+  box-shadow:inset 0 0 0 1px rgba(192,57,43,.14); }
+.hv-dash .hv-stat-value{ font-size:1.7rem; font-weight:800; letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums; color:var(--d-ink); }
+.hv-dash .hv-stat-label{ font-size:10.5px; font-weight:700; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--d-soft); margin-top:3px; }
+
+/* Cards + section headings */
+.hv-dash .hv-card{ border-radius:18px; padding:1.25rem !important; }
+.hv-dash h6{ display:flex; align-items:center; gap:.45rem; font-size:12px;
+  font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--maroon-dark); }
+.hv-dash h6 .bi{ color:var(--gold); font-size:14px; }
+
+/* Tables */
+.hv-dash table{ font-variant-numeric:tabular-nums; }
+.hv-dash thead th{ font-size:10.5px; font-weight:700; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--d-soft); border-bottom:1px solid var(--d-line); }
+.hv-dash tbody tr{ transition:background .15s; }
+.hv-dash .table-hover tbody tr:hover{ background:var(--cream); }
+.hv-dash .table-danger{ --bs-table-bg:rgba(192,57,43,.055); --bs-table-hover-bg:rgba(192,57,43,.1); }
+.hv-dash .table-warning{ --bs-table-bg:rgba(212,169,74,.1); --bs-table-hover-bg:rgba(212,169,74,.18); }
+
+/* Attention chips */
+.hv-dash .hv-attn-chip{ display:inline-flex; align-items:center; gap:.5rem;
+  padding:.5rem .8rem; border-radius:999px; background:#fff; border:1px solid var(--d-line);
+  color:var(--d-ink); font-size:13px; font-weight:500; text-decoration:none;
+  transition:border-color .18s, box-shadow .18s, transform .18s; }
+.hv-dash .hv-attn-chip:hover{ border-color:var(--gold); transform:translateY(-1px);
+  box-shadow:0 8px 18px -12px rgba(60,8,8,.4); }
+.hv-dash .hv-attn-ico{ font-size:15px; }
+.hv-dash .hv-attn-arrow{ font-size:11px; color:var(--muted); transition:transform .18s; }
+.hv-dash .hv-attn-chip:hover .hv-attn-arrow{ transform:translateX(3px); color:var(--maroon); }
+
+/* Critical alert row: tint, not a slab border */
+.hv-dash .hv-alert-crit{ background:rgba(192,57,43,.05); border-radius:8px;
+  margin:0 -.35rem; padding-left:.6rem !important; padding-right:.6rem; }
+
+/* Quick-action ghost buttons */
+.hv-dash .d-grid .btn-outline-secondary{ border-color:var(--d-line); color:var(--d-ink);
+  font-weight:500; border-radius:10px; transition:all .16s; }
+.hv-dash .d-grid .btn-outline-secondary:hover{ background:var(--gold-soft);
+  border-color:var(--gold); color:var(--maroon-dark); }
+.hv-dash .d-grid .btn-outline-secondary .bi{ color:var(--maroon); }
+
+/* One authored entrance: tiles + cards settle in, from visible */
+@keyframes hvRise{ from{ opacity:.001; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion:no-preference){
+  .hv-dash .row.g-3.mb-4 > [class*="col-"], .hv-dash .row.g-3 > [class*="col-"]{
+    animation:hvRise .5s cubic-bezier(.2,.75,.2,1) both; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(1){ animation-delay:.02s; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(2){ animation-delay:.06s; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(3){ animation-delay:.10s; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(4){ animation-delay:.14s; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(5){ animation-delay:.18s; }
+  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(n+6){ animation-delay:.22s; }
+  .hv-dash .row.g-3 > .col-lg-8{ animation-delay:.24s; }
+  .hv-dash .row.g-3 > .col-lg-4{ animation-delay:.30s; }
+}
+</style>
+@endpush

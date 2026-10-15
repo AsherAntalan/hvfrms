@@ -37,6 +37,27 @@
     </form>
 </div>
 
+<!-- Branch filter chips (inline navigation) + Archives -->
+<div class="hv-card p-3 mb-3 no-print">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div class="flex-grow-1">
+            @include('partials.branch-chips', [
+                'chipRoute'    => 'reports',
+                'chipBranches' => $branches,
+                'chipSelected' => $branchFilter,
+                'chipAllValue' => 0,
+                'chipAllowAll' => $allowAllBranches,
+                'chipMainId'   => $mainBranch?->id,
+                'chipPreserve' => ['from' => $dateFrom, 'to' => $dateTo],
+            ])
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="archivesBtn" data-branch="{{ $branchFilter }}">
+            <i class="bi bi-archive me-1"></i> Archives
+            <span class="badge bg-secondary ms-1" id="archivesCount">{{ $archiveCount }}</span>
+        </button>
+    </div>
+</div>
+
 <!-- Export buttons -->
 <div class="d-flex justify-content-end gap-2 mb-3 no-print">
     <a id="csvExportBtn" href="#" class="btn btn-outline-secondary btn-sm">
@@ -78,6 +99,9 @@
 
 <!-- Tab 1: Stock Summary -->
 <div class="tab-pane fade show active" id="tabStock">
+    <div class="small text-muted mb-2" id="stockScopeLabel">
+        Current on-hand snapshot &mdash; <strong>{{ $branchFilter === 0 ? 'All Branches' : ($branches->firstWhere('id', $branchFilter)->branch_name ?? 'Selected branch') }}</strong>.
+    </div>
     <div class="hv-card p-0">
         <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0">
@@ -93,7 +117,7 @@
                         <th>Nearest Expiry</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="stockSummaryBody">
                 @if(empty($stockRows))
                     <tr><td colspan="8" class="text-center text-muted py-4">No stock data found.</td></tr>
                 @else
@@ -104,7 +128,7 @@
                         @endphp
                         <tr>
                             <td class="ps-3 fw-semibold">{{ $sr->item_name }}</td>
-                            <td class="small">{{ $sr->category_name ?? '&mdash;' }}</td>
+                            <td class="small">{{ $sr->category_name ?? '—' }}</td>
                             <td><span class="hv-badge {{ ($sr->goods_type ?? '') === 'wet' ? 'hv-badge-info' : 'hv-badge-warning' }}">{{ ucfirst($sr->goods_type ?? 'N/A') }}</span></td>
                             <td class="small">{{ $sr->branch_name }}</td>
                             <td class="text-center fw-semibold {{ $low ? 'text-danger' : '' }}">
@@ -170,7 +194,7 @@
                         @endphp
                         <tr>
                             <td class="ps-3 fw-semibold">{{ $mr->item_name }}</td>
-                            <td class="small">{{ $mr->category_name ?? '&mdash;' }}</td>
+                            <td class="small">{{ $mr->category_name ?? '—' }}</td>
                             <td class="small">{{ $mr->branch_name }}</td>
                             <td class="text-center text-success fw-semibold">+{{ (int)$mr->total_in }}</td>
                             <td class="text-center text-danger fw-semibold">-{{ (int)$mr->total_out }}</td>
@@ -244,24 +268,26 @@
                         <th class="text-center">Delivered</th>
                         <th class="text-center">Settled</th>
                         <th class="text-center">Cancelled</th>
-                        <th class="text-end">Value (excl. cancelled)</th>
+                        <th class="text-center">Declined</th>
+                        <th class="text-end">Value (excl. cancelled/declined)</th>
                     </tr>
                 </thead>
                 <tbody>
                 @if(empty($orderRows))
-                    <tr><td colspan="10" class="text-center text-muted py-4">No orders in this period.</td></tr>
+                    <tr><td colspan="11" class="text-center text-muted py-4">No orders in this period.</td></tr>
                 @else
                     @foreach($orderRows as $or)
                     <tr>
                         <td class="ps-3 fw-semibold">{{ $or->branch_name }}</td>
                         <td class="text-center fw-bold">{{ $or->total_orders }}</td>
-                        <td class="text-center">{{ $or->pending_count ?: '&mdash;' }}</td>
-                        <td class="text-center">{{ $or->approved_count ?: '&mdash;' }}</td>
-                        <td class="text-center">{{ $or->preparing_count ?: '&mdash;' }}</td>
-                        <td class="text-center">{{ $or->delivering_count ?: '&mdash;' }}</td>
-                        <td class="text-center">{{ $or->delivered_count ?: '&mdash;' }}</td>
-                        <td class="text-center text-success fw-semibold">{{ $or->settled_count ?: '&mdash;' }}</td>
-                        <td class="text-center text-danger">{{ $or->cancelled_count ?: '&mdash;' }}</td>
+                        <td class="text-center">{{ (int) ($or->pending_count ?? 0) }}</td>
+                        <td class="text-center">{{ (int) ($or->approved_count ?? 0) }}</td>
+                        <td class="text-center">{{ (int) ($or->preparing_count ?? 0) }}</td>
+                        <td class="text-center">{{ (int) ($or->delivering_count ?? 0) }}</td>
+                        <td class="text-center">{{ (int) ($or->delivered_count ?? 0) }}</td>
+                        <td class="text-center text-success fw-semibold">{{ (int) ($or->settled_count ?? 0) }}</td>
+                        <td class="text-center text-danger">{{ (int) ($or->cancelled_count ?? 0) }}</td>
+                        <td class="text-center text-danger">{{ (int) ($or->declined_count ?? 0) }}</td>
                         <td class="text-end fw-semibold">&#8369;{{ number_format($or->total_value, 2) }}</td>
                     </tr>
                     @endforeach
@@ -278,13 +304,19 @@
     @if(!empty($expired))
     <div class="alert alert-danger py-2 small mb-3">
         <i class="bi bi-exclamation-triangle-fill me-1"></i>
-        <strong>{{ count($expired) }}</strong> batch(es) have EXPIRED and still have stock remaining.
+        <strong>{{ count($expired) }}</strong> expired batch(es) pending review.
+        @if($expiredArchivedCount > 0)
+            <span class="text-muted">({{ $expiredArchivedCount }} archived, hidden here but still physically expired.)</span>
+        @endif
+        <span class="d-block mt-1 text-muted">
+            Total physical expired stock remaining: <strong>{{ $expiredPhysicalQty }}</strong> unit(s). Archiving is a reporting action — it does not dispose stock or change balances.
+        </span>
     </div>
 
-    <h6 class="text-danger mb-2"><i class="bi bi-x-circle me-1"></i>Expired Batches</h6>
+    <h6 class="text-danger mb-2"><i class="bi bi-x-circle me-1"></i>Expired Batches <span class="text-muted fw-normal small">(pending review)</span></h6>
     <div class="hv-card p-0 mb-3">
         <div class="table-responsive">
-            <table class="table table-hover table-sm align-middle mb-0">
+            <table class="table table-hover table-sm align-middle mb-0" id="expiredTable">
                 <thead>
                     <tr>
                         <th class="ps-3">Batch #</th>
@@ -293,17 +325,30 @@
                         <th class="text-center">Qty Left</th>
                         <th>Expiry Date</th>
                         <th>Days Overdue</th>
+                        @if($canArchive)<th class="text-end pe-3 no-print">Action</th>@endif
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($expired as $e)
-                    <tr class="table-danger">
+                    <tr class="table-danger" data-expired-row="{{ $e->batch_id }}">
                         <td class="ps-3">#{{ $e->batch_id }}</td>
                         <td class="fw-semibold">{{ $e->item_name }}</td>
                         <td class="small">{{ $e->branch_name }}</td>
                         <td class="text-center">{{ $e->quantity_left }} {{ $e->unit }}</td>
                         <td>{{ date('M j, Y', strtotime($e->expiry_date)) }}</td>
                         <td class="fw-bold text-danger">{{ abs($e->days_left) }} day(s)</td>
+                        @if($canArchive)
+                        <td class="text-end pe-3 no-print">
+                            <button type="button" class="btn btn-sm btn-outline-secondary hv-archive-btn"
+                                    data-batch="{{ $e->batch_id }}"
+                                    data-product="{{ $e->item_name }}"
+                                    data-branch="{{ $e->branch_name }}"
+                                    data-qty="{{ $e->quantity_left }} {{ $e->unit }}"
+                                    data-expiry="{{ date('M j, Y', strtotime($e->expiry_date)) }}">
+                                <i class="bi bi-archive me-1"></i>Archive
+                            </button>
+                        </td>
+                        @endif
                     </tr>
                     @endforeach
                 </tbody>
@@ -388,6 +433,40 @@
 
 </div><!-- /tab-content -->
 
+<!-- ═══ Archives modal ═══ -->
+<div class="modal fade" id="archivesModal" tabindex="-1" aria-labelledby="archivesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--maroon-dark);color:#fff;">
+        <h5 class="modal-title" id="archivesModalLabel"><i class="bi bi-archive me-2"></i>Archived Expired Batches</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-2 mb-2">
+          <input type="search" id="archSearch" class="form-control form-control-sm" placeholder="Search product, branch, or batch #">
+        </div>
+        <div class="alert alert-light border small py-2">
+          Entries automatically disappear <strong>30 days after they are archived</strong> (Asia/Manila). Archiving and removal are reporting actions only — physical stock, ledger, and audit history are preserved.
+        </div>
+        <div id="archLoading" class="text-center text-muted py-4" style="display:none;"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead><tr><th>Batch #</th><th>Product</th><th>Branch</th><th class="text-center">Qty</th><th>Expiry</th><th>Archived</th><th>By</th><th>Removes On</th><th class="text-end">Action</th></tr></thead>
+            <tbody id="archBody"></tbody>
+          </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-2">
+          <span class="small text-muted" id="archTotal"></span>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" id="archPrev">Prev</button>
+            <button class="btn btn-outline-secondary" id="archNext">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 @push('styles')
 <style>
 @media print {
@@ -403,18 +482,135 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    'use strict';
+    var CSRF = document.querySelector('meta[name="csrf-token"]').content;
+    var ROUTES = {
+        archives:   "{{ route('reports.archives') }}",
+        archive:    "{{ route('reports.archive') }}",
+        archiveRm:  "{{ route('reports.archiveRemove') }}",
+        export:     "{{ route('reports.export') }}"
+    };
+    // The authoritative selected branch comes from the server-rendered page.
+    function currentBranch(){
+        var b = $('archivesBtn'); return b ? (b.dataset.branch || '') : '';
+    }
+    var $ = function(id){ return document.getElementById(id); };
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+    function dateVals(){
+        var f = document.querySelector('input[name=from]'), t = document.querySelector('input[name=to]');
+        return { from: f ? f.value : '', to: t ? t.value : '' };
+    }
+
+    // ---- CSV link for the full-page export ----
     var typeMap = {tabStock:'stock', tabMovement:'movements', tabOrders:'orders', tabExpiry:'expiry'};
     function updateCsvLink() {
-        var active = document.querySelector('.tab-pane.active');
-        var type = active ? (typeMap[active.id] || 'stock') : 'stock';
+        var active = document.querySelector('#tabStock,#tabMovement,#tabOrders,#tabExpiry');
+        var activePane = document.querySelector('.tab-content > .tab-pane.active');
+        var type = activePane ? (typeMap[activePane.id] || 'stock') : 'stock';
         var params = new URLSearchParams(window.location.search);
         params.set('type', type);
-        document.getElementById('csvExportBtn').href = "{{ route('reports.export') }}?" + params.toString();
+        $('csvExportBtn').href = ROUTES.export + "?" + params.toString();
     }
     updateCsvLink();
-    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+    document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(function(tab){
         tab.addEventListener('shown.bs.tab', updateCsvLink);
     });
+
+    // ---- Preserve the active report tab across branch navigation ----
+    // Branch chips are plain links (page navigation = one authoritative scope).
+    // We remember the open tab in the URL hash so a branch change keeps it.
+    document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(function(tab){
+        tab.addEventListener('shown.bs.tab', function(){
+            var target = tab.getAttribute('data-bs-target');
+            if (target) history.replaceState(null, '', window.location.pathname + window.location.search + target);
+        });
+    });
+    (function restoreTab(){
+        var h = window.location.hash;
+        if (!h) return;
+        var trigger = document.querySelector('.nav-tabs [data-bs-target="'+h+'"]');
+        if (trigger) { try { bootstrap.Tab.getOrCreateInstance(trigger).show(); } catch(e){} }
+    })();
+    // Carry the active tab onto each branch chip link so navigation keeps it.
+    document.querySelectorAll('.hv-branch-chip').forEach(function(chip){
+        chip.addEventListener('click', function(){
+            var pane = document.querySelector('.tab-content > .tab-pane.active');
+            if (pane && chip.href) {
+                try { var u = new URL(chip.href); u.hash = '#'+pane.id; chip.href = u.toString(); } catch(e){}
+            }
+        });
+    });
+
+    // ---- Archive a single expired batch ----
+    document.querySelectorAll('.hv-archive-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var b = btn.dataset;
+            if (!confirm('Archive this expired batch?\n\nProduct: '+b.product+'\nBatch: #'+b.batch+'\nBranch: '+b.branch+'\nRemaining: '+b.qty+'\nExpiry: '+b.expiry+'\n\nThis is a reporting action only. Physical stock, balances and ledger are unchanged, and the stock stays blocked.')) return;
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            var fd = new FormData(); fd.append('batch_id', b.batch);
+            fetch(ROUTES.archive, { method:'POST', headers:{'X-CSRF-TOKEN':CSRF,'X-Requested-With':'XMLHttpRequest'}, body:fd })
+              .then(function(r){ return r.json(); })
+              .then(function(res){
+                  if(!res.ok){ alert(res.error||'Could not archive.'); btn.disabled=false; btn.innerHTML='<i class="bi bi-archive me-1"></i>Archive'; return; }
+                  var row = document.querySelector('[data-expired-row="'+b.batch+'"]');
+                  if(row) row.remove();
+                  bumpArchiveCount(res.already ? 0 : 1);
+              })
+              .catch(function(){ alert('Network error.'); btn.disabled=false; btn.innerHTML='<i class="bi bi-archive me-1"></i>Archive'; });
+        });
+    });
+    function bumpArchiveCount(delta){
+        var el = $('archivesCount'); if(!el) return;
+        el.textContent = Math.max(0, (parseInt(el.textContent,10)||0) + delta);
+    }
+
+    // ---- Archives modal ----
+    var archivesModal = new bootstrap.Modal($('archivesModal'));
+    var archPage = 1, archQuery = '', archDebounce;
+    $('archivesBtn').addEventListener('click', function(){ archPage = 1; loadArchives(); archivesModal.show(); });
+    $('archSearch').addEventListener('input', function(){ clearTimeout(archDebounce); archDebounce = setTimeout(function(){ archQuery = $('archSearch').value.trim(); archPage = 1; loadArchives(); }, 300); });
+    $('archPrev').addEventListener('click', function(){ if(archPage>1){ archPage--; loadArchives(); } });
+    $('archNext').addEventListener('click', function(){ archPage++; loadArchives(); });
+
+    function loadArchives(){
+        $('archLoading').style.display=''; $('archBody').innerHTML='';
+        var qs = new URLSearchParams({ q: archQuery, page: archPage, branch: currentBranch() });
+        fetch(ROUTES.archives + '?' + qs.toString(), { headers:{'X-Requested-With':'XMLHttpRequest'} })
+          .then(function(r){ return r.json(); })
+          .then(function(res){
+              $('archLoading').style.display='none';
+              if(!res.ok){ $('archBody').innerHTML='<tr><td colspan="9" class="text-danger text-center py-3">Could not load.</td></tr>'; return; }
+              if(!res.items.length){ $('archBody').innerHTML='<tr><td colspan="9" class="text-center text-muted py-4">No archived entries.</td></tr>'; }
+              else {
+                  $('archBody').innerHTML = res.items.map(function(a){
+                      return '<tr><td>#'+esc(a.batch_id)+'</td><td class="fw-semibold">'+esc(a.item_name)+'</td><td class="small">'+esc(a.branch_name)+'</td>'
+                        + '<td class="text-center">'+esc(a.quantity_left)+' '+esc(a.unit)+'</td><td>'+esc(a.expiry_date)+'</td>'
+                        + '<td class="small">'+esc(a.archived_at)+'</td><td class="small">'+esc(a.archived_by)+'</td>'
+                        + '<td class="small">'+esc(a.removal_at)+'<div class="text-muted" style="font-size:11px">in '+esc(a.days_left)+' day(s)</div></td>'
+                        + '<td class="text-end"><button class="btn btn-sm btn-outline-danger arch-del" data-id="'+a.id+'"><i class="bi bi-trash"></i></button></td></tr>';
+                  }).join('');
+                  bindArchDelete();
+              }
+              $('archTotal').textContent = res.total + ' entr' + (res.total===1?'y':'ies') + ' · page ' + res.page + ' of ' + res.last_page;
+              $('archPrev').disabled = res.page <= 1;
+              $('archNext').disabled = res.page >= res.last_page;
+              $('archivesCount').textContent = res.total;
+          })
+          .catch(function(){ $('archLoading').style.display='none'; $('archBody').innerHTML='<tr><td colspan="9" class="text-danger text-center py-3">Network error.</td></tr>'; });
+    }
+    function bindArchDelete(){
+        document.querySelectorAll('.arch-del').forEach(function(btn){
+            btn.addEventListener('click', function(){
+                if(!confirm('Remove this entry from the archive list?\n\nHistorical records, ledger and audit history are preserved.')) return;
+                btn.disabled = true;
+                var fd = new FormData(); fd.append('id', btn.dataset.id);
+                fetch(ROUTES.archiveRm, { method:'POST', headers:{'X-CSRF-TOKEN':CSRF,'X-Requested-With':'XMLHttpRequest'}, body:fd })
+                  .then(function(r){ return r.json(); })
+                  .then(function(res){ if(!res.ok){ alert(res.error||'Could not remove.'); btn.disabled=false; return; } loadArchives(); })
+                  .catch(function(){ alert('Network error.'); btn.disabled=false; });
+            });
+        });
+    }
 });
 </script>
 @endpush

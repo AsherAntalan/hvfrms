@@ -100,6 +100,8 @@
 
 @endsection
 
+@include('partials.commissary-group-scanner')
+
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
@@ -107,11 +109,11 @@
     "use strict";
 
     const QR_API    = '{{ route("qr.api") }}';
-    const STOCK_API = '{{ route("stock.api") }}';
     const CSRF      = document.querySelector('meta[name="csrf-token"]').content;
 
     let mode      = 'in';
     let current   = null;
+    let currentGroup = null;
     let scanner   = null;
     let scanning  = false;
     let lastCode  = '';
@@ -155,19 +157,24 @@
         mode = m;
         $('btnIn').classList.toggle('active', m === 'in');
         $('btnOut').classList.toggle('active', m === 'out');
-        if (current) renderItem(current);
+        if (currentGroup) window.renderCommissaryGroup(currentGroup, $('scanResult'), postData, QR_API, beep, {mode, branchId: branchVal()});
+        else if (current) renderItem(current);
     }
     $('btnIn').addEventListener('click', () => setMode('in'));
     $('btnOut').addEventListener('click', () => setMode('out'));
+    $('branchSelect')?.addEventListener('change', () => {
+        if (currentGroup) lookup(currentGroup.qr_code);
+    });
 
     // -- Lookup --
     async function lookup(code) {
+        currentGroup = null;
         $('scanResult').innerHTML =
             '<div class="hv-scan-result text-center text-muted py-3">' +
             '<span class="spinner-border spinner-border-sm me-1"></span> Looking up...</div>';
 
         try {
-            const r = await postData(QR_API, { action: 'lookup', query: code });
+            const r = await postData(QR_API, { action: 'lookup', query: code, branch_id: branchVal() });
             if (!r.ok) {
                 beep(false);
                 current = null;
@@ -177,8 +184,26 @@
                 return;
             }
             beep(true);
+            if (r.production_group) {
+                current = null;
+                currentGroup = r.production_group;
+                // Dispatcher at source releases (Stock Out); the destination branch
+                // receives (Stock In). can_dispatch is false for branch users.
+                setMode(currentGroup.can_dispatch ? 'out' : 'in');
+                return;
+            }
+            if (r.production_unit) {
+                current = null;
+                mode = 'out';
+                $('btnIn').classList.toggle('active', false);
+                $('btnOut').classList.toggle('active', true);
+                renderProductionUnit(r.production_unit);
+                return;
+            }
             current = r.product;
             current._matched_by = r.matched_by || 'qr';
+            current._matched_batch = r.matched_batch || null;
+            current._movement_key = window.crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
             renderItem(current);
         } catch (e) {
             beep(false);
@@ -189,19 +214,47 @@
     }
 
     // -- Render Result --
+    function renderProductionUnit(p) {
+        let html = '<div class="hv-card p-3 mt-3"><h5>' + escapeHtml(p.item_name) + '</h5>';
+        html += '<p><strong>1 ' + escapeHtml(p.unit) + '</strong> — label ' + p.unit_number + ' of ' + p.total_units + '</p>';
+        html += '<p>Order: ' + escapeHtml(p.order_number) + '<br>Destination: ' + escapeHtml(p.destination) + '<br>Expiry: ' + escapeHtml(p.expiry_date || 'Non-perishable') + '</p>';
+        if (p.dispatched) html += '<div class="alert alert-success">This piece is already dispatched.</div>';
+        else if (p.can_dispatch) {
+            html += '<label for="productionMovement" class="form-label">Movement</label><select id="productionMovement" class="form-select mb-3"><option value="delivery">Stock Out — For Delivery</option></select>';
+            html += '<button type="button" class="btn btn-maroon" id="btnProductionDispatch">Scan Out 1 ' + escapeHtml(p.unit) + '</button>';
+        } else html += '<div class="alert alert-info">' + escapeHtml(p.blocked_reason || 'This order is not ready for release.') + '</div>';
+        html += '<div id="productionMessage" class="mt-2" role="status"></div></div>';
+        $('scanResult').innerHTML = html;
+        const button = $('btnProductionDispatch');
+        if (button) button.onclick = async function () {
+            button.disabled = true;
+            try {
+                const r = await postData(QR_API, {action: 'stock_out', qr: p.qr_code, quantity: 1});
+                $('productionMessage').textContent = r.message || r.error || Object.values(r.errors || {}).flat().join(' ') || 'Could not record stock-out.';
+                if (!r.ok) button.disabled = false;
+                else {button.textContent = 'Scanned Out'; beep(true);}
+            } catch (e) { $('productionMessage').textContent = 'Network error. Retry this same label safely.'; button.disabled = false; }
+        };
+    }
+
+    function availableQuantity(p) {
+        if (p._matched_batch) {
+            return Number(p._matched_batch.branch_id) === branchVal() ? Number(p._matched_batch.quantity_left) || 0 : 0;
+        }
+        const stock = (p.stock || []).find(s => Number(s.branch_id) === branchVal());
+        return Number(stock?.total_qty) || 0;
+    }
+
     function renderItem(p) {
         const bid     = branchVal();
-        const myStock = (p.stock || []).find(s => s.branch_id == bid);
-        const onHand  = myStock ? parseInt(myStock.total_qty) || 0 : 0;
+        const onHand  = availableQuantity(p);
         const unit    = escapeHtml(p.unit || '');
 
-        const myBatches = (p.batches || []).filter(b => b.branch_id == bid);
-        const totalBatchQty = myBatches.reduce((s, b) => s + b.quantity_left, 0);
+        const myBatches = (p.batches || []).filter(b => b.branch_id == bid && (!p._matched_batch || b.id === p._matched_batch.id));
 
         const actionColor = mode === 'in' ? 'btn-success' : 'btn-danger';
         const actionLabel = mode === 'in' ? 'Confirm Stock In' : 'Confirm Stock Out';
 
-        let maxQty = mode === 'out' ? (onHand > 0 ? onHand : 0) : 9999;
 
         let h = '<div class="hv-scan-result">';
 
@@ -261,14 +314,13 @@
             h += '<label class="form-label small text-muted">Reason <span class="text-danger">*</span></label>';
             h += '<select class="form-select mb-3" id="fReason">';
             h += '<option value="">Select reason</option>';
-            ['Sold / Used', 'Transferred to another branch', 'Given away / Promo',
-             'Expired', 'Damaged', 'Spoiled', 'Lost / Missing', 'Other'].forEach(function(r) {
+            ['Sold / Used', 'Expired', 'Damaged', 'Lost / Missing', 'Other'].forEach(function(r) {
                 h += '<option value="' + escapeHtml(r) + '">' + escapeHtml(r) + '</option>';
             });
             h += '</select>';
 
             h += '<div class="alert alert-info py-2 small mb-3">' +
-                 '<i class="bi bi-info-circle me-1"></i><strong>FIFO:</strong> Stock will be consumed from the oldest batch first.</div>';
+                 '<i class="bi bi-info-circle me-1"></i>' + (p._matched_batch ? 'Stock will be deducted only from the scanned batch.' : '<strong>FEFO:</strong> Stock with the earliest expiry will be used first.') + '</div>';
         }
 
         // Remarks
@@ -309,15 +361,14 @@
     async function confirmTxn() {
         if (!current) return;
 
-        const qty     = parseInt($('qty').value, 10) || 0;
+        if (!$('qty').reportValidity()) return;
+        const qty     = Number($('qty').value);
         const remarks = $('notes') ? $('notes').value : '';
         if (qty < 1) { alert('Enter a quantity of at least 1.'); return; }
 
         // Enforce max for stock out
         if (mode === 'out') {
-            const bid = branchVal();
-            const myStock = (current.stock || []).find(s => s.branch_id == bid);
-            const onHand = myStock ? parseInt(myStock.total_qty) || 0 : 0;
+            const onHand = availableQuantity(current);
             if (qty > onHand) {
                 alert('Quantity exceeds available stock (' + onHand + '). Please enter a valid amount.');
                 return;
@@ -327,6 +378,8 @@
         const bid = branchVal();
         let fields = {
             item_id:   current.id,
+            batch_id:  current._matched_batch?.id || '',
+            idempotency_key: current._movement_key,
             branch_id: bid,
             quantity:  qty,
             remarks:   remarks
@@ -351,7 +404,7 @@
         btn.disabled = true; btn.textContent = 'Saving...';
 
         try {
-            const r = await postData(STOCK_API, fields);
+            const r = await postData(QR_API, fields);
             if (!r.ok) {
                 beep(false);
                 btn.disabled = false;

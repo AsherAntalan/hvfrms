@@ -1,19 +1,26 @@
 @extends('layouts.app')
 
-@section('title', $isMgr ? 'Branch Inventory' : 'Products')
+@section('title', $isMgr ? 'Inventory' : 'Products')
 
 @section('content')
 
+@include('partials.production-shipments')
+
 {{-- ═══ PAGE HEADER ═══════════════════════════════════════ --}}
 <div class="hv-page-header">
-    <div></div>
+    <div>{{ $scopeLabel }}</div>
     <div class="d-flex align-items-center gap-2">
+        @if(auth()->user()->isBranchManager() && auth()->user()->branch?->branch_type !== 'main')
+        <a class="btn btn-maroon btn-sm" href="{{ route('ordering') }}">Create Commissary Order</a>
+        @endif
         <button class="btn btn-outline-secondary btn-sm d-none" id="btnPrintSelected" onclick="printSelectedQR()">
             <i class="bi bi-printer me-1"></i> Print Selected QR
         </button>
+        @if($canManageProducts)
         <button class="btn btn-maroon btn-sm" onclick="openModal()">
             <i class="bi bi-plus-lg me-1"></i> Add Product
         </button>
+        @endif
     </div>
 </div>
 
@@ -60,36 +67,32 @@
                     <th>Category</th>
                     <th>Unit</th>
                     <th class="text-end">Price</th>
-                    <th class="text-center">{{ $isMgr ? 'Your Stock' : 'Total Stock' }}</th>
+                    <th class="text-center" title="All remaining units at {{ $scopeLabel }}, including expired/damaged">Physical Stock</th>
+                    <th class="text-center" title="Good, unexpired remaining units; some may be reserved for a commissary order">Usable Stock</th>
                     <th class="text-center">Reorder Lvl</th>
                     <th class="text-center">Shelf Life</th>
                     <th class="text-center">QR</th>
-                    <th class="text-center">Status</th>
+                    <th class="text-center">Catalog Status</th>
                     <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
             @if($items->isEmpty())
                 <tr id="emptyRow">
-                    <td colspan="11" class="text-center text-muted py-4">
-                        No products found. Click "Add Product" to create one.
+                    <td colspan="12" class="text-center text-muted py-4">
+                        No products found.@if($canManageProducts) Click "Add Product" to create one.@endif
                     </td>
                 </tr>
             @else
                 @foreach($items as $item)
                     @php
-                        if ($isMgr) {
-                            $stockVal = (int)$item->my_stock;
-                            $exp = $item->nearest_expiry ?? null;
-                            $warnStr = date('Y-m-d', strtotime('+7 days'));
-                            $todayStr = date('Y-m-d');
-                            $expWarning = ($exp && $exp <= $warnStr);
-                            $expExpired = ($exp && $exp <= $todayStr);
-                        } else {
-                            $stockVal = (int)$item->total_stock;
-                            $expWarning = false;
-                            $expExpired = false;
-                        }
+                        $physical = (int)($item->physical_stock ?? 0);
+                        $usable   = (int)($item->usable_stock ?? 0);
+                        $expiredQty = (int)($item->expired_stock ?? 0);
+                        $damagedQty = (int)($item->damaged_stock ?? 0);
+                        $exp = $item->nearest_expiry ?? null;
+                        $warnStr = date('Y-m-d', strtotime('+7 days'));
+                        $expWarning = ($exp && $exp <= $warnStr);
                         $rl = (int)$item->reorder_level;
                     @endphp
                     <tr class="product-row {{ $item->is_active ? '' : 'table-secondary' }}"
@@ -133,19 +136,28 @@
                         </td>
                         <td class="small">{{ e($item->unit) }}</td>
                         <td class="text-end fw-semibold">&#8369;{{ number_format($item->price, 2) }}</td>
+                        {{-- Physical stock (includes expired/damaged) --}}
                         <td class="text-center">
-                            <span class="fw-bold {{ $stockVal === 0 ? 'text-danger' : ($stockVal <= $rl ? 'text-warning' : '') }}">
-                                {{ $stockVal }}
+                            <span class="fw-semibold">{{ $physical }}</span>
+                            @if($expiredQty > 0)
+                                <div class="text-danger small"><i class="bi bi-x-circle-fill"></i> {{ $expiredQty }} expired</div>
+                            @endif
+                            @if($damagedQty > 0)
+                                <div class="text-muted small"><i class="bi bi-slash-circle"></i> {{ $damagedQty }} damaged</div>
+                            @endif
+                        </td>
+                        {{-- Usable stock (eligible only) --}}
+                        <td class="text-center">
+                            <span class="fw-bold {{ $usable === 0 ? 'text-danger' : ($usable <= $rl ? 'text-warning' : 'text-success') }}">
+                                {{ $usable }}
                             </span>
-                            @if($isMgr)
-                                @if($stockVal > 0 && $stockVal <= $rl)
-                                    <div class="text-warning small"><i class="bi bi-exclamation-triangle-fill"></i> Low</div>
-                                @endif
-                                @if($expExpired)
-                                    <div class="text-danger small"><i class="bi bi-x-circle-fill"></i> Expired {{ date('M j', strtotime($exp)) }}</div>
-                                @elseif($expWarning)
-                                    <div class="text-warning small"><i class="bi bi-clock-fill"></i> Exp {{ date('M j', strtotime($exp)) }}</div>
-                                @endif
+                            @if($usable === 0 && $physical > 0)
+                                <div class="text-danger small" title="Enabled product, but no issuable stock">None usable</div>
+                            @elseif($usable > 0 && $usable <= $rl)
+                                <div class="text-warning small"><i class="bi bi-exclamation-triangle-fill"></i> Low</div>
+                            @endif
+                            @if($usable > 0 && $expWarning)
+                                <div class="text-warning small"><i class="bi bi-clock-fill"></i> Exp {{ date('M j', strtotime($exp)) }}</div>
                             @endif
                         </td>
                         <td class="text-center">{{ (int)$item->reorder_level }}</td>
@@ -167,9 +179,9 @@
                         </td>
                         <td class="text-center">
                             @if($item->is_active)
-                                <span class="hv-badge hv-badge-success">Active</span>
+                                <span class="hv-badge hv-badge-success" title="Available for commissary orders; finished stock is not required">Available</span>
                             @else
-                                <span class="hv-badge hv-badge-danger">Inactive</span>
+                                <span class="hv-badge hv-badge-danger">Unavailable</span>
                             @endif
                         </td>
                         <td class="text-center">
@@ -177,20 +189,24 @@
                                 <a href="{{ route('stock.history', $item->id) }}" class="btn btn-sm btn-outline-primary" title="Movement History">
                                     <i class="bi bi-clock-history"></i>
                                 </a>
+                                @if($canManageProducts)
                                 <button class="btn btn-sm btn-outline-secondary" title="Edit"
                                         onclick="openModal(@js($item))">
                                     <i class="bi bi-pencil"></i>
                                 </button>
+                                @endif
+                                @if($canManageAvailability)
                                 @if($item->is_active)
-                                    <button class="btn btn-sm btn-outline-danger" title="Deactivate"
+                                    <button class="btn btn-sm btn-outline-danger" title="Mark unavailable" aria-label="Mark {{ $item->item_name }} unavailable for orders"
                                             onclick="toggleItem({{ $item->id }}, 0)">
-                                        <i class="bi bi-x-circle"></i>
+                                        <i class="bi bi-x-circle" aria-hidden="true"></i> Mark unavailable
                                     </button>
                                 @else
-                                    <button class="btn btn-sm btn-outline-success" title="Activate"
+                                    <button class="btn btn-sm btn-outline-success" title="Make available" aria-label="Make {{ $item->item_name }} available for orders"
                                             onclick="toggleItem({{ $item->id }}, 1)">
-                                        <i class="bi bi-check-circle"></i>
+                                        <i class="bi bi-check-circle" aria-hidden="true"></i> Make available
                                     </button>
+                                @endif
                                 @endif
                             </div>
                         </td>
@@ -203,6 +219,7 @@
 </div>
 
 {{-- ═══ ADD / EDIT PRODUCT MODAL ══════════════════════════ --}}
+@if($canManageProducts)
 <div class="modal fade" id="itemModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -291,6 +308,8 @@
     </div>
 </div>
 
+@endif
+
 @endsection
 
 @push('scripts')
@@ -298,11 +317,13 @@
 const API  = '{{ route("inventory.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 
+@if($canManageProducts)
 let itemModal;
 
 document.addEventListener('DOMContentLoaded', function () {
     itemModal = new bootstrap.Modal(document.getElementById('itemModal'));
 });
+@endif
 
 function filterTable() {
     var search   = document.getElementById('searchBox').value.toLowerCase();
@@ -324,6 +345,7 @@ function filterTable() {
         'Showing ' + visible + ' item' + (visible !== 1 ? 's' : '');
 }
 
+@if($canManageProducts)
 function openModal(data) {
     var form  = document.getElementById('itemForm');
     var title = document.getElementById('modalTitle');
@@ -377,9 +399,11 @@ async function saveItem(e) {
     }
 }
 
+@endif
+
 async function toggleItem(id, newStatus) {
-    var action = newStatus ? 'activate' : 'deactivate';
-    if (!confirm('Are you sure you want to ' + action + ' this product?')) return;
+    var action = newStatus ? 'make this product available for orders' : 'mark this product unavailable for orders';
+    if (!confirm('Do you want to ' + action + '?')) return;
 
     var data = new FormData();
     data.append('action', 'toggle');

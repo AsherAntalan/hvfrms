@@ -7,10 +7,14 @@
     <title>@yield('title', 'Dashboard') — Hidden Vietnam FRMS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="{{ asset('assets/css/theme.css') }}" rel="stylesheet">
+    <link href="{{ asset('assets/css/theme.css') }}?v={{ @filemtime(public_path('assets/css/theme.css')) ?: '1' }}" rel="stylesheet">
     @stack('styles')
 </head>
 <body>
+<script>
+    /* Apply persisted collapsed state before paint to avoid a flash */
+    try { if (localStorage.getItem('hv-sidebar-collapsed') === '1') document.body.classList.add('sidebar-collapsed'); } catch (e) {}
+</script>
 
 <!-- ═══ SIDEBAR ══════════════════════════════════════════ -->
 <aside class="hv-sidebar" id="sidebar">
@@ -53,14 +57,10 @@
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="bi bi-building hv-nav-icon"></i>
-                <span>Warehouse</span>
+                <span>Commissary</span>
                 <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
-                <a href="{{ route('warehouse') }}"
-                   class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
-                    <span>Receive Stock</span>
-                </a>
                 <a href="{{ route('qr') }}"
                    class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
                     <span>QR Scanner</span>
@@ -68,25 +68,11 @@
             </div>
         </div>
 
-        {{-- Delivery ▾ --}}
-        @php $dlActive = request()->routeIs('orders*','delivery*'); @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-truck hv-nav-icon"></i>
-                <span>Delivery</span>
-                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
-                <a href="{{ route('delivery') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
-                    <span>Prepare Deliveries</span>
-                </a>
-                <a href="{{ route('delivery.history') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
-                    <span>Delivery History</span>
-                </a>
-            </div>
-        </div>
+        {{-- Delivery — single page (Active + History tabs inside) --}}
+        <a href="{{ route('delivery') }}"
+           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
+            <i class="bi bi-truck"></i> <span>Delivery</span>
+        </a>
 
         <hr class="hv-sidebar-divider">
 
@@ -108,11 +94,11 @@
         </a>
 
         {{-- Warehouse ▾ --}}
-        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*'); @endphp
+        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*','products*'); @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="bi bi-building hv-nav-icon"></i>
-                <span>Warehouse</span>
+                <span>All Branches</span>
                 <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
@@ -120,9 +106,9 @@
                    class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
                     <span>Stock / Inventory</span>
                 </a>
-                <a href="{{ route('warehouse') }}"
-                   class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
-                    <span>Receive Stock</span>
+                <a href="{{ route('products') }}"
+                   class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
+                    <span>Overall Products</span>
                 </a>
                 <a href="{{ route('stock') }}"
                    class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
@@ -131,30 +117,18 @@
             </div>
         </div>
 
-        {{-- Delivery ▾ --}}
-        @php $dlActive = request()->routeIs('orders*','delivery*'); @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-truck hv-nav-icon"></i>
-                <span>Delivery</span>
-                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
-                <a href="{{ route('orders') }}"
-                   class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
-                    <span>Pending Orders</span>
-                </a>
-                <a href="{{ route('delivery') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
-                    <span>Prepare Deliveries</span>
-                </a>
-                <a href="{{ route('delivery.history') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
-                    <span>Delivery History</span>
-                </a>
-            </div>
-        </div>
+        {{-- Orders — order list / creation --}}
+        <a href="{{ route('orders') }}"
+           class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
+            <i class="bi bi-receipt"></i> <span>Orders</span>
+        </a>
+
+        {{-- Delivery — single page (Active + History tabs inside) --}}
+        <a href="{{ route('delivery') }}"
+           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
+            <i class="bi bi-truck"></i> <span>Delivery</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+        </a>
 
         <hr class="hv-sidebar-divider">
 
@@ -205,7 +179,7 @@
         {{-- ── Inventory ▾ ──────────────────────────────── --}}
         @if($canInv)
         @php
-            $invActive = request()->routeIs('inventory*','stock*','warehouse*');
+            $invActive = request()->routeIs('inventory*','stock*','warehouse*','products*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $invActive ? 'active' : '' }}" onclick="toggleNav(this)">
@@ -215,27 +189,29 @@
             </button>
             <div class="hv-nav-submenu {{ $invActive ? 'open' : '' }}">
                 <a href="{{ route('inventory') }}"
-                   class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
-                    <span>Inventory</span>
+                   class="hv-nav-link {{ request()->routeIs('inventory*','warehouse*') ? 'active' : '' }}">
+                    <span>{{ ($isOwner || $isMainBM) ? 'All Branches' : 'Inventory' }}</span>
                 </a>
+                @if($u->canManageCatalog() || $u->canManageProductAvailability())
+                <a href="{{ route('products') }}"
+                   class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
+                    <span>Overall Products</span>
+                </a>
+                @endif
                 <a href="{{ route('stock') }}"
                    class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
                     <span>Stock Management</span>
                 </a>
-                @if($isOwner || $isMainBM)
-                <a href="{{ route('warehouse') }}"
-                   class="hv-nav-link {{ request()->routeIs('warehouse*') ? 'active' : '' }}">
-                    <span>Warehouse</span>
-                </a>
-                @endif
             </div>
         </div>
         @endif
 
-        {{-- ── Orders ▾ ─────────────────────────────────── --}}
+        {{-- ── Orders ──────────────────────────────────── --}}
         @php
             $odActive = request()->routeIs('orders*','ordering*');
         @endphp
+        @if($isBM)
+        {{-- Branch manager also has Order Supplies → keep the dropdown --}}
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="bi bi-cart3 hv-nav-icon"></i>
@@ -247,37 +223,26 @@
                    class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
                     <span>All Orders</span>
                 </a>
-                @if($isBM)
                 <a href="{{ route('ordering') }}"
                    class="hv-nav-link {{ request()->routeIs('ordering*') ? 'active' : '' }}">
                     <span>Order Supplies</span>
                 </a>
-                @endif
             </div>
         </div>
+        @else
+        {{-- Owner / Admin / others: a single All Orders link, no dropdown --}}
+        <a href="{{ route('orders') }}"
+           class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
+            <i class="bi bi-cart3"></i> <span>All Orders</span>
+        </a>
+        @endif
 
-        {{-- ── Delivery ▾ ──────────────────────────────── --}}
-        @php
-            $dlActive = request()->routeIs('delivery*');
-        @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $dlActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-truck hv-nav-icon"></i>
-                <span>Delivery</span>
-                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-                <i class="bi {{ $dlActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $dlActive ? 'open' : '' }}">
-                <a href="{{ route('delivery') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery') ? 'active' : '' }}">
-                    <span>Active Deliveries</span>
-                </a>
-                <a href="{{ route('delivery.history') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery.history') ? 'active' : '' }}">
-                    <span>Delivery History</span>
-                </a>
-            </div>
-        </div>
+        {{-- ── Delivery — single page (Active + History tabs inside) ── --}}
+        <a href="{{ route('delivery') }}"
+           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
+            <i class="bi bi-truck"></i> <span>Delivery</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+        </a>
 
         <hr class="hv-sidebar-divider">
 
@@ -389,7 +354,9 @@
     <!-- Top bar (inside main, not fixed) -->
     <div class="hv-topbar">
         <div class="d-flex align-items-center gap-2">
-            <button class="hv-hamburger-main d-lg-none" id="sidebarToggleMobile">
+            <button class="hv-hamburger-main" id="sidebarToggle" type="button"
+                    aria-controls="sidebar" aria-expanded="true"
+                    aria-label="Toggle navigation sidebar">
                 <i class="bi bi-list"></i>
             </button>
             <h5 class="mb-0 fw-bold" style="color:var(--maroon-dark);">
@@ -465,7 +432,7 @@
                     </a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
-                        <form method="POST" action="{{ route('logout') }}">
+                        <form method="POST" action="{{ route('logout') }}" data-confirm="Log out of Hidden Vietnam?">
                             @csrf
                             <button type="submit" class="dropdown-item text-danger">
                                 <i class="bi bi-box-arrow-right me-1"></i> Logout
@@ -505,31 +472,80 @@
  * Desktop (lg+): sidebar is always visible, fixed
  * Mobile (<lg):  slides sidebar in/out as an overlay
  */
-(function () {
+var HVSidebar = (function () {
     const sidebar  = document.getElementById('sidebar');
     const backdrop = document.getElementById('backdrop');
-    const toggleMob = document.getElementById('sidebarToggleMobile');
+    const toggle   = document.getElementById('sidebarToggle');
+    const STORE_KEY = 'hv-sidebar-collapsed';
+    const isDesktop = function () { return window.innerWidth >= 992; };
 
-    function openMobile()  { sidebar.classList.add('open'); backdrop.classList.add('show'); }
-    function closeMobile() { sidebar.classList.remove('open'); backdrop.classList.remove('show'); }
+    // ---- Mobile slide-in drawer ----
+    function openMobile()  { sidebar.classList.add('open'); backdrop.classList.add('show'); setAria(); }
+    function closeMobile() { sidebar.classList.remove('open'); backdrop.classList.remove('show'); setAria(); }
 
-    if (toggleMob) toggleMob.addEventListener('click', openMobile);
-    if (backdrop)  backdrop.addEventListener('click', closeMobile);
+    // ---- Desktop compact rail (persisted) ----
+    function collapse(on) {
+        document.body.classList.toggle('sidebar-collapsed', on);
+        try { localStorage.setItem(STORE_KEY, on ? '1' : '0'); } catch (e) {}
+        setAria();
+    }
+    function expandDesktop() { if (document.body.classList.contains('sidebar-collapsed')) collapse(false); }
 
-    // Close sidebar on nav link click (mobile only)
+    // ---- aria-expanded reflects what the hamburger currently controls ----
+    function setAria() {
+        if (!toggle) return;
+        var expanded = isDesktop()
+            ? !document.body.classList.contains('sidebar-collapsed')
+            : sidebar.classList.contains('open');
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+
+    // Restore persisted desktop state on load
+    try {
+        if (localStorage.getItem(STORE_KEY) === '1') document.body.classList.add('sidebar-collapsed');
+    } catch (e) {}
+
+    if (toggle) {
+        toggle.addEventListener('click', function () {
+            if (isDesktop()) {
+                collapse(!document.body.classList.contains('sidebar-collapsed'));
+            } else {
+                sidebar.classList.contains('open') ? closeMobile() : openMobile();
+            }
+        });
+    }
+    if (backdrop) backdrop.addEventListener('click', closeMobile);
+
+    // Close drawer when a real link is tapped (mobile only)
     sidebar.querySelectorAll('.hv-nav-link').forEach(function (link) {
         link.addEventListener('click', function () {
-            if (window.innerWidth < 992) closeMobile();
+            if (!isDesktop()) closeMobile();
         });
     });
 
-    // Clean up mobile overlay on resize to desktop
+    // Reset transient mobile overlay and keep aria accurate on resize
     window.addEventListener('resize', function () {
-        if (window.innerWidth >= 992) closeMobile();
+        if (isDesktop()) closeMobile();
+        setAria();
     });
+
+    setAria();
+    return { expandDesktop: expandDesktop, isDesktop: isDesktop };
 })();
 
 function toggleNav(btn) {
+    // In the collapsed desktop rail, a dropdown parent first expands the
+    // sidebar, then opens its own submenu — never navigates, never via hover.
+    if (HVSidebar.isDesktop() && document.body.classList.contains('sidebar-collapsed')) {
+        HVSidebar.expandDesktop();
+        var sub = btn.nextElementSibling;
+        var chevron = btn.querySelector('.bi-chevron-down, .bi-chevron-right');
+        if (!sub.classList.contains('open')) {
+            sub.classList.add('open');
+            if (chevron) { chevron.classList.add('bi-chevron-down'); chevron.classList.remove('bi-chevron-right'); }
+        }
+        return;
+    }
     var sub = btn.nextElementSibling;
     var chevron = btn.querySelector('.bi-chevron-down, .bi-chevron-right');
     var isOpen = sub.classList.contains('open');
@@ -551,8 +567,9 @@ function toggleNav(btn) {
     var list = document.getElementById('notifList');
     var totalEl = document.getElementById('notifTotal');
     var toastBox = document.getElementById('toastContainer');
-    var prevCount = -1;
-    var prevIds = '';
+    var seenNotificationIds = null;
+    var notificationFetchPending = false;
+    function notificationId(n) { return n.id || n.type + ':' + n.message; }
 
     var sevIcons = {
         critical: { icon: 'bi-exclamation-circle-fill', color: 'var(--danger)' },
@@ -561,6 +578,8 @@ function toggleNav(btn) {
     };
 
     function fetchNotifs() {
+        if (notificationFetchPending) return;
+        notificationFetchPending = true;
         fetch(NOTIF_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF } })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -582,7 +601,7 @@ function toggleNav(btn) {
                 var html = '';
                 data.items.forEach(function(n) {
                     var s = sevIcons[n.severity] || sevIcons.info;
-                    var typeLabel = n.type === 'delivery' ? 'Delivery' : 'Alert';
+                    var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
                     html += '<a href="' + n.link + '" class="hv-notif-item">'
                         + '<i class="bi ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
                         + '<div class="hv-notif-text">'
@@ -593,14 +612,16 @@ function toggleNav(btn) {
                 list.innerHTML = html;
             }
 
-            // Toast popup for new items
-            var newIds = data.items.map(function(n){ return n.message; }).join('|');
-            if (prevCount >= 0 && data.total > prevCount && newIds !== prevIds) {
-                var newItems = data.items.slice(0, data.total - prevCount);
-                newItems.forEach(function(n) { showToast(n); });
+            // Detect events by identity: a decline can replace a pending order
+            // without changing the badge total.
+            if (seenNotificationIds !== null) {
+                data.items.forEach(function(n) {
+                    if (!seenNotificationIds.has(notificationId(n))) showToast(n);
+                });
+            } else {
+                seenNotificationIds = new Set();
             }
-            prevCount = data.total;
-            prevIds = newIds;
+            data.items.forEach(function(n) { seenNotificationIds.add(notificationId(n)); });
 
             // Update sidebar badges
             if (data.sidebar) {
@@ -608,12 +629,13 @@ function toggleNav(btn) {
                 updateSidebarBadge('sidebarBadgeAlerts', data.sidebar.alerts);
             }
         })
-        .catch(function() {});
+        .catch(function() {})
+        .finally(function() { notificationFetchPending = false; });
     }
 
     function showToast(n) {
         var s = sevIcons[n.severity] || sevIcons.info;
-        var typeLabel = n.type === 'delivery' ? 'Delivery' : 'Alert';
+        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
         var toast = document.createElement('div');
         toast.className = 'hv-toast severity-' + n.severity;
         toast.innerHTML = '<i class="bi ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
@@ -654,11 +676,45 @@ function toggleNav(btn) {
     // Initial fetch + poll every 30 seconds
     fetchNotifs();
     setInterval(fetchNotifs, 30000);
+    document.getElementById('notifDropdown').addEventListener('show.bs.dropdown', fetchNotifs);
+    window.addEventListener('focus', fetchNotifs);
 })();
 </script>
 @endunless
 
-<script src="{{ asset('assets/js/app.js') }}"></script>
+<script src="{{ asset('assets/js/app.js') }}?v={{ @filemtime(public_path('assets/js/app.js')) ?: '1' }}"></script>
+<script>
+/* Global confirmation guard: logout, and any save/delete/archive form submit.
+   - A form (or control) with data-confirm uses its exact message.
+   - Otherwise a form whose submit button reads save/delete/archive/remove/
+     dispose/void asks a generic confirm. Opt out with data-noconfirm.
+   Fetch-based actions (cancel, decline, dispose, archive) keep their own
+   in-handler confirm and are type=button, so they are not double-prompted. */
+(function () {
+    var VERB = /\b(save|update|delete|archive|remove|dispose|void|deactivate|reset|clear)\b/i;
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-noconfirm')) return;
+        var msg = form.getAttribute('data-confirm');
+        if (!msg) {
+            var btn = (document.activeElement && form.contains(document.activeElement) && document.activeElement.type === 'submit')
+                ? document.activeElement
+                : form.querySelector('[type=submit]');
+            var label = btn ? (btn.getAttribute('data-confirm') || btn.textContent || btn.value || '') : '';
+            if (btn && btn.hasAttribute('data-noconfirm')) return;
+            if (btn && VERB.test(label)) { msg = 'Are you sure you want to ' + label.trim().toLowerCase() + '?'; }
+        }
+        if (msg && !window.confirm(msg)) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+
+    // Links/buttons (non-submit) that carry data-confirm.
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest('[data-confirm]');
+        if (!el || el.tagName === 'FORM' || el.type === 'submit') return;
+        if (!window.confirm(el.getAttribute('data-confirm'))) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+})();
+</script>
 @stack('scripts')
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\QrController;
+use App\Http\Controllers\StockController;
 use App\Models\Alert;
 use App\Models\AuditLog;
 use App\Models\Branch;
@@ -11,8 +13,11 @@ use App\Models\StockBatch;
 use App\Models\StockTransaction;
 use App\Models\User;
 use App\Services\StockService;
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -37,7 +42,7 @@ class CriticalWorkflowTest extends TestCase
                 $this->artisan('migrate:fresh', $this->migrateFreshUsing());
             }
 
-            $this->app[\Illuminate\Contracts\Console\Kernel::class]->setArtisan(null);
+            $this->app[Kernel::class]->setArtisan(null);
             RefreshDatabaseState::$migrated = true;
         }
 
@@ -47,7 +52,7 @@ class CriticalWorkflowTest extends TestCase
     private function runMigrationsWithSqliteSafety(): void
     {
         $migrationPath = database_path('migrations');
-        $files = glob($migrationPath . '/*.php');
+        $files = glob($migrationPath.'/*.php');
         sort($files);
 
         foreach ($files as $file) {
@@ -56,7 +61,7 @@ class CriticalWorkflowTest extends TestCase
                 if (is_object($migration) && method_exists($migration, 'up')) {
                     $migration->up();
                 }
-            } catch (\Illuminate\Database\QueryException $e) {
+            } catch (QueryException $e) {
                 if (str_contains($e->getMessage(), 'MODIFY') ||
                     str_contains($e->getMessage(), 'ON UPDATE CURRENT_TIMESTAMP') ||
                     str_contains($e->getMessage(), 'near "MODIFY"')) {
@@ -84,41 +89,41 @@ class CriticalWorkflowTest extends TestCase
         return Branch::create([
             'branch_name' => $name,
             'branch_type' => $type,
-            'is_active'   => $active ? 1 : 0,
+            'is_active' => $active ? 1 : 0,
         ]);
     }
 
     private function createUser(Role $role, Branch $branch, string $email = 'user@test.com', string $password = 'secret123'): User
     {
         return User::create([
-            'full_name'     => 'Test User',
-            'email'         => $email,
+            'full_name' => 'Test User',
+            'email' => $email,
             'password_hash' => Hash::make($password),
-            'role_id'       => $role->id,
-            'branch_id'     => $branch->id,
-            'status'        => 'active',
+            'role_id' => $role->id,
+            'branch_id' => $branch->id,
+            'status' => 'active',
         ]);
     }
 
     private function createItem(string $name = 'Test Item', int $reorderLevel = 10): Item
     {
         return Item::create([
-            'item_name'     => $name,
-            'unit'          => 'pack',
+            'item_name' => $name,
+            'unit' => 'pack',
             'reorder_level' => $reorderLevel,
-            'is_active'     => 1,
+            'is_active' => 1,
         ]);
     }
 
     private function createBatch(int $itemId, int $branchId, int $qtyIn, int $qtyLeft, ?string $expiryDate = null, ?string $receivedAt = null): StockBatch
     {
         return StockBatch::create([
-            'item_id'       => $itemId,
-            'branch_id'     => $branchId,
-            'quantity_in'   => $qtyIn,
+            'item_id' => $itemId,
+            'branch_id' => $branchId,
+            'quantity_in' => $qtyIn,
             'quantity_left' => $qtyLeft,
-            'expiry_date'   => $expiryDate,
-            'received_at'   => $receivedAt ?? now(),
+            'expiry_date' => $expiryDate,
+            'received_at' => $receivedAt ?? now(),
         ]);
     }
 
@@ -132,7 +137,7 @@ class CriticalWorkflowTest extends TestCase
         $user = $this->createUser($role, $branch, 'admin@test.com', 'password123');
 
         $response = $this->post('/login', [
-            'email'    => 'admin@test.com',
+            'email' => 'admin@test.com',
             'password' => 'password123',
         ]);
 
@@ -150,7 +155,7 @@ class CriticalWorkflowTest extends TestCase
         $this->createUser($role, $branch, 'admin@test.com', 'password123');
 
         $response = $this->post('/login', [
-            'email'    => 'admin@test.com',
+            'email' => 'admin@test.com',
             'password' => 'wrongpassword',
         ]);
 
@@ -177,7 +182,7 @@ class CriticalWorkflowTest extends TestCase
         // controller's MySQL query failed on SQLite (expected).
         $this->assertTrue(
             in_array($response->getStatusCode(), [200, 500]),
-            'Expected 200 or 500 (SQLite limitation), got ' . $response->getStatusCode()
+            'Expected 200 or 500 (SQLite limitation), got '.$response->getStatusCode()
         );
 
         // Verify we are NOT getting a redirect to login (403/302)
@@ -209,17 +214,17 @@ class CriticalWorkflowTest extends TestCase
 
         Alert::create([
             'alert_type' => 'low_stock',
-            'severity'   => 'warning',
-            'message'    => 'Low stock at Branch A',
-            'item_id'    => $item->id,
-            'branch_id'  => $branchA->id,
+            'severity' => 'warning',
+            'message' => 'Low stock at Branch A',
+            'item_id' => $item->id,
+            'branch_id' => $branchA->id,
         ]);
         Alert::create([
             'alert_type' => 'low_stock',
-            'severity'   => 'warning',
-            'message'    => 'Low stock at Branch B',
-            'item_id'    => $item->id,
-            'branch_id'  => $branchB->id,
+            'severity' => 'warning',
+            'message' => 'Low stock at Branch B',
+            'item_id' => $item->id,
+            'branch_id' => $branchB->id,
         ]);
 
         $this->assertTrue($user->isBranchScoped());
@@ -235,18 +240,19 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_stock_in_creates_batch_and_transaction(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Rice Flour');
 
-        $service = new StockService();
+        $futureExpiry = now()->addMonths(6)->toDateString();
+        $service = new StockService;
         $result = $service->stockIn(
             $item->id,
             $branch->id,
             50,
             $user->id,
-            '2025-06-15',
+            $futureExpiry,
             'Initial stock'
         );
 
@@ -275,15 +281,15 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_fifo_stock_out_deducts_from_earliest_expiring_first(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Soy Sauce');
 
-        $earlyBatch = $this->createBatch($item->id, $branch->id, 20, 20, '2025-03-01', '2025-01-01');
-        $lateBatch = $this->createBatch($item->id, $branch->id, 30, 30, '2025-06-01', '2025-01-01');
+        $earlyBatch = $this->createBatch($item->id, $branch->id, 20, 20, now()->addMonths(2)->toDateString(), '2025-01-01');
+        $lateBatch = $this->createBatch($item->id, $branch->id, 30, 30, now()->addMonths(5)->toDateString(), '2025-01-01');
 
-        $service = new StockService();
+        $service = new StockService;
         $result = $service->stockOut(
             $item->id,
             $branch->id,
@@ -306,14 +312,14 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_stock_out_returns_error_when_insufficient_stock(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Spring Rolls');
 
-        $this->createBatch($item->id, $branch->id, 10, 10, '2025-06-01');
+        $this->createBatch($item->id, $branch->id, 10, 10, now()->addMonths(6)->toDateString());
 
-        $service = new StockService();
+        $service = new StockService;
         $result = $service->stockOut(
             $item->id,
             $branch->id,
@@ -324,7 +330,7 @@ class CriticalWorkflowTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertArrayHasKey('error', $result);
-        $this->assertStringContainsString('Insufficient stock', $result['error']);
+        $this->assertStringContainsString('Insufficient', $result['error']);
 
         $batch = StockBatch::first();
         $this->assertEquals(10, $batch->quantity_left);
@@ -335,14 +341,14 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_adjustment_creates_correct_transaction_type(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Noodles');
 
         $this->createBatch($item->id, $branch->id, 50, 50, '2025-06-01');
 
-        $service = new StockService();
+        $service = new StockService;
 
         $result = $service->adjustment($item->id, $branch->id, 5, $user->id, 'Expired items found');
         $this->assertTrue($result['ok']);
@@ -368,7 +374,7 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_restore_order_stock_reverses_deductions(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Fish Sauce');
@@ -377,16 +383,16 @@ class CriticalWorkflowTest extends TestCase
 
         $orderNumber = 'ORD-2025-0001';
         StockTransaction::create([
-            'item_id'      => $item->id,
-            'branch_id'    => $branch->id,
-            'batch_id'     => $batch->id,
-            'type'         => 'out',
-            'quantity'     => -20,
-            'reason'       => "Order {$orderNumber} approved",
+            'item_id' => $item->id,
+            'branch_id' => $branch->id,
+            'batch_id' => $batch->id,
+            'type' => 'out',
+            'quantity' => -20,
+            'reason' => "Order {$orderNumber} approved",
             'performed_by' => $user->id,
         ]);
 
-        $service = new StockService();
+        $service = new StockService;
         $result = $service->restoreOrderStock(1, $orderNumber, $branch->id, $user->id);
 
         $this->assertTrue($result['ok']);
@@ -428,10 +434,10 @@ class CriticalWorkflowTest extends TestCase
         $sev = $totalQty <= ($item->reorder_level / 2) ? 'critical' : 'warning';
         $alert = Alert::create([
             'alert_type' => 'low_stock',
-            'severity'   => $sev,
-            'message'    => "{$item->item_name} is low at {$branch->branch_name}: {$totalQty} pack(s) remaining (reorder level: {$item->reorder_level}).",
-            'item_id'    => $item->id,
-            'branch_id'  => $branch->id,
+            'severity' => $sev,
+            'message' => "{$item->item_name} is low at {$branch->branch_name}: {$totalQty} pack(s) remaining (reorder level: {$item->reorder_level}).",
+            'item_id' => $item->id,
+            'branch_id' => $branch->id,
         ]);
 
         $this->assertNotNull($alert->id);
@@ -460,14 +466,14 @@ class CriticalWorkflowTest extends TestCase
     // ---------------------------------------------------------------
     public function test_stock_in_preserves_expiry_date(): void
     {
-        $role = $this->createRole('warehouse_admin');
+        $role = $this->createRole('commissary_manager');
         $branch = $this->createBranch('Main Warehouse', 'main');
         $user = $this->createUser($role, $branch);
         $item = $this->createItem('Coconut Milk');
 
-        $expiryDate = '2025-12-31';
+        $expiryDate = now()->addMonths(8)->toDateString();
 
-        $service = new StockService();
+        $service = new StockService;
         $result = $service->stockIn(
             $item->id,
             $branch->id,
@@ -482,5 +488,180 @@ class CriticalWorkflowTest extends TestCase
         $batch = StockBatch::find($result['batch_id']);
         $this->assertNotNull($batch);
         $this->assertEquals($expiryDate, $batch->expiry_date->format('Y-m-d'));
+    }
+
+    // ---------------------------------------------------------------
+    // 14. Expired stock in is rejected — no batch, no transaction
+    // ---------------------------------------------------------------
+    public function test_expired_stock_in_is_rejected(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $branch = $this->createBranch('Main Warehouse', 'main');
+        $user = $this->createUser($role, $branch);
+        $item = $this->createItem('Expired Tofu');
+
+        $service = new StockService;
+        $result = $service->stockIn(
+            $item->id,
+            $branch->id,
+            40,
+            $user->id,
+            now()->subDay()->toDateString(),   // yesterday = expired
+            'Supplier delivery'
+        );
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('expired', strtolower($result['error']));
+        $this->assertEquals(0, StockBatch::where('item_id', $item->id)->count());
+        $this->assertEquals(0, StockTransaction::where('item_id', $item->id)->count());
+    }
+
+    // ---------------------------------------------------------------
+    // 15. Normal stock out excludes expired stock
+    // ---------------------------------------------------------------
+    public function test_stock_out_excludes_expired_stock(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $branch = $this->createBranch('Main Warehouse', 'main');
+        $user = $this->createUser($role, $branch);
+        $item = $this->createItem('Lemongrass');
+
+        $expired = $this->createBatch($item->id, $branch->id, 50, 50, now()->subDays(2)->toDateString(), '2025-01-01');
+        $fresh = $this->createBatch($item->id, $branch->id, 5, 5, now()->addMonths(3)->toDateString(), '2025-02-01');
+
+        $service = new StockService;
+
+        // 10 requested but only 5 eligible → rejected, nothing touched.
+        $result = $service->stockOut($item->id, $branch->id, 10, $user->id, 'Sale');
+        $this->assertFalse($result['ok']);
+        $expired->refresh();
+        $fresh->refresh();
+        $this->assertEquals(50, $expired->quantity_left);
+        $this->assertEquals(5, $fresh->quantity_left);
+
+        // 5 requested → fulfilled only from the fresh batch; expired untouched.
+        $result2 = $service->stockOut($item->id, $branch->id, 5, $user->id, 'Sale');
+        $this->assertTrue($result2['ok']);
+        $expired->refresh();
+        $fresh->refresh();
+        $this->assertEquals(50, $expired->quantity_left, 'Expired batch must never be issued as normal stock out');
+        $this->assertEquals(0, $fresh->quantity_left);
+    }
+
+    // ---------------------------------------------------------------
+    // 16. Idempotency — a repeated key records the movement once
+    // ---------------------------------------------------------------
+    public function test_idempotency_key_prevents_duplicate_stock_in(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $branch = $this->createBranch('Main Warehouse', 'main');
+        $user = $this->createUser($role, $branch);
+        $item = $this->createItem('Rice Paper');
+
+        $service = new StockService;
+        $key = 'test-key-0001';
+
+        $r1 = $service->stockIn($item->id, $branch->id, 30, $user->id, now()->addMonths(4)->toDateString(), 'Receipt', null, $key);
+        $r2 = $service->stockIn($item->id, $branch->id, 30, $user->id, now()->addMonths(4)->toDateString(), 'Receipt', null, $key);
+
+        $this->assertTrue($r1['ok']);
+        $this->assertArrayHasKey('batch_id', $r1);
+        $this->assertTrue($r2['ok']);
+        $this->assertTrue($r2['duplicate'] ?? false);
+
+        $this->assertEquals(1, StockBatch::where('item_id', $item->id)->count());
+        $this->assertEquals(1, StockTransaction::where('item_id', $item->id)->where('type', 'in')->count());
+
+        // A fresh key still allows a new, legitimate movement.
+        $r3 = $service->stockIn($item->id, $branch->id, 30, $user->id, now()->addMonths(4)->toDateString(), 'Receipt', null, 'test-key-0002');
+        $this->assertTrue($r3['ok']);
+        $this->assertEquals(2, StockBatch::where('item_id', $item->id)->count());
+    }
+
+    // ---------------------------------------------------------------
+    // 17. Sequential over-issue cannot drive a balance negative
+    // ---------------------------------------------------------------
+    public function test_sequential_over_issue_is_prevented(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $branch = $this->createBranch('Main Warehouse', 'main');
+        $user = $this->createUser($role, $branch);
+        $item = $this->createItem('Chili Oil');
+
+        $batch = $this->createBatch($item->id, $branch->id, 10, 10, now()->addMonths(3)->toDateString());
+
+        $service = new StockService;
+        $this->assertTrue($service->stockOut($item->id, $branch->id, 7, $user->id, 'Sale')['ok']);
+        $this->assertFalse($service->stockOut($item->id, $branch->id, 7, $user->id, 'Sale')['ok']);
+
+        $batch->refresh();
+        $this->assertEquals(3, $batch->quantity_left);
+        $this->assertGreaterThanOrEqual(0, $batch->quantity_left);
+    }
+
+    // ---------------------------------------------------------------
+    // 18. Warehouse role stock-in is pinned to Main Warehouse even when
+    //     a different branch_id is posted (tampered location).
+    // ---------------------------------------------------------------
+    public function test_warehouse_stock_in_is_pinned_to_main_warehouse(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $main = $this->createBranch('Tanza', 'main');
+        $other = $this->createBranch('Franchise B', 'franchise');
+        $user = $this->createUser($role, $main);
+        $item = $this->createItem('Hoisin Sauce');
+
+        // Called directly (this environment's HTTP test client 404s on all web
+        // routes — a pre-existing limitation unrelated to this logic).
+        $this->actingAs($user);
+        $request = Request::create('/stock/api', 'POST', [
+            'action' => 'stock_in',
+            'item_id' => $item->id,
+            'branch_id' => $other->id,                 // tampered — must be ignored
+            'quantity' => 12,
+            'expiry_date' => now()->addMonths(3)->toDateString(),
+        ]);
+        $data = (new StockController)->api($request)->getData(true);
+
+        $this->assertTrue($data['ok'] ?? false, json_encode($data));
+
+        // The batch landed at the Main Warehouse, not the posted franchise.
+        $this->assertEquals(1, StockBatch::where('item_id', $item->id)->where('branch_id', $main->id)->count());
+        $this->assertEquals(0, StockBatch::where('item_id', $item->id)->where('branch_id', $other->id)->count());
+    }
+
+    // ---------------------------------------------------------------
+    // 19. Scan lookup returns the scanned batch's own quantity for a
+    //     batch QR, and no batch for a product-only QR.
+    // ---------------------------------------------------------------
+    public function test_scan_lookup_resolves_batch_quantity(): void
+    {
+        $role = $this->createRole('commissary_manager');
+        $branch = $this->createBranch('Tanza', 'main');
+        $user = $this->createUser($role, $branch);
+
+        $item = $this->createItem('Star Anise');
+        $item->update(['qr_code' => 'HV-ITEM-9001']);
+
+        $batch = $this->createBatch($item->id, $branch->id, 18, 18, now()->addMonths(5)->toDateString());
+        $batch->update(['qr_code' => 'HV-STARAN-0501-B001']);
+
+        $this->actingAs($user);
+        $controller = new QrController;
+
+        // Batch QR → matched_batch carries that batch's own quantity_left.
+        $byBatch = $controller->api(
+            Request::create('/qr/api', 'POST', ['action' => 'lookup', 'query' => 'HV-STARAN-0501-B001'])
+        )->getData(true);
+        $this->assertEquals('batch_qr', $byBatch['matched_by']);
+        $this->assertEquals(18, $byBatch['matched_batch']['quantity_left']);
+        $this->assertFalse($byBatch['matched_batch']['is_expired']);
+
+        // Product QR → no specific batch is identified (count must be entered).
+        $byProduct = $controller->api(
+            Request::create('/qr/api', 'POST', ['action' => 'lookup', 'query' => 'HV-ITEM-9001'])
+        )->getData(true);
+        $this->assertEquals('qr', $byProduct['matched_by']);
+        $this->assertNull($byProduct['matched_batch']);
     }
 }

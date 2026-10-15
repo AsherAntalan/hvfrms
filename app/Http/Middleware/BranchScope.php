@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Branch;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,15 +28,16 @@ class BranchScope
 
         $roleName = $user->role?->role_name;
 
-        if (in_array($roleName, ['super_admin', 'owner'], true)) {
-            // Owners can optionally filter by branch via query parameter.
-            $branchId = $request->query('branch') ? (int) $request->query('branch') : null;
+        if (in_array($roleName, ['super_admin', 'owner', 'admin'], true)) {
+            // Owner/Admin can optionally filter by branch via query parameter.
+            $selected = $request->query('branch', $request->isMethod('get') ? null : $request->input('branch_id'));
+            $branchId = $selected ? (int) $selected : null;
             $request->merge(['branch_id' => $branchId]);
-        } elseif (in_array($roleName, ['warehouse_admin', 'warehouse_staff'], true)) {
-            // Warehouse roles operate at the main branch.
-            $mainBranch = \App\Models\Branch::where('branch_type', 'main')
-                ->where('is_active', true)->first();
-            $request->merge(['branch_id' => $mainBranch ? $mainBranch->id : $user->branch_id]);
+        } elseif (in_array($roleName, ['commissary_manager', 'commissary_staff'], true)) {
+            // Commissary roles operate at the Commissary location (falls back to
+            // the main store only until a Commissary is configured).
+            $commissary = Branch::commissary();
+            $request->merge(['branch_id' => $commissary ? $commissary->id : $user->branch_id]);
         } else {
             // Non-owner roles are locked to their own branch.
             $request->merge(['branch_id' => $user->branch_id]);
