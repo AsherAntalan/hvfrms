@@ -31,6 +31,111 @@ body {
     font-size: 15px;
 }
 
+/* Shared workspace typography and matte surfaces; guest pages keep their styling. */
+body.hv-app {
+    --font-ui: Arial, Helvetica, sans-serif;
+    --font-display: var(--font-ui);
+    --bs-font-sans-serif: var(--font-ui);
+    --bs-body-font-family: var(--font-ui);
+    --summary-surface: #F0F1F2;
+    --summary-divider: #DEDFE1;
+    --metric-ink: #2B2320;
+    --metric-muted: #6E635C;
+    --panel-radius: 16px;
+    --shadow-card: none;
+    font-family: var(--font-ui);
+    line-height: 1.5;
+}
+
+.hv-app :is(button, input, select, textarea) {
+    font-family: inherit;
+}
+
+.hv-app .hv-main :is(h1, h2, h3, h4, h5, h6),
+.hv-app .modal-title {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    letter-spacing: -.02em;
+}
+
+.hv-app .hv-main h6 {
+    color: var(--maroon);
+    font-size: .8125rem;
+    letter-spacing: .04em;
+    line-height: 1.4;
+}
+
+.hv-app .hv-main :is(.form-control, .form-select, .btn, .nav-link) {
+    font-size: .875rem;
+}
+
+.hv-app :is(.hv-badge, .badge, .hv-inv-count) {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Existing page metrics share the dashboard's smoke-white summary treatment. */
+.hv-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 8px;
+    background: var(--summary-surface);
+    border-radius: var(--panel-radius);
+}
+
+.hv-summary-grid > div {
+    min-width: 0;
+}
+
+.hv-summary-grid > div + div {
+    border-left: 1px solid var(--summary-divider);
+}
+
+.hv-summary-metric {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+    height: 100%;
+    padding: 18px 20px;
+}
+
+.hv-summary-label {
+    color: var(--metric-muted);
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
+.hv-summary-value {
+    color: var(--metric-ink);
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.5rem);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.035em;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 767.98px) {
+    .hv-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hv-summary-grid > div:nth-child(odd) {
+        border-left: 0;
+    }
+
+    .hv-summary-grid > div:nth-child(n + 3) {
+        border-top: 1px solid var(--summary-divider);
+    }
+
+    .hv-summary-metric {
+        padding: 16px 12px;
+    }
+}
+
 /* ── Buttons ─────────────────────────────────────────── */
 .btn-maroon {
     background: var(--maroon);
@@ -156,10 +261,9 @@ body {
     .hv-sidebar { transition: none; }
 }
 
-/* Scrollbar styling for sidebar */
-.hv-sidebar::-webkit-scrollbar { width: 4px; }
-.hv-sidebar::-webkit-scrollbar-track { background: transparent; }
-.hv-sidebar::-webkit-scrollbar-thumb { background: rgba(212,169,74,0.3); border-radius: 2px; }
+/* Scrollbar styling for sidebar — hidden */
+.hv-sidebar { scrollbar-width: none; -ms-overflow-style: none; }
+.hv-sidebar::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 /* ── Sidebar Header: centered logo + brand ────────────── */
 .hv-sidebar-header {
@@ -195,6 +299,7 @@ body {
 }
 
 .hv-nav-link {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -203,22 +308,47 @@ body {
     text-decoration: none;
     font-size: 13.5px;
     font-weight: 500;
-    border-left: 3px solid transparent;
-    transition: all 0.18s ease;
+    transition: background 0.18s ease, color 0.18s ease;
     white-space: nowrap;
     overflow: hidden;
 }
 .hv-nav-link:hover {
     background: rgba(255,255,255,0.06);
     color: #fff;
-    border-left-color: rgba(212,169,74,0.35);
 }
+/* Active (current page): the cream workspace reaches into the sidebar to
+   embrace the item — cream fill, brand-red icon + label, left pill, and a
+   right edge that connects to the content panel (fillets added below). */
 .hv-nav-link.active {
-    background: rgba(212,169,74,0.13);
-    color: var(--gold);
-    border-left-color: var(--gold);
+    background: var(--paper);
+    color: var(--maroon);
     font-weight: 600;
+    border-radius: 18px 0 0 18px;
+    overflow: visible;
 }
+/* Active marker for a group toggle (section is active, not the current page):
+   a short rounded gold bar — unchanged. */
+.hv-nav-group-toggle.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    border-radius: 0 3px 3px 0;
+    background: var(--gold);
+}
+.hv-nav-link .hv-dashboard-icon {
+    display: inline-block;
+    width: 24px;
+    height: 20px;
+    flex: 0 0 24px;
+    background-color: currentColor;
+    -webkit-mask: url('../img/dashboard-icon.png') center / 20px 20px no-repeat;
+    mask: url('../img/dashboard-icon.png') center / 20px 20px no-repeat;
+}
+
 .hv-nav-link i {
     font-size: 20px;
     width: 24px;
@@ -240,9 +370,8 @@ body {
     font-size: 13.5px;
     font-weight: 500;
     border: none;
-    border-left: 3px solid transparent;
     cursor: pointer;
-    transition: all 0.18s ease;
+    transition: background 0.18s ease, color 0.18s ease;
     white-space: nowrap;
     background: none;
     width: 100%;
@@ -251,6 +380,7 @@ body {
     appearance: none;
     text-align: left;
     line-height: inherit;
+    position: relative;
 }
 .hv-nav-group-toggle:hover {
     background: rgba(255,255,255,0.06);
@@ -258,10 +388,9 @@ body {
 }
 .hv-nav-group-toggle.active {
     color: var(--gold);
-    border-left-color: rgba(212,169,74,0.3);
 }
-.hv-nav-group-toggle i.bi-chevron-down,
-.hv-nav-group-toggle i.bi-chevron-right {
+.hv-nav-group-toggle i.ph-caret-down,
+.hv-nav-group-toggle i.ph-caret-right {
     font-size: 11px;
     width: auto;
     flex-shrink: 0;
@@ -314,14 +443,22 @@ body {
     background: rgba(255,255,255,0.05);
 }
 .hv-nav-submenu .hv-nav-link.active {
-    color: var(--gold);
+    color: var(--maroon);
     border-left-color: transparent;
-    background: rgba(212,169,74,0.1);
+    background: var(--paper);
+    border-radius: 18px 0 0 18px;
+    overflow: visible;
 }
 .hv-sidebar-divider {
     border: none;
-    border-top: 1px solid rgba(255,255,255,0.07);
     margin: 6px 20px;
+}
+
+/* ── Sidebar footer: account + brand, pinned at the bottom ── */
+.hv-sidebar-foot {
+    flex-shrink: 0;
+    margin-top: auto;
+    padding: 8px 0 12px;
 }
 
 /* ── Notification Toast ───────────────────────────────── */
@@ -499,7 +636,7 @@ body {
    ═══════════════════════════════════════════════════════ */
 @media (min-width: 992px) {
     body.sidebar-collapsed .hv-sidebar { width: var(--sidebar-rail); }
-    body.sidebar-collapsed .hv-main    { margin-left: var(--sidebar-rail); }
+    /* Offset now lives on .hv-shell (see APP SHELL block); main is flush inside it. */
 
     /* Header: keep the circular logo, drop the brand text */
     body.sidebar-collapsed .hv-sidebar-header { padding: 18px 8px 14px; }
@@ -516,19 +653,24 @@ body {
     }
     body.sidebar-collapsed .hv-nav-link > span,
     body.sidebar-collapsed .hv-nav-group-toggle > span:not(.hv-sidebar-badge),
-    body.sidebar-collapsed .hv-nav-group-toggle > .bi-chevron-down,
-    body.sidebar-collapsed .hv-nav-group-toggle > .bi-chevron-right {
+    body.sidebar-collapsed .hv-nav-group-toggle > .ph-caret-down,
+    body.sidebar-collapsed .hv-nav-group-toggle > .ph-caret-right {
         display: none;
     }
 
     /* Submenus stay closed in the rail; clicking a parent expands first */
     body.sidebar-collapsed .hv-nav-submenu { display: none; }
 
-    /* Active row reads as a rounded highlight on the rail */
+    /* Rail: drop the cream-connector look; active reads as a rounded highlight */
     body.sidebar-collapsed .hv-nav-link.active,
     body.sidebar-collapsed .hv-nav-group-toggle.active {
         border-left-color: transparent;
+        background: transparent;
+        color: var(--gold);
+        border-radius: 0;
+        overflow: hidden;
     }
+    body.sidebar-collapsed .hv-nav-link.active::after { display: none; }
     body.sidebar-collapsed .hv-nav-link.active::before,
     body.sidebar-collapsed .hv-nav-group-toggle.active::before {
         content: "";
@@ -536,6 +678,7 @@ body {
         inset: 4px 14px;
         border-radius: 12px;
         background: rgba(212, 169, 74, 0.16);
+        box-shadow: none;
         z-index: 0;
     }
     body.sidebar-collapsed .hv-nav-link.active i,
@@ -559,6 +702,8 @@ body {
     }
 
     body.sidebar-collapsed .hv-sidebar-divider { margin: 6px 16px; }
+
+    body.sidebar-collapsed .hv-sidebar-foot { padding: 8px 0 12px; }
 }
 
 
@@ -736,12 +881,13 @@ a.hv-stat-link:hover {
 /* Browser surfaces — the "built not assembled" signal */
 .hv-main ::selection, .modal ::selection{ background: var(--gold-soft); color: var(--maroon-dark); }
 .hv-main :focus-visible, .modal :focus-visible{ outline: 2px solid var(--maroon); outline-offset: 2px; }
+.hv-main .table-responsive{ position: relative; min-width: 0; }
 .hv-main .table-responsive::-webkit-scrollbar{ height: 8px; }
 .hv-main .table-responsive::-webkit-scrollbar-thumb{ background: rgba(212,169,74,.4); border-radius: 8px; }
 .hv-main .table-responsive::-webkit-scrollbar-track{ background: transparent; }
 
 /* Cards — rounder panels, soft diffuse lift for comfortable separation */
-.hv-card{ border-radius: 18px; box-shadow: var(--shadow-card); }
+.hv-card{ border-radius: var(--panel-radius, 18px); box-shadow: var(--shadow-card); }
 
 /* Page header rhythm */
 .hv-page-header{ padding-bottom: .9rem; margin-bottom: 1.25rem; border-bottom: var(--hair); }
@@ -750,8 +896,9 @@ a.hv-stat-link:hover {
 /* Tables: aligned numerals, quiet headers, hairline rows */
 .hv-main table{ font-variant-numeric: tabular-nums; }
 .hv-main table thead th{
-  font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
   color: var(--muted); border-bottom: var(--hair); white-space: nowrap; }
+.hv-app .hv-main table thead th{ background: transparent; }
 .hv-main table tbody td{ border-color: var(--border); }
 .hv-main .table-hover tbody tr{ transition: background .15s ease; }
 .hv-main .table-hover tbody tr:hover{ background: var(--cream); }
@@ -808,13 +955,13 @@ a.hv-stat-link:hover {
 
 /* ── Icon system normalization (one family, consistent optics) ── */
 .hv-nav-link i, .hv-nav-group-toggle .hv-nav-icon{ line-height: 1; }
-.hv-main .btn .bi{ font-size: 15px; line-height: 1; vertical-align: -0.09em; }
-.hv-main .btn-sm .bi{ font-size: 14.5px; }
-.hv-main .nav-tabs .nav-link .bi{ font-size: 14px; vertical-align: -0.06em; }
-.hv-main table .bi{ vertical-align: -0.08em; }
-.hv-topbar .bi{ vertical-align: -0.08em; }
+.hv-main .btn i[class*="ph-"]{ font-size: 15px; line-height: 1; vertical-align: -0.09em; }
+.hv-main .btn-sm i[class*="ph-"]{ font-size: 14.5px; }
+.hv-main .nav-tabs .nav-link i[class*="ph-"]{ font-size: 14px; vertical-align: -0.06em; }
+.hv-main table i[class*="ph-"]{ vertical-align: -0.08em; }
+.hv-topbar i[class*="ph-"]{ vertical-align: -0.08em; }
 /* Icon-only action buttons read as an aligned set, no geometry shift on state */
-.hv-main .btn-sm > .bi:only-child{ display: inline-block; min-width: 1em; text-align: center; }
+.hv-main .btn-sm > i[class*="ph-"]:only-child{ display: inline-block; min-width: 1em; text-align: center; }
 
 /* ════════════════════════════════════════════════════════════
    DISPLAY TYPE + SURFACE AMPLIFICATION (visible, app-wide)
@@ -857,14 +1004,14 @@ body{ background: var(--paper); }
 .hv-inv-bar{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap;
   padding:.85rem 1rem; border-bottom: var(--hair); }
 .hv-inv-search{ position:relative; display:flex; align-items:center; flex:1 1 280px; max-width:360px; }
-.hv-inv-search .bi{ position:absolute; left:.7rem; color:var(--muted); font-size:.85rem; pointer-events:none; }
+.hv-inv-search i[class*="ph-"]{ position:absolute; left:.7rem; color:var(--muted); font-size:.85rem; pointer-events:none; }
 .hv-inv-search input{ width:100%; border:1px solid var(--border); border-radius:9px;
   padding:.4rem .7rem .4rem 2rem; font-size:13px; background:#fff; color:var(--ink); }
 .hv-inv-search input:focus{ outline:0; border-color:var(--gold); box-shadow:var(--focus-ring); }
 .hv-inv-count{ font-size:12px; color:var(--muted); }
 
 .hv-inv{ font-variant-numeric: tabular-nums; }
-.hv-inv thead th{ font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+.hv-inv thead th{ font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
   color:var(--muted); border-bottom:var(--hair); padding:.5rem .75rem; white-space:nowrap; }
 .hv-inv .hv-inv-numcol{ width:9rem; }
 
@@ -894,11 +1041,11 @@ body{ background: var(--paper); }
 .hv-inv-low{ display:inline-flex; align-items:center; gap:.3rem; margin-left:.5rem;
   font-size:11px; font-weight:700; color:#8A6D00; background:rgba(212,169,74,.18);
   border-radius:999px; padding:.08rem .5rem; white-space:nowrap; }
-.hv-inv-low .bi{ font-size:.7rem; }
+.hv-inv-low i[class*="ph-"]{ font-size:.7rem; }
 
 .hv-inv-view{ display:inline-flex; align-items:center; gap:.15rem; font-size:12px; font-weight:600;
   color:var(--muted); opacity:0; transition:opacity .15s ease, color .15s ease; }
-.hv-inv-view .bi{ font-size:.7rem; }
+.hv-inv-view i[class*="ph-"]{ font-size:.7rem; }
 .hv-inv-row:hover .hv-inv-view, .hv-inv-row[aria-expanded="true"] .hv-inv-view{ opacity:1; color:var(--maroon); }
 
 .hv-inv-detail > td{ border-top:0; }
@@ -906,3 +1053,140 @@ body{ background: var(--paper); }
 .hv-inv-panel-title{ font-weight:700; color:var(--maroon-dark); font-size:14px; margin-bottom:.6rem; }
 .hv-inv-panel-title span{ color:var(--muted); font-weight:500; }
 @media (max-width:640px){ .hv-inv .hv-inv-numcol{ width:auto; } .hv-inv-view{ opacity:1; } }
+
+/* ════════════════════════════════════════════════════════════
+   APP SHELL — CONTINUOUS RED HEADER + SIDEBAR
+   The brand maroon runs the full top edge and full left side as
+   one surface; the header lives on that red above the workspace,
+   and the sidebar dissolves into it (no seam). The cream panel
+   sits below the header and beside the sidebar, flush to the
+   right and bottom edges, turning the one rounded top-left corner
+   that reveals the red behind it. Palette unchanged — brand red
+   is simply given the full field; header text/icons go white.
+   Auth pages use layouts/guest and are untouched.
+   ════════════════════════════════════════════════════════════ */
+:root{
+  --shell-field: linear-gradient(185deg, #4A0A0A 0%, #6E1212 46%, #3C0808 100%);
+  --shell-radius: 28px;
+}
+
+/* Brand field behind the whole shell, every width; fixed so the red header
+   and left stay put while the workspace scrolls. */
+body{ background: var(--shell-field); background-attachment: fixed; }
+
+/* Desktop: sidebar dissolves into the field — no slab, no seam */
+@media (min-width: 992px){
+  .hv-sidebar{
+    background: transparent;
+    box-shadow: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+/* The area right of the sidebar: red header stacked over the cream panel */
+.hv-shell{
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.22s ease;
+}
+@media (prefers-reduced-motion: reduce){ .hv-shell{ transition: none; } }
+body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
+@media (max-width: 991.98px){ .hv-shell{ margin-left: 0; } }
+
+/* Header on the red field: transparent surface, white text + icons, no card */
+.hv-topbar{
+  background: transparent;
+  border-bottom: 0;
+  margin: 0;
+  padding: 14px 1.9rem;
+  min-height: var(--topbar-height);
+}
+.hv-topbar::after{ display: none; }          /* drop the cream-panel gold tick */
+.hv-topbar h5{ color: #fff; }
+.hv-topbar .text-muted{ color: rgba(255,255,255,.80) !important; }
+.hv-hamburger-main{ color: #fff; }
+.hv-hamburger-main:hover{ background: rgba(255,255,255,.12); }
+.hv-topbar .btn-link{ color: #fff !important; }
+/* Profile control integrated into the red: no capsule or cream fill */
+.hv-topbar-user{ background: transparent; border-color: transparent; color: #fff; }
+.hv-topbar-user:hover{ background: rgba(255,255,255,.12); border-color: transparent; }
+
+/* Cream workspace: flush right + bottom, one rounded top-left corner, grows */
+.hv-main{
+  margin: 0;
+  background: var(--paper);
+  border: 0;
+  border-top-left-radius: var(--shell-radius);
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1.7rem 1.9rem 3rem;
+}
+@media (max-width: 991.98px){
+  .hv-main{ border-top-left-radius: 18px; padding: 1.4rem 1.1rem 2.5rem; }
+}
+
+/* ── Active sidebar tab → cream connector into the workspace ──────────
+   Two transparent circles at the tab's right edge; their cream box-shadow
+   fills the join while the circle bodies leave the smooth concave notch
+   that lets the red field flow into the cream. Decorative only. */
+.hv-nav-link.active::before,
+.hv-nav-link.active::after{
+  content: "";
+  position: absolute;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hv-nav-link.active::before{ top: -16px;    box-shadow: 8px 8px 0 0 var(--paper); }
+.hv-nav-link.active::after{  bottom: -16px; box-shadow: 8px -8px 0 0 var(--paper); }
+
+/* Overlay/mobile: the panel isn't adjacent, so the tab is a self-contained
+   cream pill — no right connector, no overflow. */
+@media (max-width: 991.98px){
+  .hv-nav-link.active{ border-radius: 10px; overflow: hidden; }
+  .hv-nav-link.active::before,
+  .hv-nav-link.active::after{ display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   AUTH LOADING OVERLAY — login → destination transition
+   Solid brand burgundy, centered white segmented spinner, Arial.
+   Shared by the login page and the authenticated shell.
+   ════════════════════════════════════════════════════════════ */
+.hv-auth-loading{
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--maroon);
+  font-family: Arial, Helvetica, sans-serif;
+  opacity: 1; transition: opacity .3s ease;
+}
+.hv-auth-loading[hidden]{ display: none; }
+.hv-auth-loading.is-fading{ opacity: 0; }
+.hv-auth-loading-inner{ display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; text-align: center; }
+.hv-auth-spinner{
+  width: 54px; height: 54px; border-radius: 50%;
+  background: repeating-conic-gradient(#fff 0 10deg, rgba(255,255,255,.18) 10deg 30deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  animation: hvAuthSpin 1s steps(12) infinite;
+}
+@keyframes hvAuthSpin{ to{ transform: rotate(360deg); } }
+.hv-auth-loading-msg{ margin: 0; color: #fff; font-size: 16px; font-weight: 600; letter-spacing: .01em; }
+.hv-auth-loading-recover{
+  margin-top: 4px; background: transparent; border: 1px solid rgba(255,255,255,.55);
+  color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+  font-family: inherit;
+}
+.hv-auth-loading-recover:hover{ background: rgba(255,255,255,.12); }
+.hv-auth-loading-recover:focus-visible{ outline: 2px solid #fff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce){
+  .hv-auth-spinner{ animation: none; }
+  .hv-auth-loading{ transition: none; }
+}

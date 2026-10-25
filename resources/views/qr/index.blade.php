@@ -51,10 +51,10 @@
         {{-- ═══ MODE TOGGLE ═══════════════════════════════════ --}}
         <div class="d-flex hv-mode-toggle gap-2 mb-3">
             <button type="button" class="btn btn-outline-success active" data-mode="in" id="btnIn">
-                <i class="bi bi-box-arrow-in-down"></i> Stock In
+                <i class="ph ph-tray-arrow-down"></i> Stock In
             </button>
             <button type="button" class="btn btn-outline-danger" data-mode="out" id="btnOut">
-                <i class="bi bi-box-arrow-up"></i> Stock Out
+                <i class="ph ph-export"></i> Stock Out
             </button>
         </div>
 
@@ -78,10 +78,10 @@
 
         <div class="d-flex gap-2 mt-2">
             <button type="button" class="btn btn-maroon flex-grow-1" id="btnStartCam">
-                <i class="bi bi-camera-video"></i> Start camera
+                <i class="ph ph-video-camera"></i> Start camera
             </button>
             <button type="button" class="btn btn-outline-secondary" id="btnStopCam" disabled>
-                <i class="bi bi-stop-circle"></i> Stop
+                <i class="ph ph-stop-circle"></i> Stop
             </button>
         </div>
 
@@ -209,7 +209,7 @@
             beep(false);
             $('scanResult').innerHTML =
                 '<div class="alert alert-danger mt-3">' +
-                '<i class="bi bi-wifi-off me-1"></i> Network error. Check your connection.</div>';
+                '<i class="ph ph-wifi-slash me-1"></i> Network error. Check your connection.</div>';
         }
     }
 
@@ -260,16 +260,16 @@
 
         if (p._matched_by === 'name') {
             h += '<div class="alert alert-warning py-1 px-2 small mb-2">' +
-                 '<i class="bi bi-exclamation-triangle me-1"></i>Matched by name — verify this is the correct product.</div>';
+                 '<i class="ph ph-warning me-1"></i>Matched by name — verify this is the correct product.</div>';
         }
 
         // Batch info (show for the selected branch)
         if (myBatches.length > 0) {
             myBatches.forEach(function(batch) {
                 h += '<div class="hv-batch-info">';
-                h += '<div class="batch-label"><i class="bi bi-qr-code me-1"></i>Batch ' + escapeHtml(batch.batch_number) + ' &middot; Total qty: <strong>' + batch.quantity_left + ' ' + unit + '</strong></div>';
+                h += '<div class="batch-label"><i class="ph ph-qr-code me-1"></i>Batch ' + escapeHtml(batch.batch_number) + ' &middot; Total qty: <strong>' + batch.quantity_left + ' ' + unit + '</strong></div>';
                 if (batch.expiry_date) {
-                    h += '<div class="batch-detail"><i class="bi bi-calendar-x me-1"></i>Expires: <strong>' + escapeHtml(batch.expiry_date) + '</strong></div>';
+                    h += '<div class="batch-detail"><i class="ph ph-calendar-x me-1"></i>Expires: <strong>' + escapeHtml(batch.expiry_date) + '</strong></div>';
                 }
                 h += '</div>';
             });
@@ -307,7 +307,7 @@
         } else {
             if (onHand <= 0) {
                 h += '<div class="alert alert-warning py-2 small mb-0">' +
-                     '<i class="bi bi-exclamation-triangle me-1"></i>No stock to deduct at this branch.</div></div>';
+                     '<i class="ph ph-warning me-1"></i>No stock to deduct at this branch.</div></div>';
                 $('scanResult').innerHTML = h;
                 return;
             }
@@ -320,7 +320,7 @@
             h += '</select>';
 
             h += '<div class="alert alert-info py-2 small mb-3">' +
-                 '<i class="bi bi-info-circle me-1"></i>' + (p._matched_batch ? 'Stock will be deducted only from the scanned batch.' : '<strong>FEFO:</strong> Stock with the earliest expiry will be used first.') + '</div>';
+                 '<i class="ph ph-info me-1"></i>' + (p._matched_batch ? 'Stock will be deducted only from the scanned batch.' : '<strong>FEFO:</strong> Stock with the earliest expiry will be used first.') + '</div>';
         }
 
         // Remarks
@@ -434,7 +434,7 @@
         $('scanFeed').insertAdjacentHTML('afterbegin',
             '<div class="hv-activity-item">' +
             '<div class="hv-activity-icon" style="background:#E3EEE2;color:var(--success)">' +
-            '<i class="bi bi-check2"></i></div><div>' + escapeHtml(msg) +
+            '<i class="ph ph-check"></i></div><div>' + escapeHtml(msg) +
             ' <span class="text-muted">&mdash; ' + t + '</span></div></div>');
     }
 

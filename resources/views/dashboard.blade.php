@@ -36,128 +36,125 @@
     </time>
 </header>
 
-{{-- ═══ STAT CARDS ═══════════════════════════════════════ --}}
-<div class="row g-4 mb-4">
+{{-- ═══ SUMMARY CONTAINERS ═══════════════════════════════ --}}
+@php $hasHealth = $user->canManageInventory() || $isWarehouse; @endphp
+<div class="hv-sumrow mb-4">
 
-    {{-- Active Orders --}}
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('orders') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="base">
-                <i class="bi bi-cart3"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['pending_orders'] }}</div>
-                <div class="hv-stat-label">Active Orders</div>
-            </div>
-        </a>
-    </div>
-
-    {{-- Deliveries / In Transit --}}
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="base">
-                <i class="bi bi-truck"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['delivering'] }}</div>
-                <div class="hv-stat-label">In Transit</div>
-            </div>
-        </a>
-    </div>
-
-    {{-- Preparing (warehouse roles) --}}
-    @if($isWarehouse || $isOwner)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('delivery') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="base">
-                <i class="bi bi-box-seam"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['preparing'] }}</div>
-                <div class="hv-stat-label">Preparing</div>
-            </div>
-        </a>
-    </div>
-    @endif
-
-    {{-- Low Stock --}}
-    @if($user->canManageInventory() || $isWarehouse)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="warn">
-                <i class="bi bi-exclamation-triangle"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['low_stock'] }}</div>
-                <div class="hv-stat-label">Low Stock</div>
-            </div>
-        </a>
-    </div>
-    @endif
-
-    {{-- Expired (warehouse/owner) --}}
-    @if(($isWarehouse || $isOwner) && isset($stats['expired']) && $stats['expired'] > 0)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('warehouse') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="alert">
-                <i class="bi bi-calendar-x"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['expired'] }}</div>
-                <div class="hv-stat-label">Expired</div>
-            </div>
-        </a>
-    </div>
-    @endif
-
-    {{-- Alerts --}}
-    @if($user->canManageInventory() || $isWarehouse)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('alerts') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="alert">
-                <i class="bi bi-bell"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['alerts'] }}</div>
-                <div class="hv-stat-label">Open Alerts</div>
-            </div>
-        </a>
-    </div>
-    @endif
-
-    {{-- Branches --}}
-    @unless($isWS)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ $isOwner ? route('branches') : '#' }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="base">
-                <i class="bi bi-building"></i>
-            </div>
-            <div>
-                @if($isBranchScoped && !$isWarehouse)
-                    <div class="hv-stat-value" style="font-size:1.1rem;">{{ $branchName }}</div>
-                    <div class="hv-stat-label">My Branch</div>
+    {{-- LEFT — operations --}}
+    <section class="hv-sum hv-sum--ops">
+        <div class="hv-sum-top">
+            {{-- Red tile: Commissary Sales (authorized roles) or Active Orders --}}
+            @if($salesAuthorized ?? false)
+            <div class="hv-m is-primary hv-m--sales">
+                <span class="hv-m-head">
+                    <span class="hv-m-label">Commissary Sales</span>
+                </span>
+                @if($salesAvailable ?? false)
+                <span class="hv-m-value hv-m--money">&#8369;{{ number_format($salesAmount, 2) }}</span>
+                <span class="hv-m-sub">This month &middot; {{ $salesRangeLabel }}</span>
                 @else
-                    <div class="hv-stat-value">{{ $stats['branches'] }}</div>
-                    <div class="hv-stat-label">Branches</div>
+                <span class="hv-m-value hv-m--money">&mdash;</span>
+                <span class="hv-m-sub">This month &middot; {{ $salesRangeLabel }}</span>
+                <span class="hv-m-note">Verified payment data unavailable</span>
                 @endif
             </div>
-        </a>
-    </div>
-    @endunless
+            @else
+            <a href="{{ route('orders') }}" class="hv-m is-primary">
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-shopping-cart-simple"></i></span>
+                    <span class="hv-m-label">Active Orders</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['pending_orders'] }}</span>
+            </a>
+            @endif
 
-    {{-- Users (Owner only) --}}
-    @if($isOwner)
-    <div class="col-6 col-md-4 col-xl-2">
-        <a href="{{ route('users') }}" class="hv-stat hv-stat-link">
-            <div class="hv-stat-icon" data-tone="gold">
-                <i class="bi bi-people"></i>
-            </div>
-            <div>
-                <div class="hv-stat-value">{{ $stats['users_active'] ?? 0 }}</div>
-                <div class="hv-stat-label">Active Users</div>
-            </div>
+            {{-- In Transit --}}
+            <a href="{{ route('delivery') }}" class="hv-m">
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-truck"></i></span>
+                    <span class="hv-m-label">In Transit</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['delivering'] }}</span>
+            </a>
+
+            {{-- Preparing (warehouse roles) --}}
+            @if($isWarehouse || $isOwner)
+            <a href="{{ route('delivery') }}" class="hv-m">
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-package"></i></span>
+                    <span class="hv-m-label">Preparing</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['preparing'] }}</span>
+            </a>
+            @endif
+        </div>
+
+        @unless($isWS)
+        <div class="hv-sum-divider"></div>
+        <div class="hv-sum-bottom">
+            {{-- Branches / My Branch --}}
+            <a href="{{ $isOwner ? route('branches') : '#' }}" class="hv-m">
+                @if($isBranchScoped && !$isWarehouse)
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-buildings"></i></span>
+                    <span class="hv-m-label">My Branch</span>
+                </span>
+                <span class="hv-m-value hv-m-value--text">{{ $branchName }}</span>
+                @else
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-buildings"></i></span>
+                    <span class="hv-m-label">Branches</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['branches'] }}</span>
+                @endif
+            </a>
+
+            {{-- Active Orders (moved here for roles whose red tile shows Sales) --}}
+            @if($salesAuthorized ?? false)
+            <a href="{{ route('orders') }}" class="hv-m">
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-shopping-cart-simple"></i></span>
+                    <span class="hv-m-label">Active Orders</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['pending_orders'] }}</span>
+            </a>
+            @endif
+        </div>
+        @endunless
+    </section>
+
+    {{-- RIGHT — inventory health --}}
+    @if($hasHealth)
+    <section class="hv-sum hv-sum--health">
+        {{-- Low Stock --}}
+        <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="hv-m" data-tone="warn">
+            <span class="hv-m-head">
+                <span class="hv-m-ico"><i class="ph ph-warning"></i></span>
+                <span class="hv-m-label">Low Stock</span>
+            </span>
+            <span class="hv-m-value">{{ $stats['low_stock'] }}</span>
         </a>
-    </div>
+
+        {{-- Expired (warehouse/owner) --}}
+        @if(($isWarehouse || $isOwner) && isset($stats['expired']) && $stats['expired'] > 0)
+        <a href="{{ route('warehouse') }}" class="hv-m" data-tone="alert">
+            <span class="hv-m-head">
+                <span class="hv-m-ico"><i class="ph ph-calendar-x"></i></span>
+                <span class="hv-m-label">Expired</span>
+            </span>
+            <span class="hv-m-value">{{ $stats['expired'] }}</span>
+        </a>
+        @endif
+
+        {{-- Open Alerts --}}
+        <a href="{{ route('alerts') }}" class="hv-m" data-tone="brand">
+            <span class="hv-m-head">
+                <span class="hv-m-ico"><i class="ph ph-bell"></i></span>
+                <span class="hv-m-label">Open Alerts</span>
+            </span>
+            <span class="hv-m-value">{{ $stats['alerts'] }}</span>
+        </a>
+    </section>
     @endif
 </div>
 
@@ -166,33 +163,30 @@
 @php
     $attention = [];
     if ($stats['pending'] > 0 && ($isOwner || $isWA))
-        $attention[] = ['icon' => 'bi-hourglass-split', 'text' => $stats['pending'] . ' order' . ($stats['pending'] > 1 ? 's' : '') . ' waiting for approval', 'link' => route('orders'), 'color' => '#856404'];
+        $attention[] = ['icon' => 'ph-hourglass', 'text' => $stats['pending'] . ' order' . ($stats['pending'] > 1 ? 's' : '') . ' waiting for approval', 'link' => route('orders'), 'color' => '#856404'];
     if (($stats['approved'] ?? 0) > 0 && ($isWarehouse || $isOwner))
-        $attention[] = ['icon' => 'bi-box-arrow-in-down', 'text' => $stats['approved'] . ' approved order' . ($stats['approved'] > 1 ? 's' : '') . ' to prepare', 'link' => route('delivery'), 'color' => '#2E7D32'];
+        $attention[] = ['icon' => 'ph-tray-arrow-down', 'text' => $stats['approved'] . ' approved order' . ($stats['approved'] > 1 ? 's' : '') . ' to prepare', 'link' => route('delivery'), 'color' => '#2E7D32'];
     if (($stats['preparing'] ?? 0) > 0 && ($isWarehouse || $isOwner))
-        $attention[] = ['icon' => 'bi-box-seam', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('delivery'), 'color' => '#2C6E8F'];
+        $attention[] = ['icon' => 'ph-package', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('delivery'), 'color' => '#2C6E8F'];
     if ($stats['delivering'] > 0)
-        $attention[] = ['icon' => 'bi-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('delivery'), 'color' => '#2C6E8F'];
+        $attention[] = ['icon' => 'ph-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('delivery'), 'color' => '#2C6E8F'];
     if ($stats['low_stock'] > 0)
-        $attention[] = ['icon' => 'bi-exclamation-triangle', 'text' => $stats['low_stock'] . ' low-stock product' . ($stats['low_stock'] > 1 ? 's' : ''), 'link' => $isWarehouse ? route('warehouse') : route('reports'), 'color' => '#9A6B00'];
+        $attention[] = ['icon' => 'ph-warning', 'text' => $stats['low_stock'] . ' low-stock product' . ($stats['low_stock'] > 1 ? 's' : ''), 'link' => $isWarehouse ? route('warehouse') : route('reports'), 'color' => '#9A6B00'];
     if ($stats['alerts_critical'] > 0)
-        $attention[] = ['icon' => 'bi-exclamation-circle', 'text' => $stats['alerts_critical'] . ' critical alert' . ($stats['alerts_critical'] > 1 ? 's' : ''), 'link' => route('alerts'), 'color' => 'var(--danger)'];
+        $attention[] = ['icon' => 'ph-warning-circle', 'text' => $stats['alerts_critical'] . ' critical alert' . ($stats['alerts_critical'] > 1 ? 's' : ''), 'link' => route('alerts'), 'color' => 'var(--danger)'];
     if (isset($stats['expired']) && $stats['expired'] > 0)
-        $attention[] = ['icon' => 'bi-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse'), 'color' => 'var(--danger)'];
+        $attention[] = ['icon' => 'ph-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse'), 'color' => 'var(--danger)'];
     if ($isOwner && isset($stats['inactive_branches']) && $stats['inactive_branches'] > 0)
-        $attention[] = ['icon' => 'bi-building-x', 'text' => $stats['inactive_branches'] . ' inactive branch' . ($stats['inactive_branches'] > 1 ? 'es' : ''), 'link' => route('branches'), 'color' => 'var(--muted)'];
+        $attention[] = ['icon' => 'ph-buildings', 'text' => $stats['inactive_branches'] . ' inactive branch' . ($stats['inactive_branches'] > 1 ? 'es' : ''), 'link' => route('branches'), 'color' => 'var(--muted)'];
 @endphp
 @if(count($attention) > 0)
-<div class="hv-card p-3 mb-4">
-    <h6 style="color:var(--maroon);font-weight:700;" class="mb-3">
-        <i class="bi bi-flag me-1"></i> Needs Your Attention
-    </h6>
-    <div class="d-flex flex-wrap gap-2">
+<div class="hv-card p-3 mb-4 hv-attn">
+    <h6 class="hv-attn-title">Needs Your Attention</h6>
+    <div class="hv-attn-list">
         @foreach($attention as $a)
-        <a href="{{ $a['link'] }}" class="hv-attn-chip">
-            <i class="bi {{ $a['icon'] }} hv-attn-ico" style="color:{{ $a['color'] }};"></i>
+        <a href="{{ $a['link'] }}" class="hv-attn-item">
             <span>{{ $a['text'] }}</span>
-            <i class="bi bi-chevron-right hv-attn-arrow"></i>
+            <i class="ph ph-caret-right hv-attn-arrow"></i>
         </a>
         @endforeach
     </div>
@@ -202,24 +196,22 @@
 
 {{-- ═══ MAIN CONTENT ROW ════════════════════════════════ --}}
 <div class="row g-4">
-    {{-- Left column: Orders, Low Stock --}}
-    <div class="col-lg-8">
+    {{-- Recent orders --}}
+    <div class="col-lg-5 d-flex flex-column">
 
         {{-- Recent Orders --}}
-        <div class="hv-card p-3">
+        <div class="hv-card p-3 h-100 flex-fill">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 style="color:var(--maroon);font-weight:700;" class="mb-0">
-                    <i class="bi bi-clock-history me-1"></i> Recent Orders
-                </h6>
+                <h6 class="mb-0">Recent Orders</h6>
                 <a href="{{ route('orders') }}" class="btn btn-sm btn-outline-secondary">
-                    View All <i class="bi bi-arrow-right ms-1"></i>
+                    View All <i class="ph ph-arrow-right ms-1"></i>
                 </a>
             </div>
             @if($recentOrders->isEmpty())
                 <p class="text-muted small text-center py-3 mb-0">No orders yet.</p>
             @else
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:13px;">
+                    <table class="table table-sm table-hover align-middle mb-0 hv-row-rhythm" style="font-size:13px;">
                         <thead>
                             <tr>
                                 <th>Order #</th>
@@ -230,7 +222,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                        @foreach($recentOrders as $o)
+                        @foreach($recentOrders->take(6) as $o)
                             @php $sb = $statusMap[$o->status] ?? ['hv-badge-info', $o->status]; @endphp
                             <tr>
                                 <td class="fw-semibold">{{ $o->order_number }}</td>
@@ -248,21 +240,22 @@
             @endif
         </div>
 
+    </div>
+
         {{-- Low Stock --}}
         @if(($user->canManageInventory() || $isWarehouse) && !empty($lowStock))
-        <div class="hv-card p-3 mt-3">
+    <div class="col-lg d-flex flex-column">
+        <div class="hv-card p-3 h-100 flex-fill">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 style="color:var(--maroon);font-weight:700;" class="mb-0">
-                    <i class="bi bi-exclamation-triangle me-1"></i> Low Stock Items
-                </h6>
+                <h6 class="mb-0">Low Stock Items</h6>
                 @if(!$isWS)
                 <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="btn btn-sm btn-outline-secondary">
-                    Full Report <i class="bi bi-arrow-right ms-1"></i>
+                    Full Report <i class="ph ph-arrow-right ms-1"></i>
                 </a>
                 @endif
             </div>
             <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0" style="font-size:13px;">
+                <table class="table table-sm align-middle mb-0 hv-row-rhythm" style="font-size:13px;">
                     <thead>
                         <tr>
                             <th>Product</th>
@@ -272,7 +265,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @foreach($lowStock as $ls)
+                    @foreach(collect($lowStock)->take(6) as $ls)
                         @php $critical = $ls->total_qty <= ($ls->reorder_level / 2); @endphp
                         <tr class="{{ $critical ? 'table-danger' : 'table-warning' }}">
                             <td class="fw-semibold">{{ $ls->item_name }}</td>
@@ -285,124 +278,46 @@
                 </table>
             </div>
         </div>
-        @endif
     </div>
-
-    {{-- Right column: Quick Actions, Alerts --}}
-    <div class="col-lg-4">
-
-        {{-- Quick Actions --}}
-        <div class="hv-card p-3 mb-3">
-            <h6 style="color:var(--maroon);font-weight:700;" class="mb-3">
-                <i class="bi bi-lightning me-1"></i> Quick Actions
-            </h6>
-            <div class="d-grid gap-2">
-                @if($isWS)
-                    <a href="{{ route('warehouse') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-arrow-in-down me-2"></i> Receive Stock
-                    </a>
-                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-qr-code-scan me-2"></i> Scan QR
-                    </a>
-                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-seam me-2"></i> Orders to Prepare
-                    </a>
-                @elseif($isWA)
-                    <a href="{{ route('warehouse') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-arrow-in-down me-2"></i> Receive Stock
-                    </a>
-                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-seam me-2"></i> Prepare Deliveries
-                    </a>
-                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-qr-code-scan me-2"></i> QR Management
-                    </a>
-                    <a href="{{ route('alerts') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-bell me-2"></i> View Alerts
-                    </a>
-                @elseif($isBM)
-                    <a href="{{ route('ordering') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-cart-plus me-2"></i> Order Supplies
-                    </a>
-                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-truck me-2"></i> Incoming Deliveries
-                    </a>
-                    <a href="{{ route('inventory') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-seam me-2"></i> My Inventory
-                    </a>
-                    <a href="{{ route('qr') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-qr-code-scan me-2"></i> QR / Scanning
-                    </a>
-                @else
-                    <a href="{{ route('orders') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-cart-plus me-2"></i> New Order
-                    </a>
-                    @if($user->canManageInventory())
-                    <a href="{{ route('stock') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-box-arrow-in-down me-2"></i> Stock Management
-                    </a>
-                    @endif
-                    <a href="{{ route('delivery') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-truck me-2"></i> Manage Deliveries
-                    </a>
-                    @if($isOwner)
-                    <a href="{{ route('users') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-person-plus me-2"></i> Manage Users
-                    </a>
-                    <a href="{{ route('branches') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-building me-2"></i> Manage Branches
-                    </a>
-                    @endif
-                    @if($user->canManageInventory())
-                    <a href="{{ route('forecast') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-graph-up-arrow me-2"></i> Forecast & DSS
-                    </a>
-                    <a href="{{ route('reports') }}" class="btn btn-sm btn-outline-secondary text-start">
-                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Reports
-                    </a>
-                    @endif
-                @endif
-            </div>
-        </div>
+        @endif
 
         {{-- Active Alerts --}}
         @if($user->canManageInventory() || $isWarehouse)
-        <div class="hv-card p-3">
+    <div class="col-lg d-flex flex-column">
+        <div class="hv-card p-3 h-100 flex-fill">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 style="color:var(--maroon);font-weight:700;" class="mb-0">
-                    <i class="bi bi-bell me-1"></i> Active Alerts
-                </h6>
+                <h6 class="mb-0">Active Alerts</h6>
                 @if(!$isWS)
                 <a href="{{ route('alerts') }}" class="btn btn-sm btn-outline-secondary">
-                    All <i class="bi bi-arrow-right ms-1"></i>
+                    All <i class="ph ph-arrow-right ms-1"></i>
                 </a>
                 @endif
             </div>
             @if(empty($activeAlerts) || (is_countable($activeAlerts) && count($activeAlerts) === 0) || ($activeAlerts instanceof \Illuminate\Support\Collection && $activeAlerts->isEmpty()))
                 <div class="text-center text-muted small py-3">
-                    <i class="bi bi-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>
+                    <i class="ph ph-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>
                     All clear &mdash; no open alerts.
                 </div>
             @else
-                @foreach($activeAlerts as $a)
-                <div class="border-bottom py-2 {{ $a->severity === 'critical' ? 'hv-alert-crit' : '' }}">
-                    <div class="d-flex gap-1 mb-1">
+                <div class="hv-alert-head">Alert</div>
+                @foreach(collect($activeAlerts)->take(6) as $a)
+                <div class="hv-alert-row border-bottom {{ $a->severity === 'critical' ? 'hv-alert-crit' : '' }}">
+                    <div class="d-flex gap-1 align-items-center">
                         <span class="hv-badge {{ $sevBadges[$a->severity] ?? 'hv-badge-info' }}" style="font-size:10px;">
                             {{ ucfirst($a->severity) }}
                         </span>
                         <span class="hv-badge hv-badge-info" style="font-size:10px;">
                             {{ str_replace('_', ' ', $a->alert_type) }}
                         </span>
+                        <span class="text-muted ms-auto" style="font-size:10px;">{{ \Carbon\Carbon::parse($a->created_at)->format('M j, g:i A') }}</span>
                     </div>
-                    <p class="mb-0 small" style="line-height:1.3;">{{ $a->message }}</p>
-                    <div class="text-muted" style="font-size:10px;">{{ \Carbon\Carbon::parse($a->created_at)->format('M j, g:i A') }}</div>
+                    <p class="mb-0 small hv-alert-msg" style="line-height:1.3;" title="{{ $a->message }}">{{ $a->message }}</p>
                 </div>
                 @endforeach
             @endif
         </div>
-        @endif
-
     </div>
+        @endif
 </div>
 
 </div>{{-- /.hv-dash --}}
@@ -412,7 +327,12 @@
 @push('styles')
 <style>
 /* ══ Dashboard craft layer — scoped to .hv-dash only ══ */
-.hv-dash{ --d-ink:#2B2320; --d-soft:#6E635C; --d-line:var(--border); }
+.hv-dash{ --d-ink:var(--metric-ink); --d-soft:var(--metric-muted); --d-line:var(--border);
+  --d-smoke:var(--summary-surface); --d-smoke-line:var(--summary-divider);
+  font-family:var(--font-ui); }
+/* Dashboard uses the shared workspace typography. */
+.hv-dash .hv-dash-title,.hv-dash h1,.hv-dash h6,.hv-dash table,.hv-dash .btn{
+  font-family:var(--font-ui); }
 .hv-dash ::selection{ background:var(--gold-soft); color:var(--maroon-dark); }
 .hv-dash a:focus-visible,.hv-dash .btn:focus-visible,.hv-dash .hv-stat-link:focus-visible{
   outline:2px solid var(--maroon); outline-offset:3px; border-radius:12px; }
@@ -423,8 +343,8 @@
 .hv-dash-head{ display:flex; align-items:flex-end; justify-content:space-between;
   gap:1rem; flex-wrap:wrap; padding-bottom:1rem; margin-bottom:1.5rem;
   border-bottom:1px solid var(--d-line); }
-.hv-dash-title{ font-size:clamp(1.7rem,1.2rem + 1.9vw,2.6rem); font-weight:800;
-  letter-spacing:-0.03em; color:var(--maroon-dark); margin:0; line-height:1.03; }
+.hv-dash-title{ font-size:clamp(1.9rem,1.4rem + 1.6vw,2.4rem); font-weight:700;
+  letter-spacing:-0.02em; color:var(--maroon); margin:0; line-height:1.03; }
 .hv-dash-sub{ margin:.35rem 0 0; font-size:12px; font-weight:600; letter-spacing:.09em;
   text-transform:uppercase; color:var(--d-soft); }
 .hv-dash-date{ text-align:right; font-size:13px; color:var(--d-soft);
@@ -432,33 +352,76 @@
 .hv-dash-date .hv-dash-dow{ display:block; font-weight:800; letter-spacing:-.01em;
   color:var(--maroon); font-size:15px; }
 
-/* Stat tiles */
-.hv-dash .hv-stat{ position:relative; border-radius:16px; padding:1.15rem 1.2rem;
-  gap:.9rem; box-shadow:var(--shadow-card); overflow:hidden;
-  transition:transform .22s cubic-bezier(.2,.7,.2,1), box-shadow .22s, border-color .22s; }
-.hv-dash .hv-stat::after{ content:""; position:absolute; left:0; right:0; top:0; height:2px;
-  background:linear-gradient(90deg,var(--gold),transparent); transform:scaleX(0);
-  transform-origin:left; transition:transform .25s ease; }
-.hv-dash a.hv-stat-link:hover{ transform:translateY(-2px); border-color:var(--gold);
-  box-shadow:0 1px 2px rgba(60,8,8,.05),0 14px 26px -16px rgba(60,8,8,.35); }
-.hv-dash a.hv-stat-link:hover::after{ transform:scaleX(1); }
-.hv-dash .hv-stat-icon{ width:42px; height:42px; border-radius:11px; font-size:19px;
-  flex-shrink:0; color:var(--maroon); background:var(--gold-soft);
-  box-shadow:inset 0 0 0 1px rgba(122,23,23,.08); }
-.hv-dash .hv-stat-icon[data-tone="warn"]{ color:#9A6B00; background:#FBF0D6;
-  box-shadow:inset 0 0 0 1px rgba(154,107,0,.14); }
-.hv-dash .hv-stat-icon[data-tone="alert"]{ color:var(--danger); background:#FAE6E1;
-  box-shadow:inset 0 0 0 1px rgba(192,57,43,.14); }
-.hv-dash .hv-stat-value{ font-size:1.7rem; font-weight:800; letter-spacing:-.03em;
+/* Summary containers — two matte smoke-white panels, flat finish */
+.hv-dash .hv-sumrow{ display:flex; gap:20px; flex-wrap:wrap; align-items:stretch; }
+.hv-dash .hv-sum{ background:var(--d-smoke); border-radius:16px; padding:18px 10px; }
+.hv-dash .hv-sum--ops{ flex:1 1 55%; min-width:min(100%, 320px); display:flex; flex-direction:column; justify-content:center; }
+.hv-dash .hv-sum--health{ flex:1 1 40%; min-width:min(100%, 300px); display:flex; align-items:stretch; }
+.hv-dash .hv-sum-top,.hv-dash .hv-sum-bottom{ display:flex; align-items:stretch; }
+.hv-dash .hv-sum-divider{ height:1px; background:var(--d-smoke-line); margin:16px 12px; }
+
+/* Metric cell */
+.hv-dash .hv-m{ flex:1; min-width:0; position:relative; display:flex; flex-direction:column;
+  gap:10px; justify-content:center; padding:10px 18px; text-decoration:none; color:inherit;
+  border-left:1px solid var(--d-smoke-line); transition:background .16s; }
+.hv-dash .hv-sum-top .hv-m:first-child,
+.hv-dash .hv-sum-bottom .hv-m:first-child,
+.hv-dash .hv-sum--health .hv-m:first-child,
+.hv-dash .hv-m.is-primary{ border-left:0; }
+.hv-dash .hv-m:not(.is-primary):hover{ background:rgba(0,0,0,.025); border-radius:10px; }
+.hv-dash .hv-m-head{ display:flex; align-items:center; gap:8px; }
+.hv-dash .hv-m-ico{ flex-shrink:0; font-size:20px; line-height:1; color:var(--gold); }
+.hv-dash .hv-m-label{ font-size:12px; font-weight:700; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--d-soft); }
+.hv-dash .hv-m-value{ font-size:2.4rem; font-weight:800; letter-spacing:-.03em; line-height:1;
   font-variant-numeric:tabular-nums; color:var(--d-ink); }
-.hv-dash .hv-stat-label{ font-size:10.5px; font-weight:700; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--d-soft); margin-top:3px; }
+.hv-dash .hv-m-value--text{ font-size:1.25rem; line-height:1.15; }
+
+/* Active Orders — the only red tile (solid matte fill, white content) */
+.hv-dash .hv-m.is-primary{ flex:0 0 42%; background:var(--maroon); border-radius:12px;
+  padding:18px 20px; color:#fff; }
+.hv-dash .hv-m.is-primary .hv-m-ico,
+.hv-dash .hv-m.is-primary .hv-m-label{ color:#fff; }
+.hv-dash .hv-m.is-primary .hv-m-value{ color:#fff; font-size:3.4rem; }
+.hv-dash .hv-m.is-primary:hover{ background:var(--maroon-dark); }
+
+/* Commissary Sales tile: currency sized to fit, period caption + unavailable note */
+.hv-dash .hv-m--sales{ gap:6px; }
+.hv-dash .hv-m--sales .hv-m--money{ font-size:clamp(1.7rem,1.1rem + 2vw,2.5rem);
+  white-space:nowrap; letter-spacing:-.02em; }
+.hv-dash .hv-m--sales .hv-m-sub{ font-size:12px; font-weight:600; color:rgba(255,255,255,.82); }
+.hv-dash .hv-m--sales .hv-m-note{ font-size:11px; font-weight:600; color:rgba(255,255,255,.72);
+  font-style:italic; }
+
+/* Right container: larger numbers, existing semantic colors on number + icon */
+.hv-dash .hv-sum--health .hv-m-value{ font-size:3.2rem; }
+.hv-dash .hv-m[data-tone="warn"] .hv-m-ico,
+.hv-dash .hv-m[data-tone="warn"] .hv-m-value{ color:#9A6B00; }
+.hv-dash .hv-m[data-tone="alert"] .hv-m-ico,
+.hv-dash .hv-m[data-tone="alert"] .hv-m-value{ color:var(--danger); }
+.hv-dash .hv-m[data-tone="brand"] .hv-m-ico,
+.hv-dash .hv-m[data-tone="brand"] .hv-m-value{ color:var(--maroon); }
+
+@media (max-width:575.98px){
+  .hv-dash .hv-sum-top,.hv-dash .hv-sum-bottom,.hv-dash .hv-sum--health{ flex-wrap:wrap; }
+  .hv-dash .hv-m{ flex:1 1 45%; border-left:0; }
+  .hv-dash .hv-m.is-primary{ flex:1 1 100%; }
+}
 
 /* Cards + section headings */
-.hv-dash .hv-card{ border-radius:18px; padding:1.25rem !important; }
-.hv-dash h6{ display:flex; align-items:center; gap:.45rem; font-size:12px;
-  font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--maroon-dark); }
-.hv-dash h6 .bi{ color:var(--gold); font-size:14px; }
+.hv-dash .hv-card{ border-radius:var(--panel-radius); padding:1.25rem !important; }
+/* Uniform row rhythm so rows line up across the three panels (boxes stay natural height) */
+.hv-dash .hv-row-rhythm thead th{ height:40px; vertical-align:middle; }
+.hv-dash .hv-row-rhythm tbody tr{ height:56px; }
+.hv-dash .hv-row-rhythm tbody td{ vertical-align:middle; }
+.hv-dash .hv-alert-head{ display:flex; align-items:center; height:40px;
+  font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); border-bottom:1px solid var(--border); margin-bottom:0; }
+.hv-dash .hv-alert-row{ display:flex; flex-direction:column; justify-content:center; gap:3px; height:56px; }
+.hv-dash .hv-alert-row .hv-alert-msg{ display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical;
+  overflow:hidden; }
+.hv-dash h6{ font-size:12px; font-weight:800; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--maroon); }
 
 /* Tables */
 .hv-dash table{ font-variant-numeric:tabular-nums; }
@@ -469,16 +432,17 @@
 .hv-dash .table-danger{ --bs-table-bg:rgba(192,57,43,.055); --bs-table-hover-bg:rgba(192,57,43,.1); }
 .hv-dash .table-warning{ --bs-table-bg:rgba(212,169,74,.1); --bs-table-hover-bg:rgba(212,169,74,.18); }
 
-/* Attention chips */
-.hv-dash .hv-attn-chip{ display:inline-flex; align-items:center; gap:.5rem;
-  padding:.5rem .8rem; border-radius:999px; background:#fff; border:1px solid var(--d-line);
-  color:var(--d-ink); font-size:13px; font-weight:500; text-decoration:none;
-  transition:border-color .18s, box-shadow .18s, transform .18s; }
-.hv-dash .hv-attn-chip:hover{ border-color:var(--gold); transform:translateY(-1px);
-  box-shadow:0 8px 18px -12px rgba(60,8,8,.4); }
-.hv-dash .hv-attn-ico{ font-size:15px; }
-.hv-dash .hv-attn-arrow{ font-size:11px; color:var(--muted); transition:transform .18s; }
-.hv-dash .hv-attn-chip:hover .hv-attn-arrow{ transform:translateX(3px); color:var(--maroon); }
+/* Needs Your Attention — horizontal links with subtle separators (no pills, no icons) */
+.hv-dash .hv-attn-title{ margin:0 0 .5rem; padding-bottom:.6rem;
+  border-bottom:1px solid var(--d-line); }
+.hv-dash .hv-attn-list{ display:flex; flex-wrap:wrap; align-items:center; }
+.hv-dash .hv-attn-item{ display:inline-flex; align-items:center; gap:.45rem;
+  padding:.4rem .95rem; color:var(--d-ink); font-size:13.5px; font-weight:500;
+  text-decoration:none; border-left:1px solid var(--d-line); transition:color .16s; }
+.hv-dash .hv-attn-item:first-child{ border-left:0; padding-left:.2rem; }
+.hv-dash .hv-attn-item:hover{ color:var(--maroon); }
+.hv-dash .hv-attn-arrow{ font-size:11px; color:var(--muted); transition:transform .18s, color .18s; }
+.hv-dash .hv-attn-item:hover .hv-attn-arrow{ transform:translateX(3px); color:var(--maroon); }
 
 /* Critical alert row: tint, not a slab border */
 .hv-dash .hv-alert-crit{ background:rgba(192,57,43,.05); border-radius:8px;
@@ -489,21 +453,16 @@
   font-weight:500; border-radius:10px; transition:all .16s; }
 .hv-dash .d-grid .btn-outline-secondary:hover{ background:var(--gold-soft);
   border-color:var(--gold); color:var(--maroon-dark); }
-.hv-dash .d-grid .btn-outline-secondary .bi{ color:var(--maroon); }
+.hv-dash .d-grid .btn-outline-secondary i[class*="ph-"]{ color:var(--maroon); }
 
 /* One authored entrance: tiles + cards settle in, from visible */
 @keyframes hvRise{ from{ opacity:.001; transform:translateY(10px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion:no-preference){
-  .hv-dash .row.g-3.mb-4 > [class*="col-"], .hv-dash .row.g-3 > [class*="col-"]{
-    animation:hvRise .5s cubic-bezier(.2,.75,.2,1) both; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(1){ animation-delay:.02s; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(2){ animation-delay:.06s; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(3){ animation-delay:.10s; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(4){ animation-delay:.14s; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(5){ animation-delay:.18s; }
-  .hv-dash .row.g-3.mb-4 > [class*="col-"]:nth-child(n+6){ animation-delay:.22s; }
-  .hv-dash .row.g-3 > .col-lg-8{ animation-delay:.24s; }
-  .hv-dash .row.g-3 > .col-lg-4{ animation-delay:.30s; }
+  .hv-dash .hv-sumrow{ animation:hvRise .5s cubic-bezier(.2,.75,.2,1) both; animation-delay:.02s; }
+  .hv-dash .row.g-4 > [class*="col-"]{ animation:hvRise .5s cubic-bezier(.2,.75,.2,1) both; }
+  .hv-dash .row.g-4 > [class*="col-"]:nth-child(1){ animation-delay:.12s; }
+  .hv-dash .row.g-4 > [class*="col-"]:nth-child(2){ animation-delay:.18s; }
+  .hv-dash .row.g-4 > [class*="col-"]:nth-child(3){ animation-delay:.24s; }
 }
 </style>
 @endpush

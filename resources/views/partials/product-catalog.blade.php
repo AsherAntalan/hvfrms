@@ -27,7 +27,7 @@
             </div>
         </div>
     </div>
-    <div class="table-responsive">
+    <div class="table-responsive" id="productCatalogBody">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
@@ -35,7 +35,6 @@
                     <th>Category</th>
                     <th>Unit</th>
                     <th class="text-end">Price</th>
-                    <th class="text-center">Physical Stock</th><th class="text-center">Usable Stock</th>
                     <th class="text-center">Reorder Lvl</th>
                     <th class="text-center">Shelf Life</th>
                     <th class="text-center">Catalog Status</th>
@@ -44,10 +43,6 @@
             </thead>
             <tbody>
             @forelse($allItems as $item)
-                @php
-                    $stockVal = (int)$item->usable_stock;
-                    $rl = (int)$item->reorder_level;
-                @endphp
                 <tr class="product-row {{ $item->is_active ? '' : 'table-secondary' }}"
                     data-pname="{{ e(strtolower($item->item_name)) }}"
                     data-pcategory="{{ e($item->category_name ?? '') }}"
@@ -59,7 +54,7 @@
                                      style="width:36px;height:36px;object-fit:cover;border-radius:6px;">
                             @else
                                 <div style="width:36px;height:36px;border-radius:6px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;">
-                                    <i class="bi bi-box" style="color:var(--maroon);"></i>
+                                    <i class="ph ph-package" style="color:var(--maroon);"></i>
                                 </div>
                             @endif
                             <div>
@@ -81,15 +76,6 @@
                     </td>
                     <td class="small">{{ e($item->unit) }}</td>
                     <td class="text-end fw-semibold">&#8369;{{ number_format($item->price, 2) }}</td>
-                    <td class="text-center">{{ (int)$item->physical_stock }}
-                        @if($item->expired_stock)<div class="small text-danger">{{ $item->expired_stock }} expired</div>@endif
-                        @if($item->damaged_stock)<div class="small text-warning">{{ $item->damaged_stock }} damaged</div>@endif
-                    </td>
-                    <td class="text-center">
-                        <span class="fw-bold {{ $stockVal === 0 ? 'text-danger' : ($stockVal <= $rl ? 'text-warning' : '') }}">
-                            {{ $stockVal }}
-                        </span>
-                    </td>
                     <td class="text-center">{{ (int)$item->reorder_level }}</td>
                     <td class="text-center">{{ $item->shelf_life_days ? $item->shelf_life_days . 'd' : '—' }}</td>
 
@@ -105,19 +91,19 @@
                             @if($canManageProducts)
                             <button class="btn btn-sm btn-outline-secondary" title="Edit"
                                     onclick="openProductModal(@js($item))">
-                                <i class="bi bi-pencil"></i>
+                                <i class="ph ph-pencil-simple"></i>
                             </button>
                             @endif
                             @if($canManageAvailability)
                             @if($item->is_active)
                                 <button class="btn btn-sm btn-outline-danger" title="Mark unavailable" aria-label="Mark {{ $item->item_name }} unavailable for orders"
                                         onclick="toggleProduct({{ $item->id }}, 0)">
-                                    <i class="bi bi-x-circle" aria-hidden="true"></i> Mark unavailable
+                                    <i class="ph ph-x-circle" aria-hidden="true"></i> Mark unavailable
                                 </button>
                             @else
                                 <button class="btn btn-sm btn-outline-success" title="Make available" aria-label="Make {{ $item->item_name }} available for orders"
                                         onclick="toggleProduct({{ $item->id }}, 1)">
-                                    <i class="bi bi-check-circle" aria-hidden="true"></i> Make available
+                                    <i class="ph ph-check-circle" aria-hidden="true"></i> Make available
                                 </button>
                             @endif
                             @endif
@@ -125,7 +111,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="10" class="text-center text-muted py-4">No products found.@if($canManageProducts) Click "Add Product" to create one.@endif</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">No products found.@if($canManageProducts) Click "Add Product" to create one.@endif</td></tr>
             @endforelse
             </tbody>
         </table>

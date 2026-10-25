@@ -5,9 +5,10 @@
 @push('styles')
 <style>
 /* Row actions: one emphasized primary, quiet rest, consistent sizing */
-.hv-row-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .4rem; }
-.hv-row-actions .btn { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; font-size: 12.5px; font-weight: 600; }
-.hv-row-actions .btn .bi { font-size: .95em; }
+.hv-row-actions { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: .4rem; }
+.hv-row-actions .btn { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; min-height: 30px; gap: .35rem; white-space: nowrap; font-size: 12.5px; font-weight: 600; }
+.hv-row-actions .btn-ghost-icon { width: 30px; padding: .34rem 0; }
+.hv-row-actions .btn i[class*="ph-"] { font-size: .95em; }
 .btn-ghost-icon { border: 1px solid transparent; background: transparent; color: #6E635C; padding: .34rem .5rem; border-radius: 9px; }
 .btn-ghost-icon:hover { background: var(--gold-soft); color: var(--maroon); }
 .btn-ghost-danger:hover { background: #F6DED9; color: var(--danger); }
@@ -29,27 +30,33 @@
 @section('content')
 
 <div class="hv-page-header">
-    <div>
+    <div class="d-flex align-items-start gap-3">
         @if($showArchivedOrders)
-        <strong>Archived Orders</strong>
-        <div class="small text-muted">{{ $canArchiveOrders ? 'Retained order records. Open details, print a proforma, or restore an order to History.' : 'Retained order records. Open an order to review its history.' }}</div>
-        @elseif($organizeCommissaryOrders)
-        <strong>Commissary Orders</strong>
-        <div class="small text-muted">{{ $user->isCommissaryStaff() ? 'Find prepared orders and release goods for delivery.' : 'Review branch requests, prepare orders, and track releases.' }}</div>
+        <a class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2 flex-shrink-0"
+           href="{{ route('orders', ['queue' => 'history']) }}" aria-label="Back to Order History" title="Back to Order History">
+            <i class="ph ph-arrow-left" aria-hidden="true"></i> Leave
+        </a>
         @endif
+        <div>
+            @if($showArchivedOrders)
+            <strong>Archived Orders</strong>
+            <div class="small text-muted">{{ $canArchiveOrders ? 'Retained order records. Open details, print a proforma, or restore an order to History.' : 'Retained order records. Open an order to review its history.' }}</div>
+            @elseif($organizeCommissaryOrders)
+            <strong>Commissary Orders</strong>
+            <div class="small text-muted">{{ $user->isCommissaryStaff() ? 'Find prepared orders and release goods for delivery.' : 'Review branch requests, prepare orders, and track releases.' }}</div>
+            @endif
+        </div>
     </div>
+    @if(!$showArchivedOrders)
     <div class="d-flex flex-wrap gap-2">
-    @if($showArchivedOrders)
-    <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['queue' => 'history']) }}">Back to Order History</a>
-    @else
-    <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['archived' => 1]) }}"><i class="bi bi-archive me-1"></i> Archived Orders <span class="badge rounded-pill bg-secondary ms-1">{{ $archivedOrderCount }}</span></a>
-    @endif
-    @if(!$showArchivedOrders && !$user->isCommissaryStaff())
+    <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['archived' => 1]) }}"><i class="ph ph-archive-box me-1"></i> Archived Orders <span class="badge rounded-pill bg-secondary ms-1">{{ $archivedOrderCount }}</span></a>
+    @if(!$user->isCommissaryStaff())
     <button class="btn btn-maroon btn-sm" onclick="openOrderModal()">
-        <i class="bi bi-plus-lg me-1"></i> New Order
+        <i class="ph ph-plus me-1"></i> New Order
     </button>
     @endif
     </div>
+    @endif
 </div>
 
 @if(!$showArchivedOrders)
@@ -134,23 +141,23 @@
                     <th class="text-center">Status</th>
                     <th>Ordered By</th>
                     <th>Date</th>
-                    <th class="text-end pe-3">Actions</th>
+                    <th class="text-start pe-3">Actions</th>
                 </tr>
             </thead>
             <tbody id="ordersTableBody">
             @forelse($orders as $o)
                 @php
                     $statusBadges = [
-                        'pending'    => ['hv-badge-warning',  'bi-clock'],
-                        'approved'   => ['hv-badge-info',     'bi-check-circle'],
-                        'preparing'  => ['hv-badge-info',     'bi-box-seam'],
-                        'delivering' => ['hv-badge-info',     'bi-truck'],
-                        'delivered'  => ['hv-badge-success',  'bi-box-seam'],
-                        'settled'    => ['hv-badge-success',  'bi-check-all'],
-                        'cancelled'  => ['hv-badge-danger',   'bi-x-circle'],
-                        'declined'   => ['hv-badge-danger',   'bi-x-octagon'],
+                        'pending'    => ['hv-badge-warning',  'ph-clock'],
+                        'approved'   => ['hv-badge-info',     'ph-check-circle'],
+                        'preparing'  => ['hv-badge-info',     'ph-package'],
+                        'delivering' => ['hv-badge-info',     'ph-truck'],
+                        'delivered'  => ['hv-badge-success',  'ph-package'],
+                        'settled'    => ['hv-badge-success',  'ph-checks'],
+                        'cancelled'  => ['hv-badge-danger',   'ph-x-circle'],
+                        'declined'   => ['hv-badge-danger',   'ph-x-circle'],
                     ];
-                    $sb = $statusBadges[$o->status] ?? ['hv-badge-info', 'bi-question'];
+                    $sb = $statusBadges[$o->status] ?? ['hv-badge-info', 'ph-question'];
                 @endphp
                 <tr class="order-row"
                     data-number="{{ strtolower($o->order_number) }}"
@@ -173,7 +180,7 @@
                     <td class="text-end fw-semibold">&#8369;{{ number_format($o->fulfilled_amount ?? $o->total_amount, 2) }}</td>
                     <td class="text-center">
                         <span class="hv-badge {{ $sb[0] }}">
-                            <i class="bi {{ $sb[1] }} me-1"></i>{{ \App\Services\OrderLabelService::stageLabel($o) }}
+                            <i class="ph {{ $sb[1] }} me-1"></i>{{ \App\Services\OrderLabelService::stageLabel($o) }}
                         </span>
                         @if($o->payment_reference && !$user->isCommissaryStaff())
                         <div class="small text-muted mt-1">Payment proof submitted; review in details.</div>
@@ -188,40 +195,40 @@
                         <div class="hv-row-actions {{ $organizeCommissaryOrders ? 'commissary-order-actions' : '' }}">
                             <button class="btn btn-sm btn-ghost-icon" title="View details" aria-label="View details"
                                     onclick="viewOrder({{ $o->id }})">
-                                <i class="bi bi-eye"></i>
+                                <i class="ph ph-eye"></i>
                             </button>
 
                             @if(!$user->isCommissaryStaff() && $o->isProformaAvailable())
-                            <a class="btn btn-sm btn-ghost-icon" href="{{ route('orders.proforma', $o) }}" target="_blank" rel="noopener" title="Proforma invoice" aria-label="Proforma invoice"><i class="bi bi-file-earmark-text"></i></a>
+                            <a class="btn btn-sm btn-ghost-icon" href="{{ route('orders.proforma', $o) }}" target="_blank" rel="noopener" title="Proforma invoice" aria-label="Proforma invoice"><i class="ph ph-file-text"></i></a>
                             @endif
                             @unless($showArchivedOrders)
                             @if($user->isOwner() || $user->isMainBranchManager())
                                 @if($o->status === 'pending')
-                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" onclick="reviewCommissaryOrder(this)"><i class="bi bi-check2-circle"></i> Approve Request</button>
+                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" onclick="reviewCommissaryOrder(this)"><i class="ph ph-check-circle"></i> Approve Request</button>
                                 @endif
                                 @if(in_array($o->status, ['approved','preparing']) && !$o->piece_outputs)
-                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="openPiecePrepare(this)"><i class="bi bi-box-seam"></i> Prepare / Pick</button>
+                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="openPiecePrepare(this)"><i class="ph ph-package"></i> Prepare / Pick</button>
                                 @endif
                             @endif
                             @if(($user->isOwner() || $user->isMainBranchRole()) && $o->piece_outputs && in_array($o->status, ['approved','preparing','delivering']) && $o->released_units < $o->prepared_units)
-                            <a class="btn btn-sm btn-maroon" href="{{ route('stock') }}"><i class="bi bi-upc-scan"></i> Release / Scan Out</a>
+                            <a class="btn btn-sm btn-maroon" href="{{ route('stock', ['mode' => 'out']) }}"><i class="ph ph-barcode"></i> Release / Scan Out</a>
                             @endif
                             @if($o->status === 'delivering' && (!$o->piece_outputs || ($o->prepared_units > 0 && $o->released_units >= $o->prepared_units)) && ($user->isOwner() || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
-                            <a class="btn btn-sm btn-success" href="{{ route('delivery') }}"><i class="bi bi-box-arrow-in-down"></i> Receive / Confirm</a>
+                            <a class="btn btn-sm btn-success" href="{{ route('delivery') }}"><i class="ph ph-tray-arrow-down"></i> Receive / Confirm</a>
                             @endif
                             @if(($user->isOwner() || $user->isMainBranchManager()) && $o->piece_outputs && !in_array($o->status, ['cancelled','declined']))
-                            <a class="btn btn-sm btn-outline-maroon" href="{{ route('orders.labels', $o->id) }}" target="_blank" rel="noopener"><i class="bi bi-printer"></i> Print Labels</a>
+                            <button type="button" class="btn btn-sm btn-outline-maroon" onclick="hvPrintLabelsUrl('{{ route('orders.labels', $o->id) }}')"><i class="ph ph-printer"></i> Print Labels</button>
                             @endif
                             @if($o->status === 'pending' && ($user->isOwner() || $user->isMainBranchManager()))
-                            <button class="btn btn-sm btn-outline-danger" onclick="openDeclineModal({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}', '{{ number_format($o->fulfilled_amount ?? $o->total_amount, 2) }}')"><i class="bi bi-x-octagon"></i> Decline</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="openDeclineModal({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}', '{{ number_format($o->fulfilled_amount ?? $o->total_amount, 2) }}')"><i class="ph ph-x-circle"></i> Decline</button>
                             @endif
                             @if(in_array($o->status, ['pending','approved','preparing']) && ($user->isOwner() || $user->isMainBranchManager() || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
-                            <button class="btn btn-sm btn-ghost-icon btn-ghost-danger" data-order-id="{{ $o->id }}" title="Cancel order" aria-label="Cancel order" onclick="cancelPieceOrder(this)"><i class="bi bi-slash-circle"></i></button>
+                            <button class="btn btn-sm btn-ghost-icon btn-ghost-danger" data-order-id="{{ $o->id }}" title="Cancel order" aria-label="Cancel order" onclick="cancelPieceOrder(this)"><i class="ph ph-prohibit"></i></button>
                             @endif
                             @endunless
                             @if($canArchiveOrders && ($showArchivedOrders || in_array($o->status, \App\Models\Order::HISTORY_STATUSES, true)))
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-order-archive="{{ $showArchivedOrders ? 'restore' : 'archive' }}" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="setOrderArchive(this)">
-                                <i class="bi {{ $showArchivedOrders ? 'bi-arrow-counterclockwise' : 'bi-archive' }}"></i> {{ $showArchivedOrders ? 'Restore' : 'Archive' }}
+                                <i class="ph {{ $showArchivedOrders ? 'ph-arrow-counter-clockwise' : 'ph-archive-box' }}"></i> {{ $showArchivedOrders ? 'Restore' : 'Archive' }}
                             </button>
                             @endif
                         </div>
@@ -252,7 +259,7 @@
                 @csrf
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-cart-plus me-1"></i> New Order
+                        <i class="ph ph-shopping-cart me-1"></i> New Order
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -286,7 +293,7 @@
                     <div class="mb-2 d-flex justify-content-between align-items-center">
                         <label class="form-label fw-semibold mb-0">Order Items <span class="text-danger">*</span></label>
                         <button type="button" class="btn btn-sm btn-outline-success" onclick="addLineItem()">
-                            <i class="bi bi-plus-lg me-1"></i> Add Item
+                            <i class="ph ph-plus me-1"></i> Add Item
                         </button>
                     </div>
 
@@ -317,7 +324,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-maroon" id="btnOrder">
-                        <i class="bi bi-cart-check me-1"></i> Place Order
+                        <i class="ph ph-shopping-cart me-1"></i> Place Order
                     </button>
                 </div>
             </form>
@@ -331,7 +338,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-receipt me-1"></i> Order Details
+                    <i class="ph ph-receipt me-1"></i> Order Details
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -350,7 +357,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header" style="background:#f8d7da;">
-                <h5 class="modal-title" style="color:var(--danger);font-weight:700;"><i class="bi bi-x-octagon me-1"></i> Decline Order</h5>
+                <h5 class="modal-title" style="color:var(--danger);font-weight:700;"><i class="ph ph-x-circle me-1"></i> Decline Order</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -373,7 +380,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="btnDecline" onclick="submitDecline()"><i class="bi bi-x-octagon me-1"></i> Decline Order</button>
+                <button type="button" class="btn btn-danger" id="btnDecline" onclick="submitDecline()"><i class="ph ph-x-circle me-1"></i> Decline Order</button>
             </div>
         </div>
     </div>
@@ -432,8 +439,8 @@ async function submitDecline() {
         var res = await fetch(API, { method: 'POST', body: data, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         var json = await res.json();
         if (json.ok) { declineModal.hide(); location.reload(); }
-        else { err.textContent = json.error || 'Could not decline.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Decline Order'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Decline Order'; }
+        else { err.textContent = json.error || 'Could not decline.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
 }
 
 function openOrderModal() {
@@ -462,7 +469,7 @@ function addLineItem() {
         '<td><input type="number" class="form-control form-control-sm text-center" name="items[' + lineCounter + '][quantity]" min="1" value="1" oninput="updateLine(' + lineCounter + ')" required></td>' +
         '<td class="text-end" id="price_' + lineCounter + '">&#8369;0.00</td>' +
         '<td class="text-end fw-semibold" id="subtotal_' + lineCounter + '">&#8369;0.00</td>' +
-        '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(' + lineCounter + ')"><i class="bi bi-trash"></i></button></td>';
+        '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(' + lineCounter + ')"><i class="ph ph-trash"></i></button></td>';
     tbody.appendChild(row);
 }
 
@@ -531,7 +538,7 @@ async function submitOrder(e) {
         if (json.ok) { orderModal.hide(); location.reload(); }
         else { showOrderPaymentError('newOrder', orderPaymentError(json)); }
     } catch (err) { alert('Network error. Please check your connection.'); }
-    finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cart-check me-1"></i> Place Order'; }
+    finally { btn.disabled = false; btn.innerHTML = '<i class="ph ph-shopping-cart me-1"></i> Place Order'; }
 }
 
 async function setOrderArchive(button) {
@@ -647,7 +654,7 @@ async function viewOrder(orderId) {
             html += '<td class="text-end fw-bold">&#8369;' + parseFloat(o.fulfilled_amount ?? o.total_amount).toFixed(2) + '</td></tr></tfoot></table>';
 
             if (o.discrepancies && o.discrepancies.length > 0) {
-                html += '<div class="mt-3"><h6 class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Delivery Discrepancies</h6>';
+                html += '<div class="mt-3"><h6 class="text-danger"><i class="ph ph-warning me-1"></i>Delivery Discrepancies</h6>';
                 html += '<table class="table table-sm table-bordered mb-0"><thead><tr><th>Item</th><th class="text-center">Expected</th><th class="text-center">Received</th><th>Reason</th><th>Remarks</th></tr></thead><tbody>';
                 o.discrepancies.forEach(function(d) {
                     html += '<tr><td>' + d.item_name + '</td><td class="text-center">' + d.expected_quantity + '</td><td class="text-center text-danger fw-semibold">' + d.received_quantity + '</td><td>' + d.reason + '</td><td>' + (d.remarks || '—') + '</td></tr>';

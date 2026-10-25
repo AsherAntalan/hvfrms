@@ -7,7 +7,7 @@
 <div class="hv-page-header">
     <div></div>
     <button class="btn btn-maroon btn-sm" onclick="openModal()">
-        <i class="bi bi-plus-lg me-1"></i> Add Branch
+        <i class="ph ph-plus me-1"></i> Add Branch
     </button>
 </div>
 
@@ -42,11 +42,11 @@
                     <td>
                         @if($b->branch_type === 'main')
                             <span class="hv-badge hv-badge-warning">
-                                <i class="bi bi-star-fill me-1"></i>Main Store
+                                <i class="ph-fill ph-star me-1"></i>Main Store
                             </span>
                         @elseif($b->branch_type === 'commissary')
                             <span class="hv-badge hv-badge-gold">
-                                <i class="bi bi-building me-1"></i>Commissary
+                                <i class="ph ph-buildings me-1"></i>Commissary
                             </span>
                         @else
                             <span class="hv-badge hv-badge-info">Franchise</span>
@@ -70,13 +70,13 @@
                             <button class="btn btn-sm btn-outline-secondary"
                                     title="Edit"
                                     onclick="openModal({!! htmlspecialchars(json_encode($b), ENT_QUOTES, 'UTF-8') !!})">
-                                <i class="bi bi-pencil"></i>
+                                <i class="ph ph-pencil-simple"></i>
                             </button>
                             {{-- Toggle active/inactive --}}
                             <button class="btn btn-sm {{ $b->is_active ? 'btn-outline-danger' : 'btn-outline-success' }}"
                                     title="{{ $b->is_active ? 'Deactivate' : 'Activate' }}"
                                     onclick="toggleBranch({{ $b->id }}, {{ $b->is_active ? 0 : 1 }})">
-                                <i class="bi {{ $b->is_active ? 'bi-x-circle' : 'bi-check-circle' }}"></i>
+                                <i class="ph {{ $b->is_active ? 'ph-x-circle' : 'ph-check-circle' }}"></i>
                             </button>
                         </div>
                     </td>
@@ -89,7 +89,7 @@
 </div>
 
 <p class="text-muted small mt-2">
-    <i class="bi bi-info-circle me-1"></i>
+    <i class="ph ph-info me-1"></i>
     Showing {{ $branches->count() }} branch{{ $branches->count() !== 1 ? 'es' : '' }}.
     Main branch is the commissary / central kitchen.
 </p>
@@ -104,7 +104,7 @@
 
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" id="modalTitle" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-building me-1"></i> Add Branch
+                        <i class="ph ph-buildings me-1"></i> Add Branch
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -145,7 +145,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-maroon" id="btnSave">
-                        <i class="bi bi-check-lg me-1"></i> Save
+                        <i class="ph ph-check me-1"></i> Save
                     </button>
                 </div>
             </form>
@@ -181,7 +181,7 @@ function openModal(data) {
 
     if (data) {
         // EDIT mode
-        title.innerHTML = '<i class="bi bi-pencil me-1"></i> Edit Branch';
+        title.innerHTML = '<i class="ph ph-pencil-simple me-1"></i> Edit Branch';
         document.getElementById('f_id').value             = data.id;
         document.getElementById('f_branch_name').value    = data.branch_name;
         document.getElementById('f_branch_type').value    = data.branch_type;
@@ -189,7 +189,7 @@ function openModal(data) {
         document.getElementById('f_contact_number').value = data.contact_number || '';
     } else {
         // ADD mode
-        title.innerHTML = '<i class="bi bi-building me-1"></i> Add Branch';
+        title.innerHTML = '<i class="ph ph-buildings me-1"></i> Add Branch';
         document.getElementById('f_id').value = '';
     }
 
@@ -231,7 +231,7 @@ async function saveBranch(e) {
         alert('Network error. Please check your connection.');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save';
+        btn.innerHTML = '<i class="ph ph-check me-1"></i> Save';
     }
 }
 

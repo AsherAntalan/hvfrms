@@ -43,16 +43,16 @@
     <div class="btn-group" role="group" aria-label="Delivery view">
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'active' ? 'active' : '' }}"
                 id="tabBtnActive" onclick="showDeliveryTab('active')">
-            <i class="bi bi-truck me-1"></i> Active Deliveries
+            <i class="ph ph-truck me-1"></i> Active Deliveries
             @if($active->count() > 0)<span class="hv-tab-count">{{ $active->count() }}</span>@endif
         </button>
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'history' ? 'active' : '' }}"
                 id="tabBtnHistory" onclick="showDeliveryTab('history')">
-            <i class="bi bi-clock-history me-1"></i> Delivery History
+            <i class="ph ph-clock-counter-clockwise me-1"></i> Delivery History
         </button>
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'archived' ? 'active' : '' }}"
                 id="tabBtnArchived" onclick="showDeliveryTab('archived')">
-            <i class="bi bi-archive me-1"></i> Archived
+            <i class="ph ph-archive-box me-1"></i> Archived
             @if($archived->count() > 0)<span class="hv-tab-count">{{ $archived->count() }}</span>@endif
         </button>
     </div>
@@ -67,28 +67,47 @@
 <div id="tabActive" class="{{ $activeTab === 'active' ? '' : 'd-none' }}">
 @if($branches->isEmpty())
     <div class="hv-card p-5 text-center">
-        <i class="bi bi-check-circle d-block mb-2" style="font-size:2.25rem;color:var(--success);"></i>
+        <i class="ph ph-check-circle d-block mb-2" style="font-size:2.25rem;color:var(--success);"></i>
         <p class="mb-0 text-muted">No active deliveries right now.</p>
     </div>
 @else
     <div class="hv-branch-list">
     @foreach($branches as $b)
-        @php $collapseId = 'branch'.$b['branch_id']; $openByDefault = $b['new'] > 0; @endphp
+        @php
+            $collapseId = 'branch'.$b['branch_id'];
+            // Branch managers see only their own branch — show it expanded, no dropdown.
+            $collapsible = ! $isBM;
+            $openByDefault = $b['new'] > 0 || ! $collapsible;
+        @endphp
         <div class="hv-card p-0 mb-2 overflow-hidden">
+            @if($collapsible)
             <button class="hv-branch-head {{ $openByDefault ? '' : 'collapsed' }}" type="button"
                     data-bs-toggle="collapse" data-bs-target="#{{ $collapseId }}"
                     aria-expanded="{{ $openByDefault ? 'true' : 'false' }}" aria-controls="{{ $collapseId }}">
                 <span class="hv-branch-name">
-                    <i class="bi bi-shop me-2" style="color:var(--maroon);"></i>{{ $b['branch_name'] }}
+                    <i class="ph ph-storefront me-2" style="color:var(--maroon);"></i>{{ $b['branch_name'] }}
                 </span>
                 <span class="hv-branch-meta">
                     @if($b['new'] > 0)
                         <span class="hv-notif" title="{{ $b['new'] }} new order{{ $b['new'] !== 1 ? 's' : '' }} awaiting approval">{{ $b['new'] }} new</span>
                     @endif
                     <span class="hv-branch-count">{{ $b['count'] }} active</span>
-                    <i class="bi bi-chevron-down hv-branch-chevron"></i>
+                    <i class="ph ph-caret-down hv-branch-chevron"></i>
                 </span>
             </button>
+            @else
+            <div class="hv-branch-head" style="cursor:default;">
+                <span class="hv-branch-name">
+                    <i class="ph ph-storefront me-2" style="color:var(--maroon);"></i>{{ $b['branch_name'] }}
+                </span>
+                <span class="hv-branch-meta">
+                    @if($b['new'] > 0)
+                        <span class="hv-notif" title="{{ $b['new'] }} new order{{ $b['new'] !== 1 ? 's' : '' }} awaiting approval">{{ $b['new'] }} new</span>
+                    @endif
+                    <span class="hv-branch-count">{{ $b['count'] }} active</span>
+                </span>
+            </div>
+            @endif
             <div id="{{ $collapseId }}" class="collapse {{ $openByDefault ? 'show' : '' }}">
                 <div class="table-responsive border-top">
                     <table class="table table-hover align-middle mb-0" style="font-size:13px;">
@@ -116,14 +135,14 @@
                                 <td>
                                     <div class="hv-del-actions">
                                     @if($o->piece_outputs && ($isOwner || $isMBM) && in_array($o->status, ['approved','preparing','delivering']) && $o->released_units < $o->prepared_units)
-                                        <button class="btn btn-sm btn-maroon" title="Release this shipment" onclick="openManualDeliver({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}')"><i class="bi bi-hand-thumbs-up"></i> Manual Release</button>
+                                        <button class="btn btn-sm btn-maroon" title="Release this shipment" onclick="openManualDeliver({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}')"><i class="ph ph-thumbs-up"></i> Manual Release</button>
                                     @endif
                                     @if($o->status === 'delivering' && (!$o->piece_outputs || ($o->prepared_units > 0 && $o->released_units >= $o->prepared_units)) && ($isOwner || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
-                                        <button class="btn btn-sm btn-success" onclick="openConfirmModal({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="bi bi-box-arrow-in-down"></i> Receive / Confirm</button>
+                                        <button class="btn btn-sm btn-success" onclick="openConfirmModal({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-tray-arrow-down"></i> Receive / Confirm</button>
                                     @endif
                                         <button class="btn btn-sm btn-ghost-icon" title="Shipment / production details" aria-label="View details"
                                                 onclick="viewOrder({{ $o->id }})">
-                                            <i class="bi bi-eye"></i>
+                                            <i class="ph ph-eye"></i>
                                         </button>
                                     </div>
                                 </td>
@@ -137,7 +156,7 @@
     @endforeach
     </div>
     <p class="text-muted small mt-2">
-        <i class="bi bi-info-circle me-1"></i>
+        <i class="ph ph-info me-1"></i>
         {{ $active->count() }} active deliver{{ $active->count() !== 1 ? 'ies' : 'y' }} across {{ $branches->count() }} branch{{ $branches->count() !== 1 ? 'es' : '' }}.
     </p>
 @endif
@@ -164,15 +183,24 @@
     </div>
     @if($history->isEmpty())
         <div class="hv-card p-5 text-center">
-            <i class="bi bi-archive d-block mb-2" style="font-size:2.25rem;color:var(--maroon);opacity:.5;"></i>
+            <i class="ph ph-archive-box d-block mb-2" style="font-size:2.25rem;color:var(--maroon);opacity:.5;"></i>
             <p class="mb-0 text-muted">No delivery history yet.</p>
         </div>
     @else
+    @if($canArchive)
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="archiveSelectedBtn" disabled onclick="archiveSelectedOrders(this)">Archive Selected</button>
+        <span class="small text-muted" id="archiveSelectionCount" role="status" aria-live="polite">0 selected</span>
+    </div>
+    @endif
     <div class="hv-card p-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0" style="font-size:13px;">
                 <thead>
                     <tr>
+                        @if($canArchive)
+                        <th class="ps-3"><input type="checkbox" class="form-check-input" id="selectAllHistory" aria-label="Select all visible orders for archiving" onchange="selectAllHistoryOrders(this.checked)"></th>
+                        @endif
                         <th class="ps-3">Order #</th>
                         <th>Branch</th>
                         <th>Ordered By</th>
@@ -187,6 +215,13 @@
                     @php $sb = $statusMap[$o->status] ?? ['hv-badge-secondary', $o->status]; @endphp
                     <tr class="hist-row" data-number="{{ strtolower($o->order_number) }}"
                         data-branch="{{ strtolower($o->branch_name) }}" data-status="{{ $o->status }}">
+                        @if($canArchive)
+                        <td class="ps-3">
+                            @if(!$isBM || (int)$o->branch_id === (int)$user->branch_id)
+                            <input type="checkbox" class="form-check-input history-archive-select" value="{{ $o->id }}" aria-label="Select {{ $o->order_number }} for archiving" onchange="updateArchiveSelection()">
+                            @endif
+                        </td>
+                        @endif
                         <td class="ps-3 fw-semibold">{{ $o->order_number }}</td>
                         <td>{{ $o->branch_name }}</td>
                         <td class="text-muted">{{ $o->ordered_by_name ?? '—' }}</td>
@@ -197,10 +232,10 @@
                             <div class="hv-del-actions">
                                 @if($canArchive && (!$isBM || (int)$o->branch_id === (int)$user->branch_id))
                                 <button class="btn btn-sm btn-outline-secondary" title="Move to Archived"
-                                        onclick="archiveOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="bi bi-archive"></i> Archive</button>
+                                        onclick="archiveOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-archive-box"></i> Archive</button>
                                 @endif
                                 <button class="btn btn-sm btn-ghost-icon" title="View record" aria-label="View record" onclick="viewOrder({{ $o->id }})">
-                                    <i class="bi bi-eye"></i>
+                                    <i class="ph ph-eye"></i>
                                 </button>
                             </div>
                         </td>
@@ -211,7 +246,7 @@
         </div>
     </div>
     <p class="text-muted small mt-2" id="histEmpty" style="display:none;">
-        <i class="bi bi-search me-1"></i> No records match your filter.
+        <i class="ph ph-magnifying-glass me-1"></i> No records match your filter.
     </p>
     @endif
 </div>
@@ -220,7 +255,7 @@
 <div id="tabArchived" class="{{ $activeTab === 'archived' ? '' : 'd-none' }}">
     @if($archived->isEmpty())
         <div class="hv-card p-5 text-center">
-            <i class="bi bi-archive d-block mb-2" style="font-size:2.25rem;color:var(--maroon);opacity:.5;"></i>
+            <i class="ph ph-archive-box d-block mb-2" style="font-size:2.25rem;color:var(--maroon);opacity:.5;"></i>
             <p class="mb-0 text-muted">No archived orders.</p>
         </div>
     @else
@@ -252,14 +287,14 @@
                             <div class="hv-del-actions">
                                 @if($canArchive && (!$isBM || (int)$o->branch_id === (int)$user->branch_id))
                                 <button class="btn btn-sm btn-maroon" title="Restore to History"
-                                        onclick="restoreOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+                                        onclick="restoreOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-arrow-counter-clockwise"></i> Restore</button>
                                 @endif
                                 @if($isOwner)
                                 <button class="btn btn-sm btn-outline-danger" title="Delete permanently"
-                                        onclick="deleteOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="bi bi-trash"></i> Delete</button>
+                                        onclick="deleteOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-trash"></i> Delete</button>
                                 @endif
                                 <button class="btn btn-sm btn-ghost-icon" title="View record" aria-label="View record" onclick="viewOrder({{ $o->id }})">
-                                    <i class="bi bi-eye"></i>
+                                    <i class="ph ph-eye"></i>
                                 </button>
                             </div>
                         </td>
@@ -278,7 +313,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-receipt me-1"></i> <span id="vmTitle">Order Details</span>
+                    <i class="ph ph-receipt me-1"></i> <span id="vmTitle">Order Details</span>
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -292,14 +327,14 @@
 {{-- ═══ APPROVE & PREPARE (expiry-only) MODAL ═══ --}}
 <div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
-    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="bi bi-check-lg me-1"></i> Approve &amp; Prepare — <span id="amTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="ph ph-check me-1"></i> Approve &amp; Prepare — <span id="amTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body" id="amBody"><div class="text-center py-4 text-muted">Loading…</div></div>
     <div class="modal-footer flex-column align-items-stretch">
-      <div class="alert alert-info py-2 small mb-2"><i class="bi bi-info-circle me-1"></i>Approving produces the full ordered quantity and generates QR labels automatically. Enter the expiry per perishable line.</div>
+      <div class="alert alert-info py-2 small mb-2"><i class="ph ph-info me-1"></i>Approving produces the full ordered quantity and generates QR labels automatically. Enter the expiry per perishable line.</div>
       <div class="d-flex justify-content-end gap-2">
         <div class="text-danger small me-auto" id="amError" style="display:none;"></div>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-success" id="btnApprove"><i class="bi bi-check-lg me-1"></i> Approve &amp; Prepare</button>
+        <button type="button" class="btn btn-success" id="btnApprove"><i class="ph ph-check me-1"></i> Approve &amp; Prepare</button>
       </div>
     </div>
   </div></div>
@@ -308,14 +343,14 @@
 {{-- ═══ PRINT-AFTER-APPROVE MODAL ═══ --}}
 <div class="modal fade" id="printModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="bi bi-printer me-1"></i> Labels Ready — <span id="prTitle"></span></h5></div>
+    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="ph ph-printer me-1"></i> Labels Ready — <span id="prTitle"></span></h5></div>
     <div class="modal-body">
       <p class="mb-2">Approved and produced. The QR labels are ready.</p>
       <p class="small text-muted mb-0">Print the labels now, or choose Done. Reprinting later uses the same codes — it never creates new ones. Choosing Done does not dispatch the order.</p>
     </div>
     <div class="modal-footer">
-      <a class="btn btn-outline-primary" id="prPrintBtn" href="#" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i> Print Labels / QR</a>
-      <button type="button" class="btn btn-maroon" id="prDoneBtn"><i class="bi bi-check-lg me-1"></i> Done</button>
+      <button type="button" class="btn btn-outline-primary" id="prPrintBtn"><i class="ph ph-printer me-1"></i> Print Labels / QR</button>
+      <button type="button" class="btn btn-maroon" id="prDoneBtn"><i class="ph ph-check me-1"></i> Done</button>
     </div>
   </div></div>
 </div>
@@ -323,7 +358,7 @@
 {{-- ═══ SCAN-OUT (DISPATCH) MODAL ═══ --}}
 <div class="modal fade" id="dispatchModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="bi bi-upc-scan me-1"></i> Scan-Out — <span id="dmTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header" style="background:var(--gold-soft);"><h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="ph ph-barcode me-1"></i> Scan-Out — <span id="dmTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
       <div class="small text-muted mb-2">Scan or enter a production QR to record physical scan-out. Scan the shared product/order QR. Quantity defaults to all remaining units; you can reduce it.</div>
       <label class="form-label small fw-semibold mb-1">Production QR <span class="text-danger">*</span></label>
@@ -333,30 +368,30 @@
       <div class="text-danger small mt-1" id="dsError" style="display:none;"></div>
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-      <button type="button" class="btn btn-maroon" id="btnDispatch"><i class="bi bi-upc-scan me-1"></i> Record Scan-Out</button></div>
+      <button type="button" class="btn btn-maroon" id="btnDispatch"><i class="ph ph-barcode me-1"></i> Record Scan-Out</button></div>
   </div></div>
 </div>
 
 {{-- ═══ MANUAL DELIVER (SCAN-OUT FALLBACK) MODAL ═══ --}}
 <div class="modal fade" id="manualModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header" style="background:#fff3cd;"><h5 class="modal-title" style="color:#8a6d00;font-weight:700;"><i class="bi bi-hand-thumbs-up me-1"></i> Manual Release — <span id="mmTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header" style="background:#fff3cd;"><h5 class="modal-title" style="color:#8a6d00;font-weight:700;"><i class="ph ph-thumbs-up me-1"></i> Manual Release — <span id="mmTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-      <div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Use this only when Scan-Out cannot be completed. It records <strong>dispatch</strong> (release) for <span id="mmBranch"></span> — the branch must still confirm receipt. It does not verify physical arrival.</div>
+      <div class="alert alert-warning py-2 small mb-2"><i class="ph ph-warning me-1"></i>Use this only when Scan-Out cannot be completed. It records <strong>dispatch</strong> (release) for <span id="mmBranch"></span> — the branch must still confirm receipt. It does not verify physical arrival.</div>
       <label class="form-label small fw-semibold mb-1">Reason for bypassing Scan-Out <span class="text-danger">*</span></label>
       <textarea class="form-control form-control-sm" id="mmReason" rows="2" maxlength="500" placeholder="e.g. scanner camera failure"></textarea>
       <div class="text-danger small mt-1" id="mmError" style="display:none;"></div>
       <input type="hidden" id="mmOrderId">
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-      <button type="button" class="btn btn-warning" id="btnManual"><i class="bi bi-hand-thumbs-up me-1"></i> Confirm Manual Release</button></div>
+      <button type="button" class="btn btn-warning" id="btnManual"><i class="ph ph-thumbs-up me-1"></i> Confirm Manual Release</button></div>
   </div></div>
 </div>
 
 {{-- ═══ CANCEL ORDER MODAL ═══ --}}
 <div class="modal fade" id="cancelModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header" style="background:#f8d7da;"><h5 class="modal-title" style="color:var(--danger);font-weight:700;"><i class="bi bi-slash-circle me-1"></i> Cancel Order — <span id="cmcTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header" style="background:#f8d7da;"><h5 class="modal-title" style="color:var(--danger);font-weight:700;"><i class="ph ph-prohibit me-1"></i> Cancel Order — <span id="cmcTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
       <div class="small text-muted mb-2">Cancellation is only allowed before any physical dispatch.</div>
       <label class="form-label small fw-semibold mb-1">Reason <span class="text-danger">*</span></label>
@@ -365,7 +400,7 @@
       <input type="hidden" id="cmcOrderId">
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Keep Order</button>
-      <button type="button" class="btn btn-danger" id="btnCancelOrder"><i class="bi bi-slash-circle me-1"></i> Cancel Order</button></div>
+      <button type="button" class="btn btn-danger" id="btnCancelOrder"><i class="ph ph-prohibit me-1"></i> Cancel Order</button></div>
   </div></div>
 </div>
 
@@ -375,7 +410,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:#f8d7da;">
                 <h5 class="modal-title" id="declineModalLabel" style="color:var(--danger);font-weight:700;">
-                    <i class="bi bi-x-octagon me-1"></i> Decline Order
+                    <i class="ph ph-x-circle me-1"></i> Decline Order
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -401,7 +436,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger" id="btnDecline" onclick="submitDecline()">
-                    <i class="bi bi-x-octagon me-1"></i> Decline Order
+                    <i class="ph ph-x-circle me-1"></i> Decline Order
                 </button>
             </div>
         </div>
@@ -414,7 +449,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-box-arrow-in-down me-1"></i> Confirm Delivery Receipt
+                    <i class="ph ph-tray-arrow-down me-1"></i> Confirm Delivery Receipt
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -439,7 +474,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-maroon" id="btnConfirm" onclick="submitConfirm()">
-                    <i class="bi bi-check2-circle me-1"></i> Confirm Received
+                    <i class="ph ph-check-circle me-1"></i> Confirm Received
                 </button>
             </div>
         </div>
@@ -456,7 +491,7 @@
 
 .hv-del-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.4rem; }
 .hv-del-actions .btn { display:inline-flex; align-items:center; gap:.35rem; white-space:nowrap; font-size:12.5px; font-weight:600; }
-.hv-del-actions .btn .bi { font-size:.95em; }
+.hv-del-actions .btn i[class*="ph-"] { font-size:.95em; }
 .hv-del-actions .btn-ghost-icon { border:1px solid transparent; background:transparent; color:#6E635C; padding:.34rem .5rem; border-radius:9px; }
 .hv-del-actions .btn-ghost-icon:hover { background:var(--gold-soft); color:var(--maroon); }
 
@@ -534,6 +569,49 @@ async function archiveOrder(id, num) {
         else { alert(r.error || 'Could not archive.'); }
     } catch (e) { alert('Network error.'); }
 }
+function visibleArchiveCheckboxes() {
+    return Array.from(document.querySelectorAll('.history-archive-select')).filter(function (checkbox) {
+        return checkbox.closest('.hist-row').style.display !== 'none';
+    });
+}
+function updateArchiveSelection() {
+    var checkboxes = visibleArchiveCheckboxes();
+    var count = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+    var button = document.getElementById('archiveSelectedBtn');
+    var selectAll = document.getElementById('selectAllHistory');
+    if (!button || !selectAll) return;
+    button.disabled = count === 0;
+    document.getElementById('archiveSelectionCount').textContent = count + ' selected';
+    selectAll.checked = count > 0 && count === checkboxes.length;
+    selectAll.indeterminate = count > 0 && count < checkboxes.length;
+}
+function selectAllHistoryOrders(checked) {
+    visibleArchiveCheckboxes().forEach(function (checkbox) { checkbox.checked = checked; });
+    updateArchiveSelection();
+}
+async function archiveSelectedOrders(button) {
+    var selected = visibleArchiveCheckboxes().filter(function (checkbox) { return checkbox.checked; });
+    if (!selected.length || !confirm('Move ' + selected.length + ' selected orders to Archived?')) return;
+    var completed = 0;
+    button.disabled = true;
+    document.getElementById('tabHistory').inert = true;
+    try {
+        for (var checkbox of selected) {
+            var result = await postAPI({ action: 'archive_order', id: Number(checkbox.value) });
+            if (!result.ok) throw new Error(result.error || result.message || 'Could not archive an order.');
+            completed++;
+            checkbox.closest('.hist-row').remove();
+            button.textContent = 'Archived ' + completed + ' / ' + selected.length;
+        }
+        location.href = '{{ route('delivery') }}?tab=archived';
+    } catch (error) {
+        alert(completed + ' of ' + selected.length + ' orders archived. ' + error.message + ' Remaining orders are still selected.');
+    } finally {
+        document.getElementById('tabHistory').inert = false;
+        button.textContent = 'Archive Selected';
+        filterHistory();
+    }
+}
 async function restoreOrder(id, num) {
     if (!confirm('Restore order ' + num + ' to History?')) return;
     try {
@@ -564,6 +642,13 @@ function filterHistory() {
     });
     var empty = document.getElementById('histEmpty');
     if (empty) empty.style.display = shown === 0 ? 'block' : 'none';
+    document.querySelectorAll('.hist-row').forEach(function (row) {
+        if (row.style.display === 'none') {
+            var checkbox = row.querySelector('.history-archive-select');
+            if (checkbox) checkbox.checked = false;
+        }
+    });
+    updateArchiveSelection();
 }
 
 // ── Approve + auto-produce (expiry only), then print choice ──
@@ -599,14 +684,14 @@ async function submitApprove(orderId, orderNum, btn) {
     try {
         var r = await postAPI({ action: 'approve_prepare', id: orderId, expiry: JSON.stringify(map) });
         if (r.ok) { approveModal.hide(); openPrintChoice(orderId, orderNum); }
-        else { err.textContent = r.error || 'Could not approve.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Approve &amp; Prepare'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Approve &amp; Prepare'; }
+        else { err.textContent = r.error || 'Could not approve.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-check me-1"></i> Approve &amp; Prepare'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-check me-1"></i> Approve &amp; Prepare'; }
 }
 
 // Print-after-confirm: offer labels/QR, and Done (reload without dispatching).
 function openPrintChoice(orderId, orderNum) {
     document.getElementById('prTitle').textContent = orderNum;
-    document.getElementById('prPrintBtn').href = '{{ url("orders") }}/' + orderId + '/labels';
+    document.getElementById('prPrintBtn').onclick = function () { hvPrintLabelsUrl('{{ url("orders") }}/' + orderId + '/labels'); };
     document.getElementById('prDoneBtn').onclick = function () { printModal.hide(); location.reload(); };
     printModal.show();
 }
@@ -631,8 +716,8 @@ async function submitDispatch() {
         var data = { action: 'dispatch_scan', qr: qr }; if (qty !== null) data.quantity = qty; data.idempotency_key = dispatchRequestKey;
         var r = await postAPI(data);
         if (r.ok) { dispatchModal.hide(); alert(r.message); location.reload(); }
-        else { err.textContent = r.error || 'Could not dispatch.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-upc-scan me-1"></i> Record Scan-Out'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-upc-scan me-1"></i> Record Scan-Out'; }
+        else { err.textContent = r.error || 'Could not dispatch.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-barcode me-1"></i> Record Scan-Out'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-barcode me-1"></i> Record Scan-Out'; }
 }
 
 // ── Manual Release (scan-out fallback) ──
@@ -653,8 +738,8 @@ async function submitManualDeliver() {
     try {
         var r = await postAPI({ action: 'manual_deliver', id: document.getElementById('mmOrderId').value, reason: reason });
         if (r.ok) { manualModal.hide(); alert(r.message); location.reload(); }
-        else { err.textContent = r.error || 'Could not record manual delivery.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-hand-thumbs-up me-1"></i> Confirm Manual Release'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-hand-thumbs-up me-1"></i> Confirm Manual Release'; }
+        else { err.textContent = r.error || 'Could not record manual delivery.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-thumbs-up me-1"></i> Confirm Manual Release'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-thumbs-up me-1"></i> Confirm Manual Release'; }
 }
 
 // ── Cancel ──
@@ -673,8 +758,8 @@ async function submitCancelOrder() {
     try {
         var r = await postAPI({ action: 'cancel', id: document.getElementById('cmcOrderId').value, reason: reason });
         if (r.ok) { cancelModal.hide(); alert(r.message); location.reload(); }
-        else { err.textContent = r.error || 'Could not cancel.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i> Cancel Order'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-slash-circle me-1"></i> Cancel Order'; }
+        else { err.textContent = r.error || 'Could not cancel.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-prohibit me-1"></i> Cancel Order'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-prohibit me-1"></i> Cancel Order'; }
 }
 
 // ── Decline ──
@@ -706,8 +791,8 @@ async function submitDecline() {
     try {
         var r = await postAPI({ action: 'decline', id: document.getElementById('dmOrderId').value, reason: reason });
         if (r.ok) { declineModal.hide(); alert(r.message); location.reload(); }
-        else { err.textContent = r.error || 'Could not decline.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Decline Order'; }
-    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="bi bi-x-octagon me-1"></i> Decline Order'; }
+        else { err.textContent = r.error || 'Could not decline.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
+    } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
 }
 
 // ── View order ──
@@ -756,7 +841,7 @@ async function viewOrder(orderId) {
         html += '</tbody></table>';
         html += '<div class="text-end fw-bold" style="color:var(--maroon);">Total: PHP ' + Number(o.fulfilled_amount ?? o.total_amount).toFixed(2) + '</div>';
         if (o.discrepancies && o.discrepancies.length > 0) {
-            html += '<hr><h6 style="color:var(--danger);font-weight:700;"><i class="bi bi-exclamation-triangle me-1"></i> Discrepancies</h6>';
+            html += '<hr><h6 style="color:var(--danger);font-weight:700;"><i class="ph ph-warning me-1"></i> Discrepancies</h6>';
             html += '<table class="table table-sm" style="font-size:12px;"><thead><tr><th>Item</th><th class="text-center">Expected</th><th class="text-center">Received</th><th>Reason</th><th>Remarks</th></tr></thead><tbody>';
             o.discrepancies.forEach(function (d) {
                 html += '<tr class="table-warning"><td>' + escHtml(d.item_name) + '</td><td class="text-center">' + d.expected_quantity + '</td><td class="text-center">' + d.received_quantity + '</td><td>' + escHtml(d.reason) + '</td><td>' + escHtml(d.remarks || '—') + '</td></tr>';
@@ -765,7 +850,7 @@ async function viewOrder(orderId) {
         }
         if (o.shipment_qr) {
             html += '<hr><div class="text-center">'
-                + '<div class="small text-muted mb-1"><i class="bi bi-qr-code-scan me-1"></i>Receiving QR — scan at <strong>' + escHtml(o.branch_name) + '</strong> to receive this shipment</div>'
+                + '<div class="small text-muted mb-1"><i class="ph ph-qr-code me-1"></i>Receiving QR — scan at <strong>' + escHtml(o.branch_name) + '</strong> to receive this shipment</div>'
                 + '<div id="shipQrBox" class="d-inline-block p-2 bg-white border rounded"></div>'
                 + '<div class="small fw-semibold mt-1">' + escHtml(o.shipment_qr) + '</div></div>';
         }
@@ -843,7 +928,7 @@ async function submitConfirm() {
     var hasDiscrepancy = receivedItems.some(function (ri, i) { return ri.received_quantity !== confirmItems[i].quantity; });
     if (hasDiscrepancy) {
         if (!confirm('There are quantity discrepancies. Discrepancies will be recorded. Continue?')) {
-            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Confirm Received';
+            btn.disabled = false; btn.innerHTML = '<i class="ph ph-check-circle me-1"></i> Confirm Received';
             return;
         }
     }
@@ -855,8 +940,8 @@ async function submitConfirm() {
     try {
         var r = await postAPI(data);
         if (r.ok) { confirmModal.hide(); alert(r.message); location.reload(); }
-        else { alert(r.error || 'Error confirming delivery.'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Confirm Received'; }
-    } catch (e) { alert('Network error.'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Confirm Received'; }
+        else { alert(r.error || 'Error confirming delivery.'); btn.disabled = false; btn.innerHTML = '<i class="ph ph-check-circle me-1"></i> Confirm Received'; }
+    } catch (e) { alert('Network error.'); btn.disabled = false; btn.innerHTML = '<i class="ph ph-check-circle me-1"></i> Confirm Received'; }
 }
 </script>
 @endpush

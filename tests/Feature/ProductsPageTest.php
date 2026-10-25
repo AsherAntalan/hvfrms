@@ -49,7 +49,8 @@ class ProductsPageTest extends TestCase
                 return $items->count() === 2 && $buns->physical_stock == 14 && $buns->usable_stock == 11 && $buns->expired_stock == 2 && $buns->damaged_stock == 1;
             });
             $response->assertSee('id="searchProducts"', false)->assertSee('id="filterCategory"', false)->assertSee('id="filterGoods"', false)
-                ->assertSee('Overall Products')->assertSee('combined remaining stock from all branches and the Commissary')
+                ->assertSee('Commissary Products')->assertSee('Manage Commissary product details, prices, reorder levels, shelf life, and catalog availability.')
+                ->assertDontSee('Physical Stock')->assertDontSee('Usable Stock')
                 ->assertDontSee('printSingleQR(')->assertDontSee('Print QR label')->assertDontSee('<th class="text-center">QR</th>', false)->assertSee('toggleProduct(')->assertDontSee('id="tabActive"', false)->assertDontSee('id="tabProducts"', false);
             $document = new \DOMDocument;
             libxml_use_internal_errors(true);

@@ -67,7 +67,7 @@ class StockController extends Controller
             if (! $main) {
                 return [0, response()->json([
                     'ok' => false,
-                    'error' => 'Main Warehouse is not configured or is inactive. Ask an administrator to set it up before receiving or issuing stock.',
+                    'error' => 'The Commissary is not configured or is inactive. Ask an administrator to set it up before receiving or issuing stock.',
                 ], 422)];
             }
 
@@ -295,7 +295,7 @@ class StockController extends Controller
         return response()->json($result);
     }
 
-    public function history(Item $item)
+    public function history(Request $request, Item $item)
     {
         $user = Auth::user();
 
@@ -314,10 +314,14 @@ class StockController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        if ($request->ajax() || $request->wantsJson()) {
+            return view('partials.stock-history-content', compact('item', 'transactions', 'batches'));
+        }
+
         return view('stock.history', compact('item', 'transactions', 'batches'));
     }
 
-    public function batchDetail(StockBatch $batch)
+    public function batchDetail(Request $request, StockBatch $batch)
     {
         $user = Auth::user();
 
@@ -331,6 +335,10 @@ class StockController extends Controller
             ->with('performer')
             ->orderByDesc('created_at')
             ->get();
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return view('partials.stock-batch-content', compact('batch', 'transactions'));
+        }
 
         return view('stock.batch-detail', compact('batch', 'transactions'));
     }

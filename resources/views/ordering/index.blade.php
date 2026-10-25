@@ -5,7 +5,7 @@
 
 @if(!$isFranchise)
 <div class="alert alert-warning">
-    <i class="bi bi-info-circle me-1"></i>
+    <i class="ph ph-info me-1"></i>
     Ordering is available for franchise branches only.
 </div>
 @else
@@ -14,12 +14,12 @@
 <div class="hv-card p-4 mb-3" style="background:linear-gradient(135deg, var(--maroon), #5c1010); color:#fff; border:none;">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h4 class="mb-1 fw-bold"><i class="bi bi-shop me-2"></i> Main Branch Commissary</h4>
+            <h4 class="mb-1 fw-bold"><i class="ph ph-storefront me-2"></i> Main Branch Commissary</h4>
             <div class="opacity-75">Products are prepared after you place an order.</div>
         </div>
         <div style="width:320px;">
             <div class="input-group">
-                <span class="input-group-text bg-white border-0"><i class="bi bi-search text-muted"></i></span>
+                <span class="input-group-text bg-white border-0"><i class="ph ph-magnifying-glass text-muted"></i></span>
                 <input type="text" class="form-control border-0" id="searchBox"
                        placeholder="Search products..." oninput="filterProducts()">
             </div>
@@ -30,7 +30,7 @@
 <!-- ═══ PENDING ORDERS NOTICE ═════════════════════════════ -->
 @if($pendingOrders > 0)
 <div class="alert alert-info py-2 small mb-3">
-    <i class="bi bi-info-circle me-1"></i>
+    <i class="ph ph-info me-1"></i>
     You have <strong>{{ $pendingOrders }}</strong> pending order{{ $pendingOrders > 1 ? 's' : '' }} awaiting approval.
     <a href="{{ route('orders') }}" class="alert-link">View Orders &rarr;</a>
 </div>
@@ -90,7 +90,7 @@
                 @if($item->image_path)
                     <img src="{{ asset($item->image_path) }}" alt="{{ $item->item_name }}">
                 @else
-                    <span class="hv-prod-ph" aria-hidden="true"><i class="bi bi-bag"></i></span>
+                    <span class="hv-prod-ph" aria-hidden="true"><i class="ph ph-bag"></i></span>
                 @endif
                 @if($item->category_name)
                     <span class="hv-prod-cat">{{ $item->category_name }}</span>
@@ -105,13 +105,13 @@
 
                 <div class="hv-prod-meta">
                     @if($isAvailable)
-                        <span class="hv-prod-chip ok"><i class="bi bi-check-circle-fill"></i> Made to order</span>
+                        <span class="hv-prod-chip ok"><i class="ph-fill ph-check-circle"></i> Made to order</span>
                     @else
-                        <span class="hv-prod-chip off"><i class="bi bi-x-circle-fill"></i> Unavailable</span>
+                        <span class="hv-prod-chip off"><i class="ph-fill ph-x-circle"></i> Unavailable</span>
                     @endif
                     <span class="hv-prod-stock {{ $lowStock ? 'is-low' : '' }}">Your stock: <b>{{ $myStock }}</b></span>
                     @if((int)($item->suggested_qty ?? 0) > 0)
-                        <span class="hv-prod-sugg" title="Forecast-suggested quantity"><i class="bi bi-graph-up-arrow"></i> Suggested: {{ (int)$item->suggested_qty }}</span>
+                        <span class="hv-prod-sugg" title="Forecast-suggested quantity"><i class="ph ph-trend-up"></i> Suggested: {{ (int)$item->suggested_qty }}</span>
                     @endif
                 </div>
 
@@ -120,12 +120,12 @@
                         <button class="btn btn-maroon btn-sm w-100 btn-add-cart"
                                 id="btnCart{{ $item->id }}"
                                 onclick="openAddModal(this)">
-                            <i class="bi bi-cart-plus me-1"></i> Add to Cart
+                            <i class="ph ph-shopping-cart me-1"></i> Add to Cart
                         </button>
                     @else
                         <button class="btn btn-outline-secondary btn-sm w-100" disabled
                                 title="Marked unavailable by the Owner or Main Branch Manager">
-                            <i class="bi bi-cart-x me-1"></i> Unavailable
+                            <i class="ph ph-shopping-cart me-1"></i> Unavailable
                         </button>
                     @endif
                 </div>
@@ -139,7 +139,7 @@
 @if($recentOrders->count() > 0)
 <div class="hv-card p-3">
     <h6 class="mb-3" style="color:var(--maroon);">
-        <i class="bi bi-clock-history me-1"></i> Recent Orders
+        <i class="ph ph-clock-counter-clockwise me-1"></i> Recent Orders
     </h6>
     <div class="table-responsive">
         <table class="table table-sm table-hover align-middle mb-0">
@@ -186,7 +186,7 @@
     </div>
     <div class="text-end mt-2">
         <a href="{{ route('orders') }}" class="small text-decoration-none" style="color:var(--maroon);">
-            View all orders <i class="bi bi-arrow-right"></i>
+            View all orders <i class="ph ph-arrow-right"></i>
         </a>
     </div>
 </div>
@@ -198,7 +198,7 @@
         <div class="modal-content">
             <div class="modal-header py-2" style="background:var(--gold-soft);">
                 <h6 class="modal-title" style="color:var(--maroon);">
-                    <i class="bi bi-cart-plus me-1"></i> Add to Cart
+                    <i class="ph ph-shopping-cart me-1"></i> Add to Cart
                 </h6>
                 <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal"></button>
             </div>
@@ -210,9 +210,9 @@
                 <p class="text-muted small mb-3" id="addModalLimit"></p>
                 <label for="addModalQty" class="form-label small">Quantity</label>
                 <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
-                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalMinus" aria-label="Decrease quantity" onclick="adjustModalQty(-1)"><i class="bi bi-dash"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalMinus" aria-label="Decrease quantity" onclick="adjustModalQty(-1)"><i class="ph ph-minus"></i></button>
                     <input type="number" class="form-control text-center" id="addModalQty" min="1" step="1" value="1" oninput="updateModalQtyControls()" style="width:70px;">
-                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalPlus" aria-label="Increase quantity" onclick="adjustModalQty(1)"><i class="bi bi-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm px-3" id="btnModalPlus" aria-label="Increase quantity" onclick="adjustModalQty(1)"><i class="ph ph-plus"></i></button>
                 </div>
                 <input type="hidden" id="addModalItemId">
                 <input type="hidden" id="addModalUnitPrice">
@@ -221,7 +221,7 @@
             <div class="modal-footer py-2 justify-content-center">
                 <button type="button" class="btn btn-light btn-sm px-4" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-maroon btn-sm px-4" onclick="confirmAddToCart()">
-                    <i class="bi bi-cart-plus me-1"></i> Add to Cart
+                    <i class="ph ph-shopping-cart me-1"></i> Add to Cart
                 </button>
             </div>
         </div>
@@ -232,7 +232,7 @@
 <div class="offcanvas offcanvas-end" tabindex="-1" id="cartSidebar" style="width:400px; max-width:90vw;">
     <div class="offcanvas-header py-3" style="background:var(--maroon); color:#fff;">
         <h6 class="offcanvas-title mb-0">
-            <i class="bi bi-cart3 me-2"></i> Shopping Cart
+            <i class="ph ph-shopping-cart me-2"></i> Shopping Cart
             <span class="badge bg-success ms-2" id="cartSidebarCount">0</span>
         </h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
@@ -241,7 +241,7 @@
         <div class="flex-grow-1 overflow-auto">
         <div class="p-3" id="cartSidebarBody">
             <div class="text-center text-muted py-5" id="cartEmpty">
-                <i class="bi bi-cart" style="font-size:2rem;"></i>
+                <i class="ph ph-shopping-cart-simple" style="font-size:2rem;"></i>
                 <div class="mt-2">Your cart is empty</div>
             </div>
         </div>
@@ -255,10 +255,10 @@
             <textarea class="form-control form-control-sm mb-3" id="orderRemarks"
                       rows="2" placeholder="Add remarks for this order (optional)..." maxlength="500"></textarea>
             <button class="btn btn-maroon w-100 mb-2" id="btnPlaceOrder" onclick="placeOrder()">
-                <i class="bi bi-send me-1"></i> Place Order
+                <i class="ph ph-paper-plane-tilt me-1"></i> Place Order
             </button>
             <button class="btn btn-outline-secondary w-100 btn-sm" onclick="clearCart()">
-                <i class="bi bi-trash me-1"></i> Clear Cart
+                <i class="ph ph-trash me-1"></i> Clear Cart
             </button>
         </div>
     </div>
@@ -267,7 +267,7 @@
 <!-- ═══ FLOATING CART BUTTON ══════════════════════════════ -->
 <button class="btn btn-maroon rounded-circle shadow-lg position-fixed d-flex align-items-center justify-content-center"
         id="cartFab" onclick="openCart()" style="display:none; bottom:24px; right:24px; width:56px; height:56px; z-index:1040; font-size:1.3rem;">
-    <i class="bi bi-cart3"></i>
+    <i class="ph ph-shopping-cart"></i>
     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="cartFabBadge" style="font-size:0.7rem;">0</span>
 </button>
 
@@ -316,7 +316,7 @@
     width: 54px; height: 54px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
     background: #fff; border: 1px solid rgba(122,23,23,.12); box-shadow: 0 6px 16px -10px rgba(60,8,8,.4);
 }
-.hv-prod-ph .bi { font-size: 1.5rem; color: var(--maroon); opacity: .55; }
+.hv-prod-ph i[class*="ph-"] { font-size: 1.5rem; color: var(--maroon); opacity: .55; }
 .hv-prod-cat {
     position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .03em;
     color: var(--maroon); background: rgba(255,255,255,.9); border-radius: 999px; padding: .12rem .5rem;
@@ -335,12 +335,12 @@
 .hv-prod-chip { display: inline-flex; align-items: center; gap: .25rem; font-weight: 600; border-radius: 999px; padding: .1rem .45rem; }
 .hv-prod-chip.ok { color: var(--success); background: #E6F0E7; }
 .hv-prod-chip.off { color: var(--muted); background: #EFEBE3; }
-.hv-prod-chip .bi { font-size: .78em; }
+.hv-prod-chip i[class*="ph-"] { font-size: .78em; }
 .hv-prod-stock { color: var(--muted); }
 .hv-prod-stock.is-low { color: #8A6D00; }
 .hv-prod-stock b { color: var(--ink); }
 .hv-prod-sugg { display: inline-flex; align-items: center; gap: .25rem; color: var(--maroon); font-weight: 600; }
-.hv-prod-sugg .bi { font-size: .82em; }
+.hv-prod-sugg i[class*="ph-"] { font-size: .82em; }
 .btn-maroon {
     background: var(--maroon);
     border-color: var(--maroon);
@@ -504,7 +504,7 @@ function openAddModal(button) {
         image.style.cssText = 'max-height:100px;max-width:100%;border-radius:8px;object-fit:cover;';
         imgDiv.appendChild(image);
     } else {
-        imgDiv.innerHTML = '<i class="bi bi-box" style="font-size:3rem;color:var(--maroon);opacity:0.3;"></i>';
+        imgDiv.innerHTML = '<i class="ph ph-package" style="font-size:3rem;color:var(--maroon);opacity:0.3;"></i>';
     }
 
     var existing = cart.find(c => c.item_id === id);
@@ -577,10 +577,10 @@ function updateCartUI() {
         var inCart = cart.find(c => c.item_id === id);
         if (inCart) {
             btn.classList.add('btn-in-cart');
-            btn.innerHTML = '<i class="bi bi-cart-check me-1"></i> In Cart (' + inCart.quantity + ')';
+            btn.innerHTML = '<i class="ph ph-shopping-cart me-1"></i> In Cart (' + inCart.quantity + ')';
         } else {
             btn.classList.remove('btn-in-cart');
-            btn.innerHTML = '<i class="bi bi-cart-plus me-1"></i> Add to Cart';
+            btn.innerHTML = '<i class="ph ph-shopping-cart me-1"></i> Add to Cart';
         }
     });
 
@@ -596,7 +596,7 @@ function renderCartSidebar() {
     var labelEl = document.getElementById('cartTotalLabel');
 
     if (cart.length === 0) {
-        body.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-cart" style="font-size:2rem;"></i><div class="mt-2">Your cart is empty</div></div>';
+        body.innerHTML = '<div class="text-center text-muted py-5"><i class="ph ph-shopping-cart-simple" style="font-size:2rem;"></i><div class="mt-2">Your cart is empty</div></div>';
         footer.style.display = 'none';
         countEl.textContent  = '0';
         return;
@@ -618,7 +618,7 @@ function renderCartSidebar() {
         if (c.image) {
             html += '<img src="' + escHtml(c.image) + '" class="cart-item-img">';
         } else {
-            html += '<div class="cart-item-placeholder"><i class="bi bi-box" style="color:var(--maroon);"></i></div>';
+            html += '<div class="cart-item-placeholder"><i class="ph ph-package" style="color:var(--maroon);"></i></div>';
         }
         html += '<div class="flex-grow-1">';
         html += '<div class="fw-semibold small">' + escHtml(c.item_name) + '</div>';
@@ -626,12 +626,12 @@ function renderCartSidebar() {
         html += '<div class="text-muted small">Subtotal: &#8369;' + sub.toFixed(2) + '</div>';
         html += '</div>';
         html += '<div class="d-flex align-items-center gap-1">';
-        html += '<button class="btn btn-outline-secondary cart-qty-btn" onclick="changeCartQty(' + c.item_id + ',-1)"><i class="bi bi-dash"></i></button>';
+        html += '<button class="btn btn-outline-secondary cart-qty-btn" onclick="changeCartQty(' + c.item_id + ',-1)"><i class="ph ph-minus"></i></button>';
         html += '<span class="fw-bold" style="min-width:24px; text-align:center;">' + c.quantity + '</span>';
         var atLimit = MAX_ORDER_QUANTITY > 0 && c.quantity >= MAX_ORDER_QUANTITY;
-        html += '<button class="btn btn-outline-secondary cart-qty-btn" aria-label="Increase quantity" ' + (atLimit ? 'disabled ' : '') + 'onclick="changeCartQty(' + c.item_id + ',1)"><i class="bi bi-plus"></i></button>';
+        html += '<button class="btn btn-outline-secondary cart-qty-btn" aria-label="Increase quantity" ' + (atLimit ? 'disabled ' : '') + 'onclick="changeCartQty(' + c.item_id + ',1)"><i class="ph ph-plus"></i></button>';
         html += '</div>';
-        html += '<button class="btn btn-outline-danger btn-sm px-1 py-0" onclick="removeFromCart(' + c.item_id + ')" title="Remove"><i class="bi bi-trash"></i></button>';
+        html += '<button class="btn btn-outline-danger btn-sm px-1 py-0" onclick="removeFromCart(' + c.item_id + ')" title="Remove"><i class="ph ph-trash"></i></button>';
         html += '</div>';
     });
 
@@ -710,7 +710,7 @@ async function placeOrder() {
         alert('Network error. Please check your connection.');
     } finally {
         btn.disabled  = false;
-        btn.innerHTML = '<i class="bi bi-send me-1"></i> Place Order';
+        btn.innerHTML = '<i class="ph ph-paper-plane-tilt me-1"></i> Place Order';
     }
 }
 

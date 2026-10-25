@@ -7,7 +7,7 @@
 <div class="hv-page-header">
     <div></div>
     <button class="btn btn-maroon btn-sm" onclick="openModal()">
-        <i class="bi bi-plus-lg me-1"></i> Add User
+        <i class="ph ph-plus me-1"></i> Add User
     </button>
 </div>
 
@@ -40,12 +40,13 @@
                     <td>
                         @php
                             $role_badges = [
-                                'super_admin'      => 'hv-badge-warning',
-                                'owner'            => 'hv-badge-success',
-                                'branch_manager'   => 'hv-badge-info',
-                                'branch_staff'     => 'hv-badge-secondary',
-                                'warehouse_admin'  => 'hv-badge-info',
-                                'warehouse_staff'  => 'hv-badge-secondary',
+                                'super_admin'        => 'hv-badge-warning',
+                                'owner'              => 'hv-badge-success',
+                                'admin'              => 'hv-badge-success',
+                                'branch_manager'     => 'hv-badge-info',
+                                'branch_staff'       => 'hv-badge-secondary',
+                                'commissary_manager' => 'hv-badge-info',
+                                'commissary_staff'   => 'hv-badge-secondary',
                             ];
                             $badge_class = $role_badges[$u->role_name] ?? 'hv-badge-info';
                             $role_label  = ucwords(str_replace('_', ' ', $u->role_name));
@@ -68,33 +69,33 @@
                             <button class="btn btn-sm btn-outline-secondary"
                                     title="View Details"
                                     onclick="viewUser({!! htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8') !!})">
-                                <i class="bi bi-eye"></i>
+                                <i class="ph ph-eye"></i>
                             </button>
                             {{-- Edit --}}
                             <button class="btn btn-sm btn-outline-secondary"
                                     title="Edit"
                                     onclick="openModal({!! htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8') !!})">
-                                <i class="bi bi-pencil"></i>
+                                <i class="ph ph-pencil-simple"></i>
                             </button>
                             {{-- Toggle status --}}
                             @if($u->status === 'active')
                                 <button class="btn btn-sm btn-outline-danger"
                                         title="Disable"
                                         onclick="toggleUser({{ $u->id }}, 'disabled')">
-                                    <i class="bi bi-x-circle"></i>
+                                    <i class="ph ph-x-circle"></i>
                                 </button>
                             @else
                                 <button class="btn btn-sm btn-outline-success"
                                         title="Activate"
                                         onclick="toggleUser({{ $u->id }}, 'active')">
-                                    <i class="bi bi-check-circle"></i>
+                                    <i class="ph ph-check-circle"></i>
                                 </button>
                             @endif
                             {{-- Reset password --}}
                             <button class="btn btn-sm btn-outline-warning"
                                     title="Reset Password"
                                     onclick="resetPassword({{ $u->id }}, '{{ e($u->full_name) }}')">
-                                <i class="bi bi-key"></i>
+                                <i class="ph ph-key"></i>
                             </button>
                         </div>
                     </td>
@@ -107,7 +108,7 @@
 </div>
 
 <p class="text-muted small mt-2">
-    <i class="bi bi-info-circle me-1"></i>
+    <i class="ph ph-info me-1"></i>
     Showing {{ $users->count() }} user{{ $users->count() !== 1 ? 's' : '' }}.
     Default password for new accounts: <code>staff123</code>
 </p>
@@ -122,7 +123,7 @@
 
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" id="modalTitle" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-person-plus me-1"></i> Add User
+                        <i class="ph ph-user-plus me-1"></i> Add User
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -149,7 +150,7 @@
                             <input type="password" class="form-control" name="password" id="f_password"
                                    minlength="6" placeholder="Minimum 6 characters">
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwVis('f_password', this)">
-                                <i class="bi bi-eye"></i>
+                                <i class="ph ph-eye"></i>
                             </button>
                         </div>
                         <div class="form-text">Leave blank when editing to keep current password.</div>
@@ -186,7 +187,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-maroon" id="btnSave">
-                        <i class="bi bi-check-lg me-1"></i> Save
+                        <i class="ph ph-check me-1"></i> Save
                     </button>
                 </div>
             </form>
@@ -204,7 +205,7 @@
 
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-key me-1"></i> Reset Password
+                        <i class="ph ph-key me-1"></i> Reset Password
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -217,7 +218,7 @@
                             <input type="password" class="form-control" name="new_password" id="r_password"
                                    required minlength="6" placeholder="Minimum 6 characters">
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwVis('r_password', this)">
-                                <i class="bi bi-eye"></i>
+                                <i class="ph ph-eye"></i>
                             </button>
                         </div>
                     </div>
@@ -227,7 +228,7 @@
                             <input type="password" class="form-control" id="r_confirm"
                                    required minlength="6" placeholder="Re-enter password">
                             <button class="btn btn-outline-secondary" type="button" onclick="togglePwVis('r_confirm', this)">
-                                <i class="bi bi-eye"></i>
+                                <i class="ph ph-eye"></i>
                             </button>
                         </div>
                     </div>
@@ -236,7 +237,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-warning" id="btnReset">
-                        <i class="bi bi-key me-1"></i> Reset Password
+                        <i class="ph ph-key me-1"></i> Reset Password
                     </button>
                 </div>
             </form>
@@ -250,7 +251,7 @@
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
                 <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="bi bi-person-badge me-1"></i> User Details
+                    <i class="ph ph-identification-badge me-1"></i> User Details
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -290,10 +291,10 @@ function togglePwVis(inputId, btn) {
     var icon = btn.querySelector('i');
     if (inp.type === 'password') {
         inp.type = 'text';
-        icon.className = 'bi bi-eye-slash';
+        icon.className = 'ph ph-eye-slash';
     } else {
         inp.type = 'password';
-        icon.className = 'bi bi-eye';
+        icon.className = 'ph ph-eye';
     }
 }
 
@@ -301,10 +302,11 @@ function viewUser(data) {
     var roleBadges = {
         'super_admin': 'hv-badge-warning',
         'owner': 'hv-badge-success',
+        'admin': 'hv-badge-success',
         'branch_manager': 'hv-badge-info',
         'branch_staff': 'hv-badge-secondary',
-        'warehouse_admin': 'hv-badge-info',
-        'warehouse_staff': 'hv-badge-secondary'
+        'commissary_manager': 'hv-badge-info',
+        'commissary_staff': 'hv-badge-secondary'
     };
     var roleLabel = (data.role_name || '').replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
     var badgeClass = roleBadges[data.role_name] || 'hv-badge-info';
@@ -332,7 +334,7 @@ function openModal(data) {
     form.reset();
 
     if (data) {
-        title.innerHTML = '<i class="bi bi-pencil me-1"></i> Edit User';
+        title.innerHTML = '<i class="ph ph-pencil-simple me-1"></i> Edit User';
         document.getElementById('f_id').value        = data.id;
         document.getElementById('f_full_name').value  = data.full_name;
         document.getElementById('f_email').value      = data.email;
@@ -342,7 +344,7 @@ function openModal(data) {
         pwInput.removeAttribute('required');
         pwGroup.querySelector('.form-text').style.display = '';
     } else {
-        title.innerHTML = '<i class="bi bi-person-plus me-1"></i> Add User';
+        title.innerHTML = '<i class="ph ph-user-plus me-1"></i> Add User';
         document.getElementById('f_id').value = '';
         pwInput.setAttribute('required', 'required');
         pwGroup.querySelector('.form-text').style.display = 'none';
@@ -386,7 +388,7 @@ async function saveUser(e) {
         alert('Network error. Please check your connection.');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save';
+        btn.innerHTML = '<i class="ph ph-check me-1"></i> Save';
     }
 }
 
@@ -477,7 +479,7 @@ async function doReset(e) {
         alert('Network error. Please check your connection.');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-key me-1"></i> Reset';
+        btn.innerHTML = '<i class="ph ph-key me-1"></i> Reset';
     }
 }
 </script>

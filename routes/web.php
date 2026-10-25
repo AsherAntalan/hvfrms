@@ -178,6 +178,8 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     Route::middleware('role:super_admin,owner,admin,branch_manager,commissary_manager,commissary_staff')->group(function () {
         Route::get('warehouse', [WarehouseController::class, 'index'])
             ->name('warehouse');
+        Route::get('warehouse/panel', [WarehouseController::class, 'panel'])
+            ->name('warehouse.panel');
         Route::post('warehouse/api', [WarehouseController::class, 'api'])
             ->name('warehouse.api');
     });

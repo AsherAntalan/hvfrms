@@ -42,10 +42,10 @@
         {{-- ═══ MODE TOGGLE ═══════════════════════════════════ --}}
         <div class="d-flex hv-mode-toggle gap-2 mb-3">
             <button type="button" class="btn btn-outline-success active" data-mode="in" id="btnIn">
-                <i class="bi bi-box-arrow-in-down"></i> Stock In
+                <i class="ph ph-tray-arrow-down"></i> Stock In
             </button>
             <button type="button" class="btn btn-outline-danger" data-mode="out" id="btnOut">
-                <i class="bi bi-box-arrow-up"></i> Stock Out
+                <i class="ph ph-export"></i> Stock Out
             </button>
         </div>
 
@@ -55,12 +55,12 @@
             <input type="hidden" id="branchSelect" value="{{ $mainBranch->id ?? '' }}">
             <label class="form-label small text-muted mb-1">Location</label>
             <div class="form-control mb-3 d-flex align-items-center bg-light">
-                <i class="bi bi-building me-2" style="color:var(--maroon)"></i>
+                <i class="ph ph-buildings me-2" style="color:var(--maroon)"></i>
                 <strong>{{ $mainBranch->branch_name ?? 'Commissary' }}</strong>
             </div>
             @unless($mainBranch)
                 <div class="alert alert-danger small py-2 mb-3">
-                    <i class="bi bi-exclamation-octagon me-1"></i>No active Commissary is configured. Stock in/out is blocked until an administrator sets it up.
+                    <i class="ph ph-warning-octagon me-1"></i>No active Commissary is configured. Stock in/out is blocked until an administrator sets it up.
                 </div>
             @endunless
         @elseif(!auth()->user()->isBranchScoped())
@@ -84,10 +84,10 @@
 
         <div class="d-flex gap-2 mt-2">
             <button type="button" class="btn btn-maroon flex-grow-1" id="btnStartCam">
-                <i class="bi bi-camera-video"></i> Start camera
+                <i class="ph ph-video-camera"></i> Start camera
             </button>
             <button type="button" class="btn btn-outline-secondary" id="btnStopCam" disabled>
-                <i class="bi bi-stop-circle"></i> Stop
+                <i class="ph ph-stop-circle"></i> Stop
             </button>
         </div>
 
@@ -183,6 +183,13 @@
         if (currentGroup) lookup(currentGroup.qr_code);
     });
 
+    // Open in the mode the entry point asked for — e.g. "Release / Scan Out"
+    // links to ?mode=out so releasing never defaults to Stock In.
+    try {
+        const wantMode = new URLSearchParams(location.search).get('mode');
+        if (wantMode === 'out' || wantMode === 'in') setMode(wantMode);
+    } catch (e) {}
+
     // -- Lookup --
     async function lookup(code) {
         currentGroup = null;
@@ -226,7 +233,7 @@
             beep(false);
             $('scanResult').innerHTML =
                 '<div class="alert alert-danger mt-3">' +
-                '<i class="bi bi-wifi-off me-1"></i> Network error. Check your connection.</div>';
+                '<i class="ph ph-wifi-slash me-1"></i> Network error. Check your connection.</div>';
         }
     }
 
@@ -269,7 +276,7 @@
         // Matched-by-name warning
         if (p._matched_by === 'name') {
             h += '<div class="alert alert-warning py-1 px-2 small mb-2">' +
-                 '<i class="bi bi-exclamation-triangle me-1"></i>Matched by name — verify this is the correct product.</div>';
+                 '<i class="ph ph-warning me-1"></i>Matched by name — verify this is the correct product.</div>';
         }
 
         // Product header
@@ -304,13 +311,13 @@
                  ' <span class="fs-6 text-muted">' + unit + ' in this batch</span></div>';
             if (batch.expiry_date) {
                 h += '<div class="small ' + (bExpired ? 'text-danger fw-semibold' : 'text-muted') + '">' +
-                     '<i class="bi bi-calendar-x me-1"></i>Expiry: ' + escapeHtml(batch.expiry_date) + '</div>';
+                     '<i class="ph ph-calendar-x me-1"></i>Expiry: ' + escapeHtml(batch.expiry_date) + '</div>';
             }
             h += '</div>';
         } else {
             // Product- or name-level code: cannot prove a physical count.
             h += '<div class="alert alert-info py-2 small my-3">' +
-                 '<i class="bi bi-upc-scan me-1"></i>This code identifies a <strong>product</strong>, not a specific package or batch. ' +
+                 '<i class="ph ph-barcode me-1"></i>This code identifies a <strong>product</strong>, not a specific package or batch. ' +
                  'Enter the counted quantity below.</div>';
         }
 
@@ -325,13 +332,13 @@
 
         // Extra info
         if (p.pack_description) {
-            h += '<div class="small text-muted mb-1"><i class="bi bi-box me-1"></i>' + escapeHtml(p.pack_description) + '</div>';
+            h += '<div class="small text-muted mb-1"><i class="ph ph-package me-1"></i>' + escapeHtml(p.pack_description) + '</div>';
         }
         if (myStock && myStock.nearest_expiry) {
-            h += '<div class="small text-muted mb-1"><i class="bi bi-calendar-x me-1"></i>Nearest expiry: ' + escapeHtml(myStock.nearest_expiry) + '</div>';
+            h += '<div class="small text-muted mb-1"><i class="ph ph-calendar-x me-1"></i>Nearest expiry: ' + escapeHtml(myStock.nearest_expiry) + '</div>';
         }
         if (onHand <= (p.reorder_level || 0) && onHand > 0) {
-            h += '<div class="small text-danger fw-semibold mb-1"><i class="bi bi-exclamation-circle me-1"></i>Low stock (reorder level: ' + (p.reorder_level || 0) + ')</div>';
+            h += '<div class="small text-danger fw-semibold mb-1"><i class="ph ph-warning-circle me-1"></i>Low stock (reorder level: ' + (p.reorder_level || 0) + ')</div>';
         }
 
         // Batch health flags (authoritative values come from the server; these
@@ -343,7 +350,7 @@
         if (mode === 'in' && (scannedExpired || scannedDamaged)) {
             const why = scannedExpired ? 'expired' : 'damaged';
             h += '<div class="alert alert-danger py-2 small mb-2" id="blockMsg">' +
-                 '<i class="bi bi-slash-circle me-1"></i>This batch is <strong>' + why + '</strong> and cannot be received into available stock. ' +
+                 '<i class="ph ph-prohibit me-1"></i>This batch is <strong>' + why + '</strong> and cannot be received into available stock. ' +
                  'Route it through disposal instead.</div>';
             h += '<div class="d-flex gap-2"><button type="button" class="btn btn-outline-secondary py-2" id="btnClear">Clear</button></div>';
             h += '</div>';
@@ -364,7 +371,7 @@
 
         if (mode === 'out' && currentMax <= 0 && !disposalOnly) {
             h += '<div class="alert alert-warning py-2 small mb-0">' +
-                 '<i class="bi bi-exclamation-triangle me-1"></i>No eligible stock to release' +
+                 '<i class="ph ph-warning me-1"></i>No eligible stock to release' +
                  (batch ? ' from this batch.' : ' at this location.') + '</div>';
             h += '<div class="d-flex gap-2 mt-2"><button type="button" class="btn btn-outline-secondary py-2" id="btnClear">Clear</button></div>';
             h += '</div>';
@@ -415,14 +422,14 @@
             h += '</select>';
 
             if (disposalOnly) {
-                h += '<div class="alert alert-danger py-2 small mb-3"><i class="bi bi-slash-circle me-1"></i>' +
+                h += '<div class="alert alert-danger py-2 small mb-3"><i class="ph ph-prohibit me-1"></i>' +
                      'This batch is ' + (scannedExpired ? 'expired' : 'damaged') + ' — it cannot be issued as usable stock. ' +
                      'Only disposal is allowed.</div>';
             } else if (batch) {
-                h += '<div class="alert alert-info py-2 small mb-3"><i class="bi bi-box-seam me-1"></i>' +
+                h += '<div class="alert alert-info py-2 small mb-3"><i class="ph ph-package me-1"></i>' +
                      'Releasing from the scanned batch ' + escapeHtml(batch.batch_number) + ' only.</div>';
             } else {
-                h += '<div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle me-1"></i>' +
+                h += '<div class="alert alert-info py-2 small mb-3"><i class="ph ph-info me-1"></i>' +
                      '<strong>FEFO:</strong> stock is consumed from the earliest-expiring eligible batch first.</div>';
             }
         }
@@ -560,7 +567,7 @@
         $('scanFeed').insertAdjacentHTML('afterbegin',
             '<div class="hv-activity-item">' +
             '<div class="hv-activity-icon" style="background:#E3EEE2;color:var(--success)">' +
-            '<i class="bi bi-check2"></i></div><div>' + escapeHtml(msg) +
+            '<i class="ph ph-check"></i></div><div>' + escapeHtml(msg) +
             ' <span class="text-muted">&mdash; ' + t + '</span></div></div>');
     }
 

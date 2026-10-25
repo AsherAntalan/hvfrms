@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Forgot Password — {{ config('app.name') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" rel="stylesheet">
     <link href="{{ asset('assets/css/theme.css') }}" rel="stylesheet">
     <style>
     .hv-auth-box {
@@ -65,17 +66,17 @@
             @if(session('reset_link') && config('app.debug'))
             <div class="hv-reset-link">
                 <div class="text-muted" style="font-size:11px;margin-bottom:4px;">
-                    <i class="bi bi-info-circle"></i> <strong>Dev only:</strong> Copy this link and open it in your browser:
+                    <i class="ph ph-info"></i> <strong>Dev only:</strong> Copy this link and open it in your browser:
                 </div>
                 <a href="{{ session('reset_link') }}" id="resetLink">{{ session('reset_link') }}</a>
                 <div class="copy-btn">
                     <button type="button" class="btn btn-sm btn-outline-maroon" onclick="copyLink()">
-                        <i class="bi bi-clipboard"></i> Copy Link
+                        <i class="ph ph-clipboard"></i> Copy Link
                     </button>
                 </div>
             </div>
             <div class="alert alert-warning py-2 small mt-3">
-                <i class="bi bi-clock"></i> This link expires in <strong>1 hour</strong>.
+                <i class="ph ph-clock"></i> This link expires in <strong>1 hour</strong>.
             </div>
             @endif
         @endif
@@ -84,18 +85,18 @@
         <form method="POST" action="{{ route('password.email') }}">
             @csrf
             <div class="hv-input-icon mb-3">
-                <i class="bi bi-envelope"></i>
+                <i class="ph ph-envelope"></i>
                 <input type="email" name="email" class="form-control py-2" placeholder="Email address" required autofocus>
             </div>
             <button type="submit" class="btn btn-maroon w-100 py-2 fw-bold">
-                <i class="bi bi-send me-1"></i> Send Reset Link
+                <i class="ph ph-paper-plane-tilt me-1"></i> Send Reset Link
             </button>
         </form>
         @endif
 
         <div class="text-center mt-3">
             <a href="{{ route('login') }}" class="text-muted small text-decoration-none">
-                <i class="bi bi-arrow-left"></i> Back to Login
+                <i class="ph ph-arrow-left"></i> Back to Login
             </a>
         </div>
     </div>
@@ -106,9 +107,9 @@ function copyLink() {
     const link = document.getElementById('resetLink').textContent;
     navigator.clipboard.writeText(link).then(function() {
         const btn = document.querySelector('.copy-btn button');
-        btn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+        btn.innerHTML = '<i class="ph ph-check"></i> Copied!';
         setTimeout(function() {
-            btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy Link';
+            btn.innerHTML = '<i class="ph ph-clipboard"></i> Copy Link';
         }, 2000);
     });
 }

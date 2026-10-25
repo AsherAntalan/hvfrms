@@ -13,12 +13,9 @@
         @if(auth()->user()->isBranchManager() && auth()->user()->branch?->branch_type !== 'main')
         <a class="btn btn-maroon btn-sm" href="{{ route('ordering') }}">Create Commissary Order</a>
         @endif
-        <button class="btn btn-outline-secondary btn-sm d-none" id="btnPrintSelected" onclick="printSelectedQR()">
-            <i class="bi bi-printer me-1"></i> Print Selected QR
-        </button>
         @if($canManageProducts)
         <button class="btn btn-maroon btn-sm" onclick="openModal()">
-            <i class="bi bi-plus-lg me-1"></i> Add Product
+            <i class="ph ph-plus me-1"></i> Add Product
         </button>
         @endif
     </div>
@@ -60,26 +57,20 @@
         <table class="table table-hover align-middle mb-0" id="productTable">
             <thead>
                 <tr>
-                    <th class="text-center" style="width:36px;">
-                        <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleSelectAll()" title="Select all for QR print">
-                    </th>
                     <th class="ps-3">Product Name</th>
                     <th>Category</th>
                     <th>Unit</th>
-                    <th class="text-end">Price</th>
                     <th class="text-center" title="All remaining units at {{ $scopeLabel }}, including expired/damaged">Physical Stock</th>
                     <th class="text-center" title="Good, unexpired remaining units; some may be reserved for a commissary order">Usable Stock</th>
                     <th class="text-center">Reorder Lvl</th>
                     <th class="text-center">Shelf Life</th>
-                    <th class="text-center">QR</th>
                     <th class="text-center">Catalog Status</th>
-                    <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
             @if($items->isEmpty())
                 <tr id="emptyRow">
-                    <td colspan="12" class="text-center text-muted py-4">
+                    <td colspan="8" class="text-center text-muted py-4">
                         No products found.@if($canManageProducts) Click "Add Product" to create one.@endif
                     </td>
                 </tr>
@@ -96,17 +87,11 @@
                         $rl = (int)$item->reorder_level;
                     @endphp
                     <tr class="product-row {{ $item->is_active ? '' : 'table-secondary' }}"
+                        style="cursor:pointer" title="Click to view details"
                         data-name="{{ e(strtolower($item->item_name)) }}"
                         data-category="{{ e($item->category_name ?? '') }}"
-                        data-goods="{{ e($item->goods_type ?? '') }}">
-                        <td class="text-center">
-                            @if(!empty($item->qr_code))
-                            <input type="checkbox" class="form-check-input qr-check" onchange="updatePrintBtn()"
-                                   data-qr="{{ e($item->qr_code) }}"
-                                   data-name="{{ e($item->item_name) }}"
-                                   data-unit="{{ e($item->unit) }}">
-                            @endif
-                        </td>
+                        data-goods="{{ e($item->goods_type ?? '') }}"
+                        onclick="openHistory({{ $item->id }}, @js($item->item_name))">
                         <td class="ps-3">
                             <div class="d-flex align-items-center gap-2">
                                 @if($item->image_path)
@@ -114,7 +99,7 @@
                                          style="width:36px;height:36px;object-fit:cover;border-radius:6px;">
                                 @else
                                     <div style="width:36px;height:36px;border-radius:6px;background:var(--gold-soft);display:flex;align-items:center;justify-content:center;">
-                                        <i class="bi bi-box" style="color:var(--maroon);"></i>
+                                        <i class="ph ph-package" style="color:var(--maroon);"></i>
                                     </div>
                                 @endif
                                 <div>
@@ -135,15 +120,14 @@
                             @endif
                         </td>
                         <td class="small">{{ e($item->unit) }}</td>
-                        <td class="text-end fw-semibold">&#8369;{{ number_format($item->price, 2) }}</td>
                         {{-- Physical stock (includes expired/damaged) --}}
                         <td class="text-center">
                             <span class="fw-semibold">{{ $physical }}</span>
                             @if($expiredQty > 0)
-                                <div class="text-danger small"><i class="bi bi-x-circle-fill"></i> {{ $expiredQty }} expired</div>
+                                <div class="text-danger small"><i class="ph-fill ph-x-circle"></i> {{ $expiredQty }} expired</div>
                             @endif
                             @if($damagedQty > 0)
-                                <div class="text-muted small"><i class="bi bi-slash-circle"></i> {{ $damagedQty }} damaged</div>
+                                <div class="text-muted small"><i class="ph ph-prohibit"></i> {{ $damagedQty }} damaged</div>
                             @endif
                         </td>
                         {{-- Usable stock (eligible only) --}}
@@ -154,10 +138,10 @@
                             @if($usable === 0 && $physical > 0)
                                 <div class="text-danger small" title="Enabled product, but no issuable stock">None usable</div>
                             @elseif($usable > 0 && $usable <= $rl)
-                                <div class="text-warning small"><i class="bi bi-exclamation-triangle-fill"></i> Low</div>
+                                <div class="text-warning small"><i class="ph-fill ph-warning"></i> Low</div>
                             @endif
                             @if($usable > 0 && $expWarning)
-                                <div class="text-warning small"><i class="bi bi-clock-fill"></i> Exp {{ date('M j', strtotime($exp)) }}</div>
+                                <div class="text-warning small"><i class="ph-fill ph-clock"></i> Exp {{ date('M j', strtotime($exp)) }}</div>
                             @endif
                         </td>
                         <td class="text-center">{{ (int)$item->reorder_level }}</td>
@@ -165,50 +149,11 @@
                             {{ $item->shelf_life_days ? $item->shelf_life_days . 'd' : '—' }}
                         </td>
                         <td class="text-center">
-                            @if(!empty($item->qr_code))
-                                <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="Print QR label"
-                                        onclick="printSingleQR(this)"
-                                        data-qr="{{ e($item->qr_code) }}"
-                                        data-name="{{ e($item->item_name) }}"
-                                        data-unit="{{ e($item->unit) }}">
-                                    <i class="bi bi-qr-code"></i>
-                                </button>
-                            @else
-                                <span class="text-muted">&mdash;</span>
-                            @endif
-                        </td>
-                        <td class="text-center">
                             @if($item->is_active)
                                 <span class="hv-badge hv-badge-success" title="Available for commissary orders; finished stock is not required">Available</span>
                             @else
                                 <span class="hv-badge hv-badge-danger">Unavailable</span>
                             @endif
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex gap-1 justify-content-center">
-                                <a href="{{ route('stock.history', $item->id) }}" class="btn btn-sm btn-outline-primary" title="Movement History">
-                                    <i class="bi bi-clock-history"></i>
-                                </a>
-                                @if($canManageProducts)
-                                <button class="btn btn-sm btn-outline-secondary" title="Edit"
-                                        onclick="openModal(@js($item))">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                @endif
-                                @if($canManageAvailability)
-                                @if($item->is_active)
-                                    <button class="btn btn-sm btn-outline-danger" title="Mark unavailable" aria-label="Mark {{ $item->item_name }} unavailable for orders"
-                                            onclick="toggleItem({{ $item->id }}, 0)">
-                                        <i class="bi bi-x-circle" aria-hidden="true"></i> Mark unavailable
-                                    </button>
-                                @else
-                                    <button class="btn btn-sm btn-outline-success" title="Make available" aria-label="Make {{ $item->item_name }} available for orders"
-                                            onclick="toggleItem({{ $item->id }}, 1)">
-                                        <i class="bi bi-check-circle" aria-hidden="true"></i> Make available
-                                    </button>
-                                @endif
-                                @endif
-                            </div>
                         </td>
                     </tr>
                 @endforeach
@@ -229,7 +174,7 @@
 
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" id="modalTitle" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-box-seam me-1"></i> Add Product
+                        <i class="ph ph-package me-1"></i> Add Product
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -300,7 +245,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-maroon" id="btnSave">
-                        <i class="bi bi-check-lg me-1"></i> Save
+                        <i class="ph ph-check me-1"></i> Save
                     </button>
                 </div>
             </form>
@@ -310,6 +255,26 @@
 
 @endif
 
+{{-- ═══ MOVEMENT HISTORY MODAL (opened by clicking a row) ══ --}}
+<div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:var(--gold-soft);">
+                <h5 class="modal-title" id="hTitle" style="color:var(--maroon);font-weight:700;">
+                    <i class="ph ph-clock-counter-clockwise me-1"></i> Movement History
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="hBody">
+                <div class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -317,13 +282,61 @@
 const API  = '{{ route("inventory.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 
-@if($canManageProducts)
-let itemModal;
+let historyModal;
+const HISTORY_BASE = '{{ url('stock/history') }}';
+const BATCH_BASE   = '{{ url('stock/batch') }}';
+var _histItem = { id: null, name: '' };
+@if($canManageProducts) let itemModal; @endif
 
 document.addEventListener('DOMContentLoaded', function () {
-    itemModal = new bootstrap.Modal(document.getElementById('itemModal'));
+    historyModal = new bootstrap.Modal(document.getElementById('historyModal'));
+    @if($canManageProducts) itemModal = new bootstrap.Modal(document.getElementById('itemModal')); @endif
+
+    // Batch links inside the history modal open the batch detail in the same
+    // modal instead of navigating away.
+    document.getElementById('hBody').addEventListener('click', function (e) {
+        var a = e.target.closest('a[href*="/stock/batch/"]');
+        if (!a) { return; }
+        e.preventDefault();
+        var m = a.getAttribute('href').match(/\/stock\/batch\/(\d+)/);
+        if (m) { openBatch(m[1]); }
+    });
 });
-@endif
+
+function dEsc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
+
+async function loadIntoHistory(url, title) {
+    document.getElementById('hTitle').innerHTML = title;
+    var body = document.getElementById('hBody');
+    body.innerHTML = '<div class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>';
+    try {
+        var res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!res.ok) { throw new Error('http'); }
+        return await res.text();
+    } catch (e) {
+        body.innerHTML = '<div class="text-center text-danger py-4">Could not load. Please try again.</div>';
+        return null;
+    }
+}
+
+// Row click → open this product's Movement History in a modal (AJAX partial).
+async function openHistory(id, name) {
+    _histItem = { id: id, name: name };
+    historyModal.show();
+    var html = await loadIntoHistory(HISTORY_BASE + '/' + id,
+        '<i class="ph ph-clock-counter-clockwise me-1"></i> ' + dEsc(name) + ' — Movement History');
+    if (html != null) { document.getElementById('hBody').innerHTML = html; }
+}
+
+// Batch "view" (eye) → batch detail in the same modal, with a Back button.
+async function openBatch(batchId) {
+    var html = await loadIntoHistory(BATCH_BASE + '/' + batchId,
+        '<i class="ph ph-package me-1"></i> Batch #' + dEsc(batchId));
+    if (html == null) { return; }
+    var back = '<div class="mb-3"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="openHistory(_histItem.id, _histItem.name)">'
+        + '<i class="ph ph-arrow-left me-1"></i> Back to History</button></div>';
+    document.getElementById('hBody').innerHTML = back + html;
+}
 
 function filterTable() {
     var search   = document.getElementById('searchBox').value.toLowerCase();
@@ -354,7 +367,7 @@ function openModal(data) {
     document.getElementById('f_reorder_level').value = 10;
 
     if (data) {
-        title.innerHTML = '<i class="bi bi-pencil me-1"></i> Edit Product';
+        title.innerHTML = '<i class="ph ph-pencil-simple me-1"></i> Edit Product';
         document.getElementById('f_id').value              = data.id;
         document.getElementById('f_item_name').value       = data.item_name;
         document.getElementById('f_category_id').value     = data.category_id || '';
@@ -365,7 +378,7 @@ function openModal(data) {
         document.getElementById('f_shelf_life_days').value = (data.shelf_life_days != null && data.shelf_life_days !== '') ? data.shelf_life_days : '';
         document.getElementById('f_remarks').value         = data.remarks || '';
     } else {
-        title.innerHTML = '<i class="bi bi-box-seam me-1"></i> Add Product';
+        title.innerHTML = '<i class="ph ph-package me-1"></i> Add Product';
         document.getElementById('f_id').value = '';
     }
 
@@ -395,7 +408,7 @@ async function saveItem(e) {
         alert('Network error.');
     } finally {
         btn.disabled  = false;
-        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save';
+        btn.innerHTML = '<i class="ph ph-check me-1"></i> Save';
     }
 }
 
@@ -421,64 +434,5 @@ async function toggleItem(id, newStatus) {
     } catch (err) { alert('Network error.'); }
 }
 
-function toggleSelectAll() {
-    var checked = document.getElementById('selectAll').checked;
-    document.querySelectorAll('.qr-check').forEach(function (cb) {
-        var row = cb.closest('.product-row');
-        if (row && row.style.display !== 'none') cb.checked = checked;
-    });
-    updatePrintBtn();
-}
-
-function updatePrintBtn() {
-    var count = document.querySelectorAll('.qr-check:checked').length;
-    var btn   = document.getElementById('btnPrintSelected');
-    if (!btn) return;
-    if (count > 0) {
-        btn.classList.remove('d-none');
-        btn.innerHTML = '<i class="bi bi-printer me-1"></i> Print ' + count + ' QR Label' + (count !== 1 ? 's' : '');
-    } else {
-        btn.classList.add('d-none');
-    }
-}
-
-function printSingleQR(el) {
-    printQRLabels([{ qr: el.dataset.qr, name: el.dataset.name, unit: el.dataset.unit }]);
-}
-
-function printSelectedQR() {
-    var checked = document.querySelectorAll('.qr-check:checked');
-    if (!checked.length) { alert('Select products first.'); return; }
-    var labels = [];
-    checked.forEach(function (cb) {
-        labels.push({ qr: cb.dataset.qr, name: cb.dataset.name, unit: cb.dataset.unit });
-    });
-    printQRLabels(labels);
-}
-
-function printQRLabels(labels) {
-    var w = window.open('', 'qr_print', 'width=820,height=600');
-    if (!w) { alert('Please allow pop-ups to print QR labels.'); return; }
-    function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-    var d = w.document;
-    d.open();
-    d.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR Labels</title>');
-    d.write('<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:10mm;color:#222}.bar{text-align:center;margin-bottom:8mm}.bar button{padding:8px 28px;font-size:14px;cursor:pointer;background:#7A1717;color:#fff;border:none;border-radius:6px;font-weight:600}.bar button:hover{background:#5C1010}.bar .info{margin-left:10px;color:#888;font-size:13px}.grid{display:flex;flex-wrap:wrap;gap:5mm;justify-content:center}.lbl{width:58mm;border:1px dashed #bbb;border-radius:2mm;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4mm 3mm;page-break-inside:avoid}.lbl svg{width:26mm;height:26mm}.lbl .n{font-weight:700;font-size:9pt;margin-top:2mm;text-align:center;line-height:1.3}.lbl .c{font-size:7.5pt;color:#555;margin-top:1mm;font-family:monospace;letter-spacing:.5px}.lbl .u{font-size:7pt;color:#999;margin-top:.5mm}@media print{.bar{display:none}body{padding:5mm}}</style></head><body>');
-    d.write('<div class="bar"><button onclick="window.print()"><b>Print Labels</b></button><span class="info">' + labels.length + ' label' + (labels.length > 1 ? 's' : '') + '</span></div>');
-    d.write('<div class="grid" id="g"></div></body></html>');
-    d.close();
-    var scr = d.createElement('script');
-    scr.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
-    scr.onload = function () {
-        var grid = d.getElementById('g');
-        labels.forEach(function (l) {
-            var q = w.qrcode(0, 'M'); q.addData(l.qr); q.make();
-            var el = d.createElement('div'); el.className = 'lbl';
-            el.innerHTML = q.createSvgTag(3,0) + '<div class="n">' + esc(l.name) + '</div><div class="c">' + esc(l.qr) + '</div><div class="u">' + esc(l.unit) + '</div>';
-            grid.appendChild(el);
-        });
-    };
-    d.head.appendChild(scr);
-}
 </script>
 @endpush

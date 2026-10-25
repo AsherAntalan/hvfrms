@@ -6,14 +6,35 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Dashboard') — Hidden Vietnam FRMS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" rel="stylesheet">
     <link href="{{ asset('assets/css/theme.css') }}?v={{ @filemtime(public_path('assets/css/theme.css')) ?: '1' }}" rel="stylesheet">
     @stack('styles')
 </head>
-<body>
+<body class="hv-app">
 <script>
     /* Apply persisted collapsed state before paint to avoid a flash */
     try { if (localStorage.getItem('hv-sidebar-collapsed') === '1') document.body.classList.add('sidebar-collapsed'); } catch (e) {}
+</script>
+
+{{-- Auth transition overlay: continues the login loader until this page is ready --}}
+<div id="hvAuthLoading" class="hv-auth-loading" role="status" aria-live="polite" aria-hidden="true" hidden>
+    <div class="hv-auth-loading-inner">
+        <div class="hv-auth-spinner" aria-hidden="true"></div>
+        <p class="hv-auth-loading-msg">Signing you in…</p>
+    </div>
+</div>
+<script>
+    /* Show the overlay immediately (before the dashboard renders) only when we
+       arrived from a successful login, so the transition stays continuous. */
+    (function () {
+        try {
+            if (sessionStorage.getItem('hv-signing-in') === '1') {
+                var o = document.getElementById('hvAuthLoading');
+                if (o) { o.hidden = false; o.setAttribute('aria-hidden', 'false'); }
+            }
+        } catch (e) {}
+    })();
 </script>
 
 <!-- ═══ SIDEBAR ══════════════════════════════════════════ -->
@@ -49,16 +70,16 @@
         {{-- Dashboard --}}
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+            <i class="hv-dashboard-icon" aria-hidden="true"></i> <span>Dashboard</span>
         </a>
 
         {{-- Warehouse ▾ --}}
         @php $whActive = request()->routeIs('warehouse*','qr*'); @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-building hv-nav-icon"></i>
+                <i class="ph ph-buildings hv-nav-icon"></i>
                 <span>Commissary</span>
-                <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph {{ $whActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
                 <a href="{{ route('qr') }}"
@@ -71,16 +92,11 @@
         {{-- Delivery — single page (Active + History tabs inside) --}}
         <a href="{{ route('delivery') }}"
            class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-            <i class="bi bi-truck"></i> <span>Delivery</span>
+            <i class="ph ph-truck"></i> <span>Delivery Status</span>
         </a>
 
         <hr class="hv-sidebar-divider">
 
-        {{-- My Profile --}}
-        <a href="{{ route('profile') }}"
-           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
-            <i class="bi bi-person-circle"></i> <span>My Profile</span>
-        </a>
 
         {{-- ══════════════════════════════════════════════ --}}
         {{-- WAREHOUSE ADMIN — full warehouse nav            --}}
@@ -90,16 +106,16 @@
         {{-- Dashboard --}}
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+            <i class="hv-dashboard-icon" aria-hidden="true"></i> <span>Dashboard</span>
         </a>
 
         {{-- Warehouse ▾ --}}
         @php $whActive = request()->routeIs('warehouse*','inventory*','stock*','products*'); @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-building hv-nav-icon"></i>
-                <span>All Branches</span>
-                <i class="bi {{ $whActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph ph-buildings hv-nav-icon"></i>
+                <span>All Branches Inventory</span>
+                <i class="ph {{ $whActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
                 <a href="{{ route('inventory') }}"
@@ -108,7 +124,7 @@
                 </a>
                 <a href="{{ route('products') }}"
                    class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
-                    <span>Overall Products</span>
+                    <span>Commissary Products</span>
                 </a>
                 <a href="{{ route('stock') }}"
                    class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
@@ -117,35 +133,38 @@
             </div>
         </div>
 
-        {{-- Orders — order list / creation --}}
-        <a href="{{ route('orders') }}"
-           class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
-            <i class="bi bi-receipt"></i> <span>Orders</span>
-        </a>
-
-        {{-- Delivery — single page (Active + History tabs inside) --}}
-        <a href="{{ route('delivery') }}"
-           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-            <i class="bi bi-truck"></i> <span>Delivery</span>
-            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-        </a>
+        {{-- Orders ▾ — order list + delivery --}}
+        @php $odActive = request()->routeIs('orders*','delivery*'); @endphp
+        <div class="hv-nav-group">
+            <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
+                <i class="ph ph-shopping-cart hv-nav-icon"></i>
+                <span>Orders</span>
+                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+                <i class="ph {{ $odActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
+            </button>
+            <div class="hv-nav-submenu {{ $odActive ? 'open' : '' }}">
+                <a href="{{ route('orders') }}"
+                   class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
+                    <span>All Orders</span>
+                </a>
+                <a href="{{ route('delivery') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
+                    <span>Delivery Status</span>
+                </a>
+            </div>
+        </div>
 
         <hr class="hv-sidebar-divider">
 
         {{-- Alerts --}}
         <a href="{{ route('alerts') }}"
            class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
-            <i class="bi bi-bell"></i> <span>Alerts</span>
+            <i class="ph ph-bell"></i> <span>Alerts</span>
             <span class="hv-sidebar-badge" id="sidebarBadgeAlerts" style="display:none;">0</span>
         </a>
 
         <hr class="hv-sidebar-divider">
 
-        {{-- My Profile --}}
-        <a href="{{ route('profile') }}"
-           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
-            <i class="bi bi-person-circle"></i> <span>My Profile</span>
-        </a>
 
         {{-- ══════════════════════════════════════════════ --}}
         {{-- BRANCH STAFF — minimal branch nav               --}}
@@ -154,16 +173,11 @@
 
         <a href="{{ route('qr') }}"
            class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-            <i class="bi bi-qr-code-scan"></i> <span>QR Scan</span>
+            <i class="ph ph-qr-code"></i> <span>QR Scan</span>
         </a>
 
         <hr class="hv-sidebar-divider">
 
-        {{-- My Profile --}}
-        <a href="{{ route('profile') }}"
-           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
-            <i class="bi bi-person-circle"></i> <span>My Profile</span>
-        </a>
 
         {{-- ══════════════════════════════════════════════ --}}
         {{-- OWNER / SUPER_ADMIN / BRANCH_MANAGER nav        --}}
@@ -173,7 +187,7 @@
         {{-- Dashboard --}}
         <a href="{{ route('dashboard') }}"
            class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="bi bi-speedometer2"></i> <span>Dashboard</span>
+            <i class="hv-dashboard-icon" aria-hidden="true"></i> <span>Dashboard</span>
         </a>
 
         {{-- ── Inventory ▾ ──────────────────────────────── --}}
@@ -183,19 +197,19 @@
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $invActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-box-seam hv-nav-icon"></i>
+                <i class="ph ph-package hv-nav-icon"></i>
                 <span>Inventory</span>
-                <i class="bi {{ $invActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph {{ $invActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $invActive ? 'open' : '' }}">
                 <a href="{{ route('inventory') }}"
                    class="hv-nav-link {{ request()->routeIs('inventory*','warehouse*') ? 'active' : '' }}">
-                    <span>{{ ($isOwner || $isMainBM) ? 'All Branches' : 'Inventory' }}</span>
+                    <span>{{ ($isOwner || $isMainBM) ? 'All Branches Inventory' : 'Inventory' }}</span>
                 </a>
                 @if($u->canManageCatalog() || $u->canManageProductAvailability())
                 <a href="{{ route('products') }}"
                    class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
-                    <span>Overall Products</span>
+                    <span>Commissary Products</span>
                 </a>
                 @endif
                 <a href="{{ route('stock') }}"
@@ -206,66 +220,59 @@
         </div>
         @endif
 
-        {{-- ── Orders ──────────────────────────────────── --}}
+        {{-- ── Orders ▾ (All Orders + Delivery, and Order Supplies for branch managers) ── --}}
         @php
-            $odActive = request()->routeIs('orders*','ordering*');
+            $odActive = request()->routeIs('orders*','ordering*','delivery*');
         @endphp
-        @if($isBM)
-        {{-- Branch manager also has Order Supplies → keep the dropdown --}}
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-cart3 hv-nav-icon"></i>
+                <i class="ph ph-shopping-cart hv-nav-icon"></i>
                 <span>Orders</span>
-                <i class="bi {{ $odActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+                <i class="ph {{ $odActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $odActive ? 'open' : '' }}">
                 <a href="{{ route('orders') }}"
                    class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
                     <span>All Orders</span>
                 </a>
+                @if($isBM)
                 <a href="{{ route('ordering') }}"
                    class="hv-nav-link {{ request()->routeIs('ordering*') ? 'active' : '' }}">
                     <span>Order Supplies</span>
                 </a>
+                @endif
+                <a href="{{ route('delivery') }}"
+                   class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
+                    <span>Delivery Status</span>
+                </a>
             </div>
         </div>
-        @else
-        {{-- Owner / Admin / others: a single All Orders link, no dropdown --}}
-        <a href="{{ route('orders') }}"
-           class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
-            <i class="bi bi-cart3"></i> <span>All Orders</span>
-        </a>
-        @endif
-
-        {{-- ── Delivery — single page (Active + History tabs inside) ── --}}
-        <a href="{{ route('delivery') }}"
-           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-            <i class="bi bi-truck"></i> <span>Delivery</span>
-            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-        </a>
 
         <hr class="hv-sidebar-divider">
 
-        {{-- ── Insights ▾ ───────────────────────────────── --}}
         @if($canInv)
+        {{-- ── Reports (standalone, immediately after Orders) ── --}}
+        <a href="{{ route('reports') }}"
+           class="hv-nav-link {{ request()->routeIs('reports*') ? 'active' : '' }}">
+            <i class="ph ph-chart-bar"></i> <span>Reports</span>
+        </a>
+
+        {{-- ── Insights ▾ ───────────────────────────────── --}}
         @php
-            $insActive = request()->routeIs('forecast*','reports*','alerts*');
+            $insActive = request()->routeIs('forecast*','alerts*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $insActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-graph-up-arrow hv-nav-icon"></i>
+                <i class="ph ph-trend-up hv-nav-icon"></i>
                 <span>Insights</span>
                 <span class="hv-sidebar-badge" id="sidebarBadgeAlerts" style="display:none;">0</span>
-                <i class="bi {{ $insActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph {{ $insActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $insActive ? 'open' : '' }}">
                 <a href="{{ route('forecast') }}"
                    class="hv-nav-link {{ request()->routeIs('forecast*') ? 'active' : '' }}">
                     <span>Forecast & DSS</span>
-                </a>
-                <a href="{{ route('reports') }}"
-                   class="hv-nav-link {{ request()->routeIs('reports*') ? 'active' : '' }}">
-                    <span>Reports</span>
                 </a>
                 <a href="{{ route('alerts') }}"
                    class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
@@ -273,6 +280,7 @@
                 </a>
             </div>
         </div>
+
         @endif
 
         {{-- ── Management ▾ ─────────────────────────────── --}}
@@ -282,9 +290,9 @@
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $mgtActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-people hv-nav-icon"></i>
+                <i class="ph ph-users hv-nav-icon"></i>
                 <span>Management</span>
-                <i class="bi {{ $mgtActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph {{ $mgtActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $mgtActive ? 'open' : '' }}">
                 <a href="{{ route('branches') }}"
@@ -299,67 +307,75 @@
         </div>
         @endif
 
-        {{-- ── System ▾ ─────────────────────────────────── --}}
+        {{-- ── System ────────────────────────────────────── --}}
         @if($isOwner)
+        @if($isSA)
+        {{-- Super admin has multiple system tools → keep the dropdown --}}
         @php
             $sysActive = request()->routeIs('audit*','settings*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $sysActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="bi bi-gear hv-nav-icon"></i>
+                <i class="ph ph-gear hv-nav-icon"></i>
                 <span>System</span>
-                <i class="bi {{ $sysActive ? 'bi-chevron-down' : 'bi-chevron-right' }}"></i>
+                <i class="ph {{ $sysActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $sysActive ? 'open' : '' }}">
-                @if($isSA)
                 <a href="{{ route('audit') }}"
                    class="hv-nav-link {{ request()->routeIs('audit*') ? 'active' : '' }}">
                     <span>Audit Log</span>
                 </a>
-                @endif
                 <a href="{{ route('settings') }}"
                    class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
                     <span>Settings</span>
                 </a>
-                @if($isSA)
                 <a href="{{ route('settings') }}#backup"
                    class="hv-nav-link">
-                    <i class="bi bi-database-down"></i> <span>Database Backup</span>
+                    <i class="ph ph-database"></i> <span>Database Backup</span>
                 </a>
-                @endif
             </div>
         </div>
+        @else
+        {{-- Single system item → direct link, no dropdown --}}
+        <a href="{{ route('settings') }}"
+           class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
+            <i class="ph ph-gear"></i> <span>System Setting</span>
+        </a>
+        @endif
         @endif
 
         <hr class="hv-sidebar-divider">
 
-        {{-- My Profile --}}
-        <a href="{{ route('profile') }}"
-           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
-            <i class="bi bi-person-circle"></i> <span>My Profile</span>
-        </a>
 
         @endif {{-- end role sections --}}
 
     </nav>
+
+    {{-- ══ Sidebar footer: My Profile pinned at the bottom ══ --}}
+    <div class="hv-sidebar-foot">
+        <a href="{{ route('profile') }}"
+           class="hv-nav-link {{ request()->routeIs('profile*') ? 'active' : '' }}">
+            <i class="ph ph-user-circle"></i> <span>My Profile</span>
+        </a>
+    </div>
 
 </aside>
 
 <!-- ═══ BACKDROP (mobile overlay when sidebar is open) ═══ -->
 <div class="hv-backdrop" id="backdrop"></div>
 
-<!-- ═══ MAIN CONTENT AREA ════════════════════════════════ -->
-<main class="hv-main" id="mainContent">
+<!-- ═══ SHELL: red header over cream workspace ═══════════ -->
+<div class="hv-shell" id="appShell">
 
-    <!-- Top bar (inside main, not fixed) -->
-    <div class="hv-topbar">
+    <!-- Top bar on the continuous red field (above the cream panel) -->
+    <header class="hv-topbar">
         <div class="d-flex align-items-center gap-2">
             <button class="hv-hamburger-main" id="sidebarToggle" type="button"
                     aria-controls="sidebar" aria-expanded="true"
                     aria-label="Toggle navigation sidebar">
-                <i class="bi bi-list"></i>
+                <i class="ph ph-list"></i>
             </button>
-            <h5 class="mb-0 fw-bold" style="color:var(--maroon-dark);">
+            <h5 class="mb-0 fw-bold">
                 @yield('title', 'Dashboard')
             </h5>
         </div>
@@ -368,23 +384,23 @@
         <div class="d-flex align-items-center gap-3">
             @if(Auth::user()->branch)
             <span class="text-muted small d-none d-md-inline">
-                <i class="bi bi-geo-alt"></i> {{ Auth::user()->branch->branch_name }}
+                <i class="ph ph-map-pin"></i> {{ Auth::user()->branch->branch_name }}
             </span>
             @endif
 
             {{-- Notification bell --}}
             @unless(Auth::user()->isBranchStaff())
             <div class="dropdown" id="notifDropdown">
-                <button class="btn btn-link position-relative p-1" style="color:var(--ink);font-size:20px;"
+                <button class="btn btn-link position-relative p-1" style="font-size:20px;"
                         data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="notifBell">
-                    <i class="bi bi-bell"></i>
+                    <i class="ph ph-bell"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
                           style="font-size:10px;display:none;" id="notifBadge">0</span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end shadow-sm p-0" style="width:340px;max-height:420px;overflow-y:auto;">
                     <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center" style="background:var(--gold-soft);">
                         <span class="fw-bold small" style="color:var(--maroon);">
-                            <i class="bi bi-bell me-1"></i> Notifications
+                            <i class="ph ph-bell me-1"></i> Notifications
                         </span>
                         <span class="text-muted" style="font-size:11px;" id="notifTotal"></span>
                     </div>
@@ -393,7 +409,7 @@
                     </div>
                     <div class="px-3 py-2 border-top text-center">
                         <a href="{{ route('alerts') }}" class="text-decoration-none small" style="color:var(--maroon);">
-                            View All Alerts <i class="bi bi-arrow-right"></i>
+                            View All Alerts <i class="ph ph-arrow-right"></i>
                         </a>
                     </div>
                 </div>
@@ -406,7 +422,7 @@
                         <img src="{{ asset(Auth::user()->profile_photo) }}" alt="Profile" class="hv-topbar-avatar">
                     @else
                         <div class="hv-topbar-avatar-placeholder">
-                            <i class="bi bi-person-fill"></i>
+                            <i class="ph-fill ph-user"></i>
                         </div>
                     @endif
                     <span class="d-none d-sm-inline">{{ Auth::user()->full_name }}</span>
@@ -425,24 +441,27 @@
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{{ route('profile') }}">
-                        <i class="bi bi-person-gear me-1"></i> My Profile
+                        <i class="ph ph-user-gear me-1"></i> My Profile
                     </a></li>
                     <li><a class="dropdown-item" href="{{ route('profile') }}#security">
-                        <i class="bi bi-shield-lock me-1"></i> Account Security
+                        <i class="ph ph-shield-check me-1"></i> Account Security
                     </a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <form method="POST" action="{{ route('logout') }}" data-confirm="Log out of Hidden Vietnam?">
                             @csrf
                             <button type="submit" class="dropdown-item text-danger">
-                                <i class="bi bi-box-arrow-right me-1"></i> Logout
+                                <i class="ph ph-sign-out me-1"></i> Logout
                             </button>
                         </form>
                     </li>
                 </ul>
             </div>
         </div>
-    </div>
+    </header>
+
+    <!-- ═══ CREAM WORKSPACE PANEL ════════════════════════ -->
+    <main class="hv-main" id="mainContent">
 
     <!-- Flash messages (success/error after redirect) -->
     @if(session('success'))
@@ -462,7 +481,9 @@
     @yield('content')
 
     <!-- end of page content -->
-</main>
+    </main>
+
+</div><!-- /.hv-shell -->
 
 <!-- ═══ SCRIPTS ══════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -539,20 +560,20 @@ function toggleNav(btn) {
     if (HVSidebar.isDesktop() && document.body.classList.contains('sidebar-collapsed')) {
         HVSidebar.expandDesktop();
         var sub = btn.nextElementSibling;
-        var chevron = btn.querySelector('.bi-chevron-down, .bi-chevron-right');
+        var chevron = btn.querySelector('.ph-caret-down, .ph-caret-right');
         if (!sub.classList.contains('open')) {
             sub.classList.add('open');
-            if (chevron) { chevron.classList.add('bi-chevron-down'); chevron.classList.remove('bi-chevron-right'); }
+            if (chevron) { chevron.classList.add('ph-caret-down'); chevron.classList.remove('ph-caret-right'); }
         }
         return;
     }
     var sub = btn.nextElementSibling;
-    var chevron = btn.querySelector('.bi-chevron-down, .bi-chevron-right');
+    var chevron = btn.querySelector('.ph-caret-down, .ph-caret-right');
     var isOpen = sub.classList.contains('open');
     sub.classList.toggle('open');
     if (chevron) {
-        chevron.classList.toggle('bi-chevron-down', !isOpen);
-        chevron.classList.toggle('bi-chevron-right', isOpen);
+        chevron.classList.toggle('ph-caret-down', !isOpen);
+        chevron.classList.toggle('ph-caret-right', isOpen);
     }
 }
 </script>
@@ -572,9 +593,9 @@ function toggleNav(btn) {
     function notificationId(n) { return n.id || n.type + ':' + n.message; }
 
     var sevIcons = {
-        critical: { icon: 'bi-exclamation-circle-fill', color: 'var(--danger)' },
-        warning:  { icon: 'bi-exclamation-triangle-fill', color: '#E6A800' },
-        info:     { icon: 'bi-info-circle-fill', color: '#2C6E8F' }
+        critical: { icon: 'ph-warning-circle', color: 'var(--danger)' },
+        warning:  { icon: 'ph-warning', color: '#E6A800' },
+        info:     { icon: 'ph-info', color: '#2C6E8F' }
     };
 
     function fetchNotifs() {
@@ -596,14 +617,14 @@ function toggleNav(btn) {
 
             // Dropdown list
             if (data.items.length === 0) {
-                list.innerHTML = '<div class="text-center text-muted small py-4"><i class="bi bi-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>All clear!</div>';
+                list.innerHTML = '<div class="text-center text-muted small py-4"><i class="ph ph-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>All clear!</div>';
             } else {
                 var html = '';
                 data.items.forEach(function(n) {
                     var s = sevIcons[n.severity] || sevIcons.info;
                     var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
                     html += '<a href="' + n.link + '" class="hv-notif-item">'
-                        + '<i class="bi ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
+                        + '<i class="ph ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
                         + '<div class="hv-notif-text">'
                         + '<div>' + escHtml(n.message) + '</div>'
                         + '<div class="hv-notif-time">' + escHtml(n.context) + ' &middot; ' + escHtml(n.time) + '</div>'
@@ -638,7 +659,7 @@ function toggleNav(btn) {
         var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
         var toast = document.createElement('div');
         toast.className = 'hv-toast severity-' + n.severity;
-        toast.innerHTML = '<i class="bi ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
+        toast.innerHTML = '<i class="ph ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
             + '<div class="hv-toast-body">'
             + '<div class="hv-toast-title" style="color:' + s.color + ';">' + typeLabel + '</div>'
             + '<div class="hv-toast-msg">' + escHtml(n.message) + '</div>'
@@ -713,6 +734,84 @@ function toggleNav(btn) {
         if (!el || el.tagName === 'FORM' || el.type === 'submit') return;
         if (!window.confirm(el.getAttribute('data-confirm'))) { e.preventDefault(); e.stopImmediatePropagation(); }
     }, true);
+})();
+
+/* ── Same-page printing via a hidden iframe (never a new tab) ──────────
+   hvPrintLabelsUrl(url): load a same-origin label page, wait for its QR
+   images, then open the print dialog over the current page. The current
+   page, filters, and inputs stay intact. Printing never POSTs, so it
+   cannot release stock or change order status. */
+window.hvPrintLabelsUrl = function (url) {
+    var old = document.getElementById('hvLabelFrame');
+    if (old) { old.remove(); }
+    var f = document.createElement('iframe');
+    f.id = 'hvLabelFrame';
+    f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0;';
+    f.src = url;
+    var done = false;
+    function cleanup() { setTimeout(function () { f.remove(); }, 200); }
+    f.onload = function () {
+        var win = f.contentWindow, doc;
+        try { doc = win.document; } catch (e) { alert('Could not open the labels for printing.'); f.remove(); return; }
+        win.onafterprint = cleanup;
+        var tries = 0;
+        (function waitForQr() {
+            tries++;
+            var imgs = doc.querySelectorAll('.qrimg img, .qrimg svg, img');
+            var ready = imgs.length > 0 && Array.prototype.every.call(doc.images, function (im) { return im.complete; });
+            if (done) { return; }
+            if (ready || tries > 40) {           // ~6s max, then print anyway
+                done = true;
+                try { win.focus(); win.print(); } catch (e) { alert('Printing was blocked by the browser.'); f.remove(); }
+            } else {
+                setTimeout(waitForQr, 150);
+            }
+        })();
+    };
+    f.onerror = function () { alert('Could not load the labels to print.'); f.remove(); };
+    document.body.appendChild(f);
+};
+
+/* hvPrintNodes(html): print caller-built label markup (already-rendered QR
+   SVG, no external assets) in the same hidden-iframe way. */
+window.hvPrintNodes = function (bodyHtml, css) {
+    var old = document.getElementById('hvNodesFrame');
+    if (old) { old.remove(); }
+    var f = document.createElement('iframe');
+    f.id = 'hvNodesFrame';
+    f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0;';
+    document.body.appendChild(f);
+    var d = f.contentWindow.document;
+    d.open();
+    d.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>' + (css || '') + '</style></head><body>' + bodyHtml + '</body></html>');
+    d.close();
+    var win = f.contentWindow;
+    win.onafterprint = function () { setTimeout(function () { f.remove(); }, 200); };
+    setTimeout(function () { try { win.focus(); win.print(); } catch (e) { alert('Printing was blocked by the browser.'); f.remove(); } }, 150);
+};
+</script>
+<script>
+/* Remove the auth transition overlay once the destination is usable, and clear
+   the one-time flag so ordinary page visits never show it again. */
+(function () {
+    function hide(fade) {
+        var o = document.getElementById('hvAuthLoading');
+        try { sessionStorage.removeItem('hv-signing-in'); } catch (e) {}
+        if (!o || o.hidden) { return; }
+        if (fade) {
+            o.classList.add('is-fading');
+            setTimeout(function () { o.hidden = true; o.setAttribute('aria-hidden', 'true'); o.classList.remove('is-fading'); }, 320);
+        } else {
+            o.hidden = true; o.setAttribute('aria-hidden', 'true'); o.classList.remove('is-fading');
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { hide(true); });
+    } else {
+        hide(true);
+    }
+    // bfcache restore must never leave the overlay stuck.
+    window.addEventListener('pageshow', function (e) { if (e.persisted) { hide(false); } });
 })();
 </script>
 @stack('scripts')

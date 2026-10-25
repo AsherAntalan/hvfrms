@@ -16,7 +16,7 @@
         @csrf
         <input type="hidden" name="post_action" value="resolve_all">
         <button type="submit" class="btn btn-sm btn-outline-success">
-            <i class="bi bi-check-all me-1"></i> Resolve All
+            <i class="ph ph-checks me-1"></i> Resolve All
         </button>
     </form>
     @endif
@@ -24,7 +24,7 @@
 
 @if($countCritical > 0)
 <div class="alert alert-danger py-2 small mb-3">
-    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+    <i class="ph-fill ph-warning me-1"></i>
     <strong>{{ $countCritical }}</strong> critical alert(s) require immediate attention.
 </div>
 @endif
@@ -70,7 +70,7 @@
         </div>
         <div class="col-md-3">
             <button type="submit" class="btn btn-maroon btn-sm">
-                <i class="bi bi-funnel me-1"></i> Filter
+                <i class="ph ph-funnel me-1"></i> Filter
             </button>
         </div>
         <div class="col-md-3 text-end">
@@ -82,13 +82,13 @@
 <!-- Alerts List -->
 @if($alerts->isEmpty())
     <div class="hv-card p-4 text-center text-muted">
-        <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
+        <i class="ph ph-bell-slash fs-3 d-block mb-2"></i>
         No alerts found matching your filters.
     </div>
 @else
     @foreach($alerts as $a)
         @php
-            $tb = $typeBadges[$a->alert_type] ?? ['hv-badge-info', 'bi-info-circle', $a->alert_type];
+            $tb = $typeBadges[$a->alert_type] ?? ['hv-badge-info', 'ph-info', $a->alert_type];
             $sb = $sevBadges[$a->severity] ?? 'hv-badge-info';
         @endphp
         <div class="hv-card p-3 mb-2 {{ $a->is_resolved ? 'opacity-50' : '' }}"
@@ -97,16 +97,16 @@
                 <div class="flex-grow-1">
                     <div class="d-flex gap-2 align-items-center mb-1 flex-wrap">
                         <span class="hv-badge {{ $tb[0] }}">
-                            <i class="bi {{ $tb[1] }} me-1"></i>{{ $tb[2] }}
+                            <i class="ph {{ $tb[1] }} me-1"></i>{{ $tb[2] }}
                         </span>
                         <span class="hv-badge {{ $sb }}">{{ ucfirst($a->severity) }}</span>
                         @if($a->branch)
                             <span class="hv-badge" style="background:rgba(92,16,16,0.1);color:var(--maroon-dark);font-size:11px;">
-                                <i class="bi bi-geo-alt me-1"></i>{{ $a->branch->branch_name }}
+                                <i class="ph ph-map-pin me-1"></i>{{ $a->branch->branch_name }}
                             </span>
                         @endif
                         @if($a->is_resolved)
-                            <span class="hv-badge hv-badge-success"><i class="bi bi-check-lg me-1"></i>Resolved</span>
+                            <span class="hv-badge hv-badge-success"><i class="ph ph-check me-1"></i>Resolved</span>
                         @endif
                     </div>
                     <p class="mb-1 small">{{ $a->message }}</p>
@@ -124,7 +124,7 @@
                         <input type="hidden" name="post_action" value="resolve">
                         <input type="hidden" name="resolve_id" value="{{ $a->id }}">
                         <button type="submit" class="btn btn-sm btn-outline-success" title="Mark as resolved">
-                            <i class="bi bi-check-lg"></i> Resolve
+                            <i class="ph ph-check"></i> Resolve
                         </button>
                     </form>
                 </div>

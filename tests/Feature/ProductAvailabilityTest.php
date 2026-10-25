@@ -173,7 +173,7 @@ class ProductAvailabilityTest extends TestCase
         $this->item();
 
         $this->actingAs($manager)->get('/products')->assertOk()
-            ->assertSee('Overall Products')
+            ->assertSee('Commissary Products')
             ->assertSee('Mark Buns unavailable for orders')
             ->assertSee('async function toggleProduct', false)
             ->assertDontSee('Add Product')

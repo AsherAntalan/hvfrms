@@ -95,7 +95,9 @@ class BranchInventoryOverviewTest extends TestCase
         $this->assertSame(1, $xpath->query('.//tr[contains(@class,"row-active")]', $detail)->length);
         $this->assertSame(0, $xpath->query('.//button[contains(@onclick,"openAdjustModal") or contains(@onclick,"voidBatch")]', $detail)->length);
         $expired = $xpath->query('//div[@id="inventory-expired-branch-'.$w['silang']->id.'"]')->item(0);
-        $this->assertSame(0, $xpath->query('.//button[contains(@onclick,"disposeBatch")]', $expired)->length);
+        // Owner/Admin may dispose or archive expired stock at any branch from the
+        // monitor (expired cleanup), while batch edit/void stays main-branch only.
+        $this->assertGreaterThanOrEqual(1, $xpath->query('.//button[contains(@onclick,"disposeBatch")]', $expired)->length);
         $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'adjust_batch', 'batch_id' => StockBatch::where('branch_id', $w['silang']->id)->first()->id, 'quantity_left' => 20])->assertStatus(422);
     }
 

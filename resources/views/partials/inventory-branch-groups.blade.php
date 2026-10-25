@@ -7,14 +7,14 @@
 <div class="hv-inv-bar">
     <label class="visually-hidden" for="inventoryBranchSearch-{{ $kind }}">Search {{ $labels[$kind] }} by branch or product</label>
     <div class="hv-inv-search">
-        <i class="bi bi-search" aria-hidden="true"></i>
+        <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
         <input id="inventoryBranchSearch-{{ $kind }}" type="search" data-kind="{{ $kind }}" oninput="filterInventoryBranches(this)"
                placeholder="Search branches{{ $kind === 'orders' ? ' or order #' : ' or products' }}…">
     </div>
     <span class="hv-inv-count">{{ $branchSummaries->count() }} branches · select one to expand {{ strtolower($labels[$kind]) }}</span>
 </div>
 <div class="table-responsive">
-<table class="table align-middle mb-0 inventory-branch-table hv-inv" data-kind="{{ $kind }}">
+<table class="table align-middle mb-0 inventory-branch-table hv-inv" id="invTable-{{ $kind }}" data-kind="{{ $kind }}">
     <thead><tr>
         <th class="ps-3">Branch</th>
         <th class="text-end hv-inv-numcol">{{ $countHead[$kind] }}</th>
@@ -39,7 +39,7 @@
             data-bs-toggle="collapse" data-bs-target="#{{ $detailId }}" aria-controls="{{ $detailId }}" aria-expanded="false" role="button" tabindex="0">
             <td class="ps-3">
                 <span class="hv-inv-branch">
-                    <i class="bi bi-chevron-right hv-inv-chev" aria-hidden="true"></i>
+                    <i class="ph ph-caret-right hv-inv-chev" aria-hidden="true"></i>
                     <span class="hv-inv-name">{{ $branch->branch_name }}</span>
                 </span>
                 <span class="hv-inv-type {{ $isSource ? 'is-source' : '' }}">{{ $typeLabel }}</span>@unless($branch->is_active)<span class="hv-inv-type is-off">Inactive</span>@endunless
@@ -51,13 +51,13 @@
                     <span class="hv-inv-value {{ $records->count() ? '' : 'is-zero' }}">₱{{ number_format($records->sum(fn($order)=>$order->fulfilled_amount ?? $order->total_amount),2) }}</span>
                 @else
                     <span class="hv-inv-qty {{ $hasData ? '' : 'is-zero' }}">{{ $summary[$kind.'_quantities'] }}</span>
-                    @if($kind === 'active' && $summary['low_stock'])<span class="hv-inv-low"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>{{ $summary['low_stock'] }} low-stock</span>@endif
+                    @if($kind === 'active' && $summary['low_stock'])<span class="hv-inv-low"><i class="ph-fill ph-warning" aria-hidden="true"></i>{{ $summary['low_stock'] }} low-stock</span>@endif
                 @endif
             </td>
-            <td class="text-end pe-3"><span class="hv-inv-view">View<i class="bi bi-chevron-right" aria-hidden="true"></i></span></td>
+            <td class="text-end pe-3"><span class="hv-inv-view">View<i class="ph ph-caret-right" aria-hidden="true"></i></span></td>
         </tr>
         <tr class="inventory-detail-row hv-inv-detail"><td colspan="5" class="p-0 border-0">
-            <div class="collapse" id="{{ $detailId }}">
+            <div class="collapse" id="{{ $detailId }}" data-bs-parent="#invTable-{{ $kind }}">
                 <div class="hv-inv-panel">
                     <h6 class="hv-inv-panel-title">{{ $branch->branch_name }} <span>— {{ $labels[$kind] }}</span></h6>
                     @php
@@ -68,7 +68,7 @@
                     @endphp
                     @include('partials.inventory-'.$kind.'-table', [
                         'activeBatches'=>$summary['active'],'expiredBatches'=>$summary['expired'],'pendingOrders'=>$summary['orders'],'disposalRecords'=>$summary['disposal'],
-                        'canEditBatches'=>$canEditBatches && $ownsBranch,
+                        'canEditBatches'=>$canEditBatches && (int)$branch->id === (int)$mainBid,
                         'canManageProducts'=>$canManageProducts && (int)$branch->id === (int)$mainBid,
                         'canDisposeBatches'=>($canDisposeBatches ?? false) && $ownsBranch,
                         'canArchiveBatches'=>($canArchiveBatches ?? false) && $ownsBranch,

@@ -26,6 +26,54 @@ class WarehouseController extends Controller
 {
     public function index(Request $request)
     {
+        return view('warehouse.index', $this->warehouseData($request));
+    }
+
+    /**
+     * JSON partial refresh for the inventory tabs. Re-runs the same data build
+     * as index() and returns server-rendered tab bodies plus fresh counts, so
+     * mutations update in place without a full-page reload.
+     */
+    public function panel(Request $request): JsonResponse
+    {
+        $data = $this->warehouseData($request);
+        $grouped = $data['monitorAllBranches'];
+
+        $render = function (string $kind) use ($grouped, $data): string {
+            if ($grouped) {
+                return view('partials.inventory-branch-groups', array_merge($data, ['kind' => $kind]))->render();
+            }
+
+            return view('partials.inventory-'.$kind.'-table', $data)->render();
+        };
+
+        return response()->json([
+            'ok' => true,
+            'html' => [
+                'active' => $render('active'),
+                'expired' => $render('expired'),
+                'disposal' => $render('disposal'),
+                'orders' => $data['isWarehouseStaff'] ? null : $render('orders'),
+            ],
+            'counts' => [
+                'active' => $data['activeBatches']->count(),
+                'expired' => $data['expiredBatches']->count(),
+                'disposal' => $data['disposalRecords']->count(),
+                'orders' => $data['pendingOrders']->count(),
+                'totalStock' => $data['totalStock'],
+                'productCount' => $data['productCount'],
+                'lowStockCount' => $data['lowStockCount'],
+            ],
+        ]);
+    }
+
+    /**
+     * Build the full inventory-monitor view data (shared by index() and panel()).
+     *
+     * @return array<string, mixed>
+     */
+    protected function warehouseData(Request $request): array
+    {
         $user = Auth::user();
         $mainBranch = Branch::commissary();
         $mainBid = (int) ($mainBranch?->id ?? 0);
@@ -72,7 +120,15 @@ class WarehouseController extends Controller
             ->leftJoin('stock_batches as sb', 'sb.id', '=', 'st.batch_id')->whereIn('st.type', ['expired', 'damaged', 'adjustment'])->where('st.quantity', '<', 0)
             ->when(! $monitorAllBranches, fn ($query) => $query->where('st.branch_id', $mainBid)->limit(50))
             ->select('st.id', 'st.branch_id', 'b.branch_name', 'st.item_id', 'i.item_name', 'i.unit', 'st.type', 'st.quantity', 'st.reason', 'st.remarks',
-                'st.created_at', 'u.full_name as performed_by_name', 'sb.qr_code as batch_qr', 'sb.expiry_date as batch_expiry')->orderByDesc('st.created_at')->get();
+                'st.created_at', 'u.full_name as performed_by_name', 'sb.id as batch_id', 'sb.qr_code as batch_qr', 'sb.expiry_date as batch_expiry')->orderByDesc('st.created_at')->get();
+        // Hide disposal rows whose batch has been archived (30-day retention),
+        // mirroring the Expired list, so archiving removes them here too. Rows
+        // with no linked batch are never archived and always remain visible.
+        if (! empty($archivedBatchIds)) {
+            $disposalRecords = $disposalRecords->reject(
+                fn ($record) => $record->batch_id !== null && in_array((int) $record->batch_id, $archivedBatchIds, true)
+            )->values();
+        }
         // The Commissary is a make-to-order production source, not a stock-holding
         // branch — exclude it from the inventory monitor so it never shows as a row.
         $inventoryBranches = Branch::query()->where('branch_type', '!=', 'commissary')
@@ -102,9 +158,9 @@ class WarehouseController extends Controller
         $canDisposeBatches = true;
         $canArchiveBatches = $user->canManageInventory();
 
-        return view('warehouse.index', compact('products', 'categories', 'allItems', 'items', 'activeBatches', 'expiredBatches', 'pendingOrders', 'orderItems', 'disposalRecords',
+        return compact('products', 'categories', 'allItems', 'items', 'activeBatches', 'expiredBatches', 'pendingOrders', 'orderItems', 'disposalRecords',
             'totalStock', 'productCount', 'lowStockCount', 'mainBid', 'isWarehouseStaff', 'isWarehouseAdmin', 'canManageProducts', 'canManageAvailability', 'canEditBatches',
-            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'monitorAllBranches', 'branchSummaries', 'scopeLabel'));
+            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'monitorAllBranches', 'branchSummaries', 'scopeLabel');
     }
 
     public function products(): View
@@ -262,7 +318,7 @@ class WarehouseController extends Controller
         }
 
         $batchId = (int) $request->input('batch_id', 0);
-        $newQty = (int) $request->input('quantity_left', 0);
+        $newQty = (int) $request->input('new_quantity', $request->input('quantity_left', 0));
         $reason = trim($request->input('reason', 'Physical Count Correction'));
         $remarks = trim($request->input('remarks', ''));
 

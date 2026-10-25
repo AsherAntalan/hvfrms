@@ -44,11 +44,11 @@ class ForecastController extends Controller
 
         // Trend badge mapping
         $trendBadges = [
-            'rising' => ['hv-badge-success',   'bi-graph-up-arrow',   'Rising'],
-            'falling' => ['hv-badge-danger',    'bi-graph-down-arrow', 'Falling'],
-            'stable' => ['hv-badge-info',      'bi-dash-lg',          'Stable'],
-            'flat' => ['hv-badge-warning',   'bi-dash',             'No Activity'],
-            'insufficient' => ['hv-badge-secondary', 'bi-question-circle',  'Insufficient Data'],
+            'rising' => ['hv-badge-success',   'ph-trend-up',   'Rising'],
+            'falling' => ['hv-badge-danger',    'ph-trend-down', 'Falling'],
+            'stable' => ['hv-badge-info',      'ph-minus',          'Stable'],
+            'flat' => ['hv-badge-warning',   'ph-minus',             'No Activity'],
+            'insufficient' => ['hv-badge-secondary', 'ph-question',  'Insufficient Data'],
         ];
 
         // Stats for summary cards

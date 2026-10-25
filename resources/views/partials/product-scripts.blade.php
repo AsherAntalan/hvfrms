@@ -1,4 +1,21 @@
+@push('styles')
+<style>
+.hv-wh-toasts{ position:fixed; right:16px; bottom:16px; z-index:1090; display:flex; flex-direction:column;
+  gap:8px; max-width:360px; pointer-events:none; }
+.hv-wh-toast{ pointer-events:auto; display:flex; align-items:flex-start; gap:.5rem; background:#fff;
+  border:1px solid var(--border); border-left:4px solid var(--maroon); border-radius:10px; padding:.6rem .8rem;
+  font-size:13px; color:var(--ink); box-shadow:0 10px 26px -14px rgba(60,8,8,.45); }
+.hv-wh-toast.is-success{ border-left-color:var(--success); }
+.hv-wh-toast.is-error{ border-left-color:var(--danger); }
+.hv-wh-toast i[class*="ph-"]{ font-size:16px; }
+.hv-wh-toast.is-success i{ color:var(--success); }
+.hv-wh-toast.is-error i{ color:var(--danger); }
+.hv-wh-toast.is-info i{ color:var(--maroon); }
+</style>
+@endpush
+
 @push('scripts')
+<div class="hv-wh-toasts" id="catalogToasts" aria-live="polite" aria-atomic="true"></div>
 <script>
 const API = '{{ route("warehouse.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
@@ -16,7 +33,41 @@ async function postAPI(fields) {
         method: 'POST', body: fd,
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF }
     });
+    if (res.status === 419) { throw { handled: true, message: 'Your session expired. Please refresh the page and sign in again.' }; }
+    if (res.status === 401 || res.status === 403) {
+        var b = await res.json().catch(function () { return {}; });
+        throw { handled: true, message: b.error || 'You are not authorized to perform this action.' };
+    }
     return res.json();
+}
+
+function catalogToast(type, msg) {
+    var box = document.getElementById('catalogToasts');
+    if (!box) { if (type === 'error') { alert(msg); } return; }
+    var icon = type === 'success' ? 'ph-check-circle' : (type === 'error' ? 'ph-warning-circle' : 'ph-info');
+    var el = document.createElement('div');
+    el.className = 'hv-wh-toast is-' + type;
+    el.innerHTML = '<i class="ph ' + icon + '"></i><div class="flex-fill">' + String(msg).replace(/</g, '&lt;') + '</div>'
+        + '<button type="button" class="btn-close btn-close-sm ms-1" aria-label="Dismiss"></button>';
+    el.querySelector('.btn-close').addEventListener('click', function () { el.remove(); });
+    box.appendChild(el);
+    if (type !== 'error') { setTimeout(function () { el.remove(); }, 4000); }
+}
+
+// Re-fetch the catalog table from the server and swap in place (no page reload),
+// preserving the search box, filters, and scroll position.
+async function refreshCatalog() {
+    var scrollY = window.scrollY;
+    var res = await fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) { throw new Error('http'); }
+    var html = await res.text();
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var fresh = doc.getElementById('productCatalogBody');
+    var target = document.getElementById('productCatalogBody');
+    if (!fresh || !target) { throw new Error('missing'); }
+    target.innerHTML = fresh.innerHTML;
+    if (typeof filterProducts === 'function') { filterProducts(); }
+    window.scrollTo(0, scrollY);
 }
 
 // -- Products --
@@ -28,7 +79,7 @@ function openProductModal(data) {
     document.getElementById('p_reorder_level').value = 10;
 
     if (data) {
-        title.innerHTML = '<i class="bi bi-pencil me-1"></i> Edit Product';
+        title.innerHTML = '<i class="ph ph-pencil-simple me-1"></i> Edit Product';
         document.getElementById('p_id').value              = data.id;
         document.getElementById('p_item_name').value       = data.item_name;
         document.getElementById('p_category_id').value     = data.category_id || '';
@@ -39,7 +90,7 @@ function openProductModal(data) {
         document.getElementById('p_shelf_life_days').value = (data.shelf_life_days != null && data.shelf_life_days !== '') ? data.shelf_life_days : '';
         document.getElementById('p_remarks').value         = data.remarks || '';
     } else {
-        title.innerHTML = '<i class="bi bi-box-seam me-1"></i> Add Product';
+        title.innerHTML = '<i class="ph ph-package me-1"></i> Add Product';
         document.getElementById('p_id').value = '';
     }
     productModal.show();
@@ -61,14 +112,19 @@ async function saveProduct(e) {
             method: 'POST', body: data,
             headers: { 'X-CSRF-TOKEN': CSRF, 'X-Requested-With': 'XMLHttpRequest' }
         });
+        if (res.status === 419) { catalogToast('error', 'Your session expired. Please refresh the page.'); return; }
         var json = await res.json();
-        if (json.ok) { productModal.hide(); location.reload(); }
-        else { alert(json.error || 'Something went wrong.'); }
+        if (json.ok) {
+            productModal.hide();
+            catalogToast('success', json.message || 'Product saved.');
+            try { await refreshCatalog(); }
+            catch (e2) { catalogToast('error', 'Saved, but the list could not refresh. Please reload the page.'); }
+        } else { catalogToast('error', json.error || 'Something went wrong.'); }
     } catch (err) {
-        alert('Network error.');
+        catalogToast('error', 'Network error. Please try again.');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save';
+        btn.innerHTML = '<i class="ph ph-check me-1"></i> Save';
     }
 }
 
@@ -81,9 +137,12 @@ async function toggleProduct(id, newStatus) {
 
     try {
         var r = await postAPI({ action: 'toggle_product', id: id, is_active: newStatus });
-        if (r.ok) { location.reload(); }
-        else { alert(r.error || 'Something went wrong.'); }
-    } catch (err) { alert('Network error.'); }
+        if (r.ok) {
+            catalogToast('success', r.message || (newStatus ? 'Product marked available.' : 'Product marked unavailable.'));
+            try { await refreshCatalog(); }
+            catch (e2) { catalogToast('error', 'Saved, but the list could not refresh. Please reload the page.'); }
+        } else { catalogToast('error', r.error || 'Something went wrong.'); }
+    } catch (err) { catalogToast('error', err.handled ? err.message : 'Network error. Please try again.'); }
 }
 @endif
 

@@ -91,11 +91,11 @@ class AlertController extends Controller
         $countCritical = $alerts->where('is_resolved', false)->where('severity', 'critical')->count();
 
         $typeBadges = [
-            'low_stock' => ['hv-badge-warning', 'bi-exclamation-triangle', 'Low Stock'],
-            'expiring_soon' => ['hv-badge-warning', 'bi-clock-history',        'Expiring Soon'],
-            'expired' => ['hv-badge-danger',  'bi-x-octagon',            'Expired'],
-            'unusual_sales' => ['hv-badge-info',    'bi-activity',             'Unusual Sales'],
-            'operational' => ['hv-badge-info',    'bi-gear',                 'Operational'],
+            'low_stock' => ['hv-badge-warning', 'ph-warning', 'Low Stock'],
+            'expiring_soon' => ['hv-badge-warning', 'ph-clock-counter-clockwise',        'Expiring Soon'],
+            'expired' => ['hv-badge-danger',  'ph-x-circle',            'Expired'],
+            'unusual_sales' => ['hv-badge-info',    'ph-pulse',             'Unusual Sales'],
+            'operational' => ['hv-badge-info',    'ph-gear',                 'Operational'],
         ];
 
         $sevBadges = [

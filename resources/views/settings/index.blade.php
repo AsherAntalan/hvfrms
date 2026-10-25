@@ -12,7 +12,7 @@
 
             {{-- App Name --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="bi bi-shop me-1"></i>General</h6>
+                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-storefront me-1"></i>General</h6>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Application Name</label>
                     <input type="text" class="form-control" name="app_name"
@@ -23,7 +23,7 @@
 
             {{-- Forecast Settings --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="bi bi-graph-up-arrow me-1"></i>Forecast & DSS</h6>
+                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-trend-up me-1"></i>Forecast & DSS</h6>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Forecast Weeks</label>
@@ -42,7 +42,7 @@
 
             {{-- Alert Settings --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="bi bi-bell me-1"></i>Alert Thresholds</h6>
+                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-bell me-1"></i>Alert Thresholds</h6>
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Unusual Sales (σ)</label>
@@ -72,7 +72,7 @@
             </div>
 
             <button type="submit" class="btn btn-maroon">
-                <i class="bi bi-check-lg me-1"></i> Save Settings
+                <i class="ph ph-check me-1"></i> Save Settings
             </button>
         </form>
     </div>
@@ -80,16 +80,16 @@
     <div class="col-lg-4">
         @if(auth()->user()?->role?->role_name === 'super_admin')
         <div class="hv-card p-3 mb-3" id="backup">
-            <h6 style="color:var(--maroon);" class="mb-3"><i class="bi bi-database-down me-1"></i>Database Backup</h6>
+            <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-database me-1"></i>Database Backup</h6>
             <p class="small text-muted mb-3">Create a timestamped MySQL database backup. Backups are stored securely on the server.</p>
             <form method="POST" action="{{ route('backup') }}">
                 @csrf
-                <button type="submit" class="btn btn-maroon w-100" onclick="this.disabled=true;this.innerHTML='<i class=\'bi bi-hourglass-split me-1\'></i>Creating backup...';this.form.submit();">
-                    <i class="bi bi-download me-1"></i> Create Backup Now
+                <button type="submit" class="btn btn-maroon w-100" onclick="this.disabled=true;this.innerHTML='<i class=\'ph ph-hourglass me-1\'></i>Creating backup...';this.form.submit();">
+                    <i class="ph ph-download-simple me-1"></i> Create Backup Now
                 </button>
             </form>
             <div class="small text-muted mt-2">
-                <i class="bi bi-shield-lock me-1"></i> Super Admin only. Backups saved to <code>storage/app/backups/</code>
+                <i class="ph ph-shield-check me-1"></i> Super Admin only. Backups saved to <code>storage/app/backups/</code>
             </div>
         </div>
         @endif
@@ -117,18 +117,6 @@
             </form>
         </div>
 
-        <div class="hv-card p-3">
-            <h6 style="color:var(--maroon);" class="mb-2"><i class="bi bi-info-circle me-1"></i>About</h6>
-            <div class="small text-muted">
-                <p><strong>Hidden Vietnam FRMS</strong></p>
-                <p>Franchise Restaurant Management System with inventory tracking, FIFO stock management, ordering, and decision support.</p>
-                <hr>
-                <p class="mb-1"><strong>Version:</strong> 1.0.0</p>
-                <p class="mb-1"><strong>Stack:</strong> Laravel 12 + MySQL + Bootstrap 5</p>
-                <p class="mb-1"><strong>Database:</strong> hidden_vietnam</p>
-                <p class="mb-0"><strong>Timezone:</strong> Asia/Manila (UTC+8)</p>
-            </div>
-        </div>
     </div>
 </div>
 

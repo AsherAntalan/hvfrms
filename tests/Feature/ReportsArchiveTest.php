@@ -12,10 +12,11 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 /**
- * Real-route coverage for the forecast fix, Order Summary rendering,
+ * Real-route coverage for the forecast fix, Commissary Sales rendering,
  * expired-batch archive lifecycle, 30-day retention, and branch-scoped modal
  * data. Routes are exercised through the full middleware stack (APP_URL is set
  * to http://localhost in phpunit.xml so routing matches at the app root).
@@ -100,10 +101,9 @@ class ReportsArchiveTest extends TestCase
 
     // ───────────────────────── order summary ─────────────────────────
 
-    public function test_order_summary_shows_zero_not_literal_mdash(): void
+    public function test_reports_show_commissary_sales_without_literal_mdash(): void
     {
         [$owner, $main] = $this->owner();
-        // One pending order → row renders with pending=1 and zeros elsewhere.
         DB::table('orders')->insert([
             'order_number' => 'ORD-1', 'branch_id' => $main->id, 'ordered_by' => $owner->id,
             'status' => 'pending', 'total_amount' => 0, 'created_at' => now(), 'updated_at' => now(),
@@ -116,9 +116,57 @@ class ReportsArchiveTest extends TestCase
         // Legitimate '&mdash;' entities elsewhere are fine; the double-escaped
         // form must be absent.
         $res->assertDontSee('&amp;mdash;', false);
-        $res->assertSee('Order Summary');
-        // Zero-count cells render a real 0 (the pending order row has zeros).
+        $res->assertSee('Commissary Sales')->assertDontSee('Order Summary');
         $res->assertSee('Tanza');
+    }
+
+    #[TestWith(['owner', 'sales'])]
+    #[TestWith(['admin', 'sales'])]
+    #[TestWith(['commissary_manager', 'sales'])]
+    #[TestWith(['owner', 'orders'])]
+    public function test_sales_report_keeps_the_selected_period_without_counting_unverified_closed_orders(string $roleName, string $tab): void
+    {
+        $this->freezeTime();
+        $branch = $this->branch('Tanza', 'main');
+        $user = $this->user($this->role($roleName), $branch, 'sales@test.com');
+        DB::table('orders')->insert([
+            'order_number' => 'ORD-UNVERIFIED', 'branch_id' => $branch->id, 'ordered_by' => $user->id,
+            'status' => 'settled', 'total_amount' => 9876.54, 'fulfilled_amount' => 9876.54,
+            'payment_reference' => '1234567890123', 'payment_submitted_at' => now(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get('/reports?tab='.$tab.'&from=2026-10-01&to=2026-10-25');
+
+        $response->assertOk()->assertViewHas('salesAuthorized', true)
+            ->assertViewHas('dateFrom', '2026-10-01')->assertViewHas('dateTo', '2026-10-25')
+            ->assertSee('Commissary Sales')->assertSee('Unavailable')
+            ->assertSee('class="tab-pane fade show active" id="tabSales"', false)
+            ->assertSee('Verified payment data is not available yet.')
+            ->assertDontSee('Order Summary')->assertDontSee('9,876.54')->assertDontSee('9876.54');
+    }
+
+    #[TestWith(['sales'])]
+    #[TestWith(['orders'])]
+    public function test_sales_export_reports_unavailable_instead_of_exporting_order_values(string $type): void
+    {
+        [$owner] = $this->owner();
+
+        $this->actingAs($owner)->get('/reports/export?type='.$type)
+            ->assertStatus(409)->assertSee('verified payment data is not available');
+    }
+
+    public function test_branch_manager_cannot_open_or_export_commissary_sales(): void
+    {
+        $branch = $this->branch('Silang');
+        $user = $this->user($this->role('branch_manager'), $branch, 'manager@test.com');
+
+        $this->actingAs($user)->get('/reports')->assertOk()
+            ->assertViewHas('salesAuthorized', false)->assertDontSee('id="tabSales"', false);
+        $this->get('/reports?tab=sales')->assertForbidden();
+        $this->get('/reports?tab=orders')->assertForbidden();
+        $this->get('/reports/export?type=sales')->assertForbidden();
+        $this->get('/reports/export?type=orders')->assertForbidden();
     }
 
     // ───────────────────────── archive lifecycle ─────────────────────────
@@ -251,6 +299,84 @@ class ReportsArchiveTest extends TestCase
         $res->assertOk();
         $res->assertSee('BranchBProduct');
         $res->assertDontSee('MainSecretProduct');
+    }
+
+    public function test_commissary_is_excluded_from_branch_reports_options_and_aggregates(): void
+    {
+        [$owner, $main] = $this->owner();
+        $commissary = $this->branch('CommissaryHub', 'commissary');
+        $franchise = $this->branch('Franchise B');
+        $commItem = $this->item('CommissaryOnlyProduct');
+        $franItem = $this->item('FranchiseOnlyProduct');
+        $this->batch($commItem->id, $commissary->id, 20, now()->addMonths(3)->toDateString());
+        $this->batch($franItem->id, $franchise->id, 8, now()->addMonths(3)->toDateString());
+
+        // All-Branches view: franchise stock shows; Commissary stock and the
+        // Commissary branch option are excluded entirely.
+        $res = $this->actingAs($owner)->get('/reports?branch=0');
+        $res->assertOk();
+        $res->assertSee('FranchiseOnlyProduct');
+        $res->assertDontSee('CommissaryOnlyProduct');
+        $res->assertDontSee('CommissaryHub');
+    }
+
+    public function test_direct_commissary_branch_param_is_ignored(): void
+    {
+        [$owner, $main] = $this->owner();
+        $commissary = $this->branch('CommissaryHub', 'commissary');
+        $franchise = $this->branch('Franchise B');
+        $commItem = $this->item('CommissaryOnlyProduct');
+        $franItem = $this->item('FranchiseOnlyProduct');
+        $this->batch($commItem->id, $commissary->id, 20, now()->addMonths(3)->toDateString());
+        $this->batch($franItem->id, $franchise->id, 8, now()->addMonths(3)->toDateString());
+
+        // A manually edited ?branch=<commissary id> must not bypass the filter.
+        $res = $this->actingAs($owner)->get('/reports?branch='.$commissary->id);
+        $res->assertOk();
+        $res->assertViewHas('branchFilter', 0);
+        $res->assertSee('FranchiseOnlyProduct');
+        $res->assertDontSee('CommissaryOnlyProduct');
+    }
+
+    public function test_reports_default_to_this_month_and_detect_presets(): void
+    {
+        [$owner, $main] = $this->owner();
+
+        // No dates supplied → default to This Month (first of month → today), preset=month.
+        $res = $this->actingAs($owner)->get('/reports');
+        $res->assertOk();
+        $res->assertViewHas('dateFrom', now('Asia/Manila')->startOfMonth()->format('Y-m-d'));
+        $res->assertViewHas('dateTo', now('Asia/Manila')->format('Y-m-d'));
+        $res->assertViewHas('datePreset', 'month');
+
+        // Explicit single-day range is preserved and recognised as "today".
+        $today = now('Asia/Manila')->format('Y-m-d');
+        $res2 = $this->actingAs($owner)->get('/reports?from='.$today.'&to='.$today);
+        $res2->assertViewHas('dateFrom', $today);
+        $res2->assertViewHas('dateTo', $today);
+        $res2->assertViewHas('datePreset', 'today');
+
+        // Reversed explicit range is swapped (inclusive, still shows) → custom.
+        $from = now('Asia/Manila')->subDays(3)->format('Y-m-d');
+        $res3 = $this->actingAs($owner)->get('/reports?from='.$today.'&to='.$from);
+        $res3->assertViewHas('dateFrom', $from);
+        $res3->assertViewHas('dateTo', $today);
+    }
+
+    public function test_commissary_scoped_user_sees_no_branch_rows_not_all_branches(): void
+    {
+        [$owner, $main] = $this->owner();
+        $commissary = $this->branch('CommissaryHub', 'commissary');
+        $franchise = $this->branch('Franchise B');
+        $cm = $this->user($this->role('commissary_manager'), $commissary, 'cm@test.com');
+        $franItem = $this->item('FranchiseOnlyProduct');
+        $this->batch($franItem->id, $franchise->id, 8, now()->addMonths(3)->toDateString());
+
+        // Scope resolves to the Commissary (excluded) → empty, never all branches.
+        $res = $this->actingAs($cm)->get('/reports');
+        $res->assertOk();
+        $res->assertViewHas('branchFilter', $commissary->id);
+        $res->assertDontSee('FranchiseOnlyProduct');
     }
 
     // ───────────────────────── forecast branch scoping ─────────────────────────

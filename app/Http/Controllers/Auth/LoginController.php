@@ -39,34 +39,37 @@ class LoginController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email'    => 'required|email',
+            'login' => 'required|string',
             'password' => 'required|string',
         ]);
 
-        $email    = $request->input('email');
+        $login = $request->input('login');
         $password = $request->input('password');
 
-        // Find user by email with their role
-        $user = User::with('role')->where('email', $email)->first();
+        // Find user by username or email with their role
+        $user = User::with('role')
+            ->where('username', $login)
+            ->orWhere('email', $login)
+            ->first();
 
         // --- User not found ---
         if (! $user) {
             return back()
-                ->withInput($request->only('email'))
-                ->with('error', 'Invalid email or password.');
+                ->withInput($request->only('login'))
+                ->with('error', 'Invalid username or password.');
         }
 
         // --- Account not active ---
         if ($user->status !== 'active') {
             return back()
-                ->withInput($request->only('email'))
+                ->withInput($request->only('login'))
                 ->with('error', 'Your account is not active yet. Please wait for approval.');
         }
 
         // --- Account locked ---
         if ($user->locked_until && $user->locked_until->isFuture()) {
             return back()
-                ->withInput($request->only('email'))
+                ->withInput($request->only('login'))
                 ->with('error', 'Account locked due to failed attempts. Try again later.');
         }
 
@@ -77,20 +80,20 @@ class LoginController extends Controller
 
             if ($attempts >= self::MAX_LOGIN_ATTEMPTS) {
                 $lockedUntil = now()->addMinutes(self::LOCKOUT_MINUTES);
-                $error = 'Account locked after ' . self::MAX_LOGIN_ATTEMPTS
-                       . ' failed attempts. Try again in ' . self::LOCKOUT_MINUTES . ' minutes.';
+                $error = 'Account locked after '.self::MAX_LOGIN_ATTEMPTS
+                       .' failed attempts. Try again in '.self::LOCKOUT_MINUTES.' minutes.';
             } else {
-                $error = 'Invalid email or password. Attempt '
-                       . $attempts . ' of ' . self::MAX_LOGIN_ATTEMPTS . '.';
+                $error = 'Invalid username or password. Attempt '
+                       .$attempts.' of '.self::MAX_LOGIN_ATTEMPTS.'.';
             }
 
             $user->update([
                 'failed_attempts' => $attempts,
-                'locked_until'    => $lockedUntil,
+                'locked_until' => $lockedUntil,
             ]);
 
             return back()
-                ->withInput($request->only('email'))
+                ->withInput($request->only('login'))
                 ->with('error', $error);
         }
 
@@ -98,7 +101,7 @@ class LoginController extends Controller
         // Reset failed attempts and lockout
         $user->update([
             'failed_attempts' => 0,
-            'locked_until'    => null,
+            'locked_until' => null,
         ]);
 
         // Log the user in and regenerate session to prevent fixation
@@ -107,10 +110,10 @@ class LoginController extends Controller
 
         // Write audit log
         AuditLog::create([
-            'user_id'    => $user->id,
-            'action'     => 'login',
+            'user_id' => $user->id,
+            'action' => 'login',
             'table_name' => 'users',
-            'record_id'  => $user->id,
+            'record_id' => $user->id,
             'ip_address' => $request->ip(),
         ]);
 

@@ -137,7 +137,7 @@ class CriticalWorkflowTest extends TestCase
         $user = $this->createUser($role, $branch, 'admin@test.com', 'password123');
 
         $response = $this->post('/login', [
-            'email' => 'admin@test.com',
+            'login' => 'admin@test.com',
             'password' => 'password123',
         ]);
 
@@ -155,7 +155,7 @@ class CriticalWorkflowTest extends TestCase
         $this->createUser($role, $branch, 'admin@test.com', 'password123');
 
         $response = $this->post('/login', [
-            'email' => 'admin@test.com',
+            'login' => 'admin@test.com',
             'password' => 'wrongpassword',
         ]);
 

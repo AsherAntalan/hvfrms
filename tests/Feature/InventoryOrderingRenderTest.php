@@ -57,7 +57,9 @@ class InventoryOrderingRenderTest extends TestCase
         $this->batch($item->id, $main->id, 11, now()->subDays(2)->toDateString());
         $this->batch($item->id, $main->id, 2, now()->addMonths(3)->toDateString(), 'damaged');
 
-        $res = $this->actingAs($owner)->get('/inventory');
+        // The Physical/Usable breakdown now lives on Overall Products (/products);
+        // /inventory for an all-branch viewer is the branch monitor.
+        $res = $this->actingAs($owner)->get('/products');
         $res->assertOk();                        // no 500 / SQL error
         $res->assertSee('Zephyr Buns');
         $res->assertSee('Physical Stock');

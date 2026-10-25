@@ -8,7 +8,7 @@
 
                 <div class="modal-header" style="background:var(--gold-soft);">
                     <h5 class="modal-title" id="productModalTitle" style="color:var(--maroon);font-weight:700;">
-                        <i class="bi bi-box-seam me-1"></i> Add Product
+                        <i class="ph ph-package me-1"></i> Add Product
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -79,7 +79,7 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-maroon" id="btnSaveProduct">
-                        <i class="bi bi-check-lg me-1"></i> Save
+                        <i class="ph ph-check me-1"></i> Save
                     </button>
                 </div>
             </form>

@@ -9,19 +9,23 @@
 @endphp
 @push('styles')
 <style>
-.production-records-toggle { color: var(--text, #292929); }
-.production-records-toggle .bi-chevron-down { transition: transform .2s ease; }
-.production-records-toggle[aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) { .production-records-toggle .bi-chevron-down { transition: none; } }
+.production-records-card { overflow: hidden; }
+.production-records-toggle { color: #fff; background: var(--maroon); font-weight: 700; border-radius: 0; }
+.production-records-toggle:hover,
+.production-records-toggle:focus-visible { color: #fff; background: var(--maroon-dark); }
+.production-records-toggle .badge { background: #fff !important; color: var(--maroon-dark) !important; }
+.production-records-toggle .ph-caret-down { color: #fff; transition: transform .2s ease; }
+.production-records-toggle[aria-expanded="true"] .ph-caret-down { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .production-records-toggle .ph-caret-down { transition: none; } }
 </style>
 @endpush
-<div class="hv-card mb-4">
+<div class="hv-card production-records-card mb-4">
     <button type="button" class="btn production-records-toggle w-100 text-start d-flex align-items-center justify-content-between gap-3 p-3"
             data-bs-toggle="collapse" data-bs-target="#productionDeliveryRecords" aria-controls="productionDeliveryRecords" aria-expanded="false">
         <span class="fw-bold">Commissary Production &amp; Delivery Records</span>
         <span class="d-flex align-items-center gap-2 flex-shrink-0">
             <span class="badge rounded-pill text-bg-light">{{ $productionShipments->count() }} records</span>
-            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            <i class="ph ph-caret-down" aria-hidden="true"></i>
         </span>
     </button>
     <div class="collapse" id="productionDeliveryRecords">

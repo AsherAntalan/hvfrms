@@ -27,7 +27,7 @@
         <a href="{{ route($chipRoute, array_merge($chipPreserve, ['branch' => $chipAllValue ?? '0'])) }}"
            class="hv-branch-chip {{ $sel === $allVal ? 'active' : '' }}"
            @if($sel === $allVal) aria-current="true" @endif>
-            <i class="bi bi-grid-3x3-gap me-1"></i>All Branches
+            <i class="ph ph-squares-four me-1"></i>All Branches
             @if($chipCounts !== null && $chipCounts->sum() > 0)
                 <span class="badge bg-secondary ms-1" style="font-size:10px;">{{ $chipCounts->sum() }}</span>
             @endif
@@ -41,8 +41,8 @@
         <a href="{{ route($chipRoute, array_merge($chipPreserve, ['branch' => $br->id])) }}"
            class="hv-branch-chip {{ $active ? 'active' : '' }}"
            @if($active) aria-current="true" @endif>
-            @if($isMain)<i class="bi bi-building-fill-gear me-1"></i>@endif
-            {{ $br->branch_name }}@if($isMain) · Main Warehouse @endif
+            @if($isMain)<i class="ph-fill ph-buildings me-1"></i>@endif
+            {{ $br->branch_name }}@if($isMain) · Main Store @endif
             @if($chipCounts !== null)
                 @php $c = $chipCounts->get($br->id, 0); @endphp
                 @if($c > 0)<span class="badge bg-secondary ms-1" style="font-size:10px;">{{ $c }}</span>@endif

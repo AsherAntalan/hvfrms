@@ -7,7 +7,7 @@
 
 {{-- Info banner --}}
 <div class="alert alert-info py-2 small mb-3">
-    <i class="bi bi-info-circle me-1"></i>
+    <i class="ph ph-info me-1"></i>
     <strong>Weighted Moving Average</strong> &mdash; Analyzes the last 8 weeks of consumption data.
     Recent weeks are weighted heavier (4&times;, 3&times;, 2&times;, 1&times;) to reflect current demand trends.
     The recommended order quantity accounts for your current stock on hand.
@@ -16,7 +16,7 @@
 {{-- Success flash --}}
 @if(session('success'))
     <div class="alert alert-success py-2 small mb-3">
-        <i class="bi bi-check-circle me-1"></i> {{ session('success') }}
+        <i class="ph ph-check-circle me-1"></i> {{ session('success') }}
     </div>
 @endif
 
@@ -54,7 +54,7 @@
         </div>
         <div class="col-md-3">
             <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="bi bi-funnel me-1"></i> Generate Forecast
+                <i class="ph ph-funnel me-1"></i> Generate Forecast
             </button>
         </div>
         <div class="col-md-5 text-end">
@@ -91,12 +91,12 @@
             @else
                 @foreach($forecasts as $fc)
                     @php
-                        $tb = $trendBadges[$fc['trend']] ?? ['hv-badge-secondary', 'bi-question-circle', 'Unknown'];
+                        $tb = $trendBadges[$fc['trend']] ?? ['hv-badge-secondary', 'ph-question', 'Unknown'];
                         $item = $fc['item'];
                         $lowStock = $fc['stock_on_hand'] > 0 && $fc['stock_on_hand'] <= ($item->reorder_level ?? 0);
                         $needOrder = $fc['recommend_qty'] > 0;
                     @endphp
-                <tr class="{{ $needOrder ? 'table-warning' : '' }}" style="cursor:pointer" onclick="let r=document.getElementById('detail-{{ $loop->index }}');r.style.display=r.style.display==='none'?'':'none';this.querySelector('.chevron').classList.toggle('bi-chevron-down');this.querySelector('.chevron').classList.toggle('bi-chevron-up');">
+                <tr class="{{ $needOrder ? 'table-warning' : '' }}" style="cursor:pointer" onclick="let r=document.getElementById('detail-{{ $loop->index }}');r.style.display=r.style.display==='none'?'':'none';this.querySelector('.chevron').classList.toggle('ph-caret-down');this.querySelector('.chevron').classList.toggle('ph-caret-up');">
                     <td class="ps-3">
                         <span class="fw-semibold">{{ $item->item_name }}</span>
                         <span class="text-muted small ms-1">({{ $item->unit }})</span>
@@ -106,7 +106,7 @@
                     <td class="text-center fw-semibold">{{ $fc['wma'] }}</td>
                     <td class="text-center">
                         <span class="hv-badge {{ $tb[0] }}">
-                            <i class="bi {{ $tb[1] }} me-1"></i>{{ $tb[2] }}
+                            <i class="ph {{ $tb[1] }} me-1"></i>{{ $tb[2] }}
                         </span>
                     </td>
                     <td class="text-center fw-bold">{{ $fc['forecast_qty'] }}</td>
@@ -120,9 +120,9 @@
                         @elseif($needOrder)
                             <span class="fw-bold text-danger fs-6">{{ $fc['recommend_qty'] }}</span>
                         @else
-                            <span class="text-success"><i class="bi bi-check-circle me-1"></i>Stocked</span>
+                            <span class="text-success"><i class="ph ph-check-circle me-1"></i>Stocked</span>
                         @endif
-                        <i class="bi bi-chevron-down chevron text-muted ms-1 small"></i>
+                        <i class="ph ph-caret-down chevron text-muted ms-1 small"></i>
                     </td>
                 </tr>
                 {{-- Expandable "Why?" detail row --}}
@@ -130,7 +130,7 @@
                     <td colspan="9" class="bg-light px-4 py-3">
                         <div class="row small">
                             <div class="col-md-6">
-                                <h6 class="mb-2" style="color:var(--maroon);"><i class="bi bi-lightbulb me-1"></i>Why this recommendation?</h6>
+                                <h6 class="mb-2" style="color:var(--maroon);"><i class="ph ph-lightbulb me-1"></i>Why this recommendation?</h6>
                                 <p class="mb-1"><strong>Historical period (8 weeks):</strong></p>
                                 <ul class="mb-2 ps-3">
                                     @foreach($fc['weekly'] as $wi => $wv)

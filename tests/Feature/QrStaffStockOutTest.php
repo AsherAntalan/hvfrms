@@ -24,7 +24,7 @@ class QrStaffStockOutTest extends TestCase
             'password_hash' => bcrypt('password'), 'role_id' => $role->id, 'branch_id' => $branch->id, 'status' => 'active']);
         $item = Item::create(['item_name' => 'Pita Bread', 'unit' => 'piece', 'price' => 12, 'is_active' => true, 'qr_code' => 'HV-ITEM-PITA']);
         $batch = StockBatch::create(['item_id' => $item->id, 'branch_id' => $branch->id, 'quantity_in' => 3, 'quantity_left' => 3,
-            'expiry_date' => now()->addDays(10), 'condition' => 'good', 'received_at' => now(), 'qr_code' => 'HV-RECEIVED-42-17-B150']);
+            'expiry_date' => now()->addDay(), 'condition' => 'good', 'received_at' => now(), 'qr_code' => 'HV-RECEIVED-42-17-B150']);
 
         return compact('branch', 'other', 'staff', 'item', 'batch');
     }
@@ -33,7 +33,7 @@ class QrStaffStockOutTest extends TestCase
     {
         $w = $this->world();
         $other = StockBatch::create(['item_id' => $w['item']->id, 'branch_id' => $w['branch']->id, 'quantity_in' => 10, 'quantity_left' => 10,
-            'expiry_date' => now()->addDay(), 'condition' => 'good', 'received_at' => now()]);
+            'expiry_date' => now()->addDays(10), 'condition' => 'good', 'received_at' => now()]);
         $this->actingAs($w['staff'])->get('/qr')->assertOk();
         $this->postJson('/qr/api', ['action' => 'lookup', 'query' => $w['batch']->qr_code])->assertOk()
             ->assertJsonPath('matched_batch.id', $w['batch']->id)->assertJsonPath('matched_batch.quantity_left', 3);

@@ -18,13 +18,17 @@ class ReportController extends Controller
 {
     /**
      * Show the reports page.
-     * Four report tabs: Stock Summary, Stock Movements, Order Summary, Expiry Report.
+     * Four report tabs: Stock Summary, Stock Movements, Commissary Sales, Expiry Report.
      */
     public function index(Request $request)
     {
         $user = Auth::user();
+        $salesAuthorized = $user->isOwner() || $user->isCommissaryManager();
+        if (in_array($request->input('tab'), ['sales', 'orders'], true)) {
+            abort_unless($salesAuthorized, 403);
+        }
 
-        [$dateFrom, $dateTo] = $this->dateRange($request);
+        [$dateFrom, $dateTo, $dateNotice, $datePreset] = $this->dateRange($request);
         $branchFilter = $this->resolveBranchFilter($request, $user);
 
         $branches = $this->authorizedBranches($user);
@@ -32,35 +36,120 @@ class ReportController extends Controller
 
         $data = $this->buildReportData($branchFilter, $dateFrom, $dateTo);
 
+        $scopeText = $branchFilter === 0
+            ? 'All operating branches'
+            : (optional($branches->firstWhere('id', $branchFilter))->branch_name ?? 'Selected branch');
+
         return view('reports.index', array_merge($data, [
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
+            'dateNotice' => $dateNotice,
+            'datePreset' => $datePreset,
+            'periodText' => $this->formatPeriod($dateFrom, $dateTo),
+            'scopeText' => $scopeText,
             'branchFilter' => $branchFilter,
             'branches' => $branches,
             'mainBranch' => $mainBranch,
             'canArchive' => $user->canManageInventory(),
             'allowAllBranches' => ! $user->isBranchScoped(),
+            'salesAuthorized' => $salesAuthorized,
         ]));
     }
 
     // ───────────────────────── helpers ─────────────────────────
 
+    /**
+     * Validated, inclusive date range in Asia/Manila business dates. With no valid
+     * dates supplied the window defaults to "This Month" (first of the month
+     * through today); explicit valid dates are preserved. A reversed range (From
+     * after To) is swapped and flagged. Returns [from, to, notice, preset] where
+     * preset is one of today|last7|month|custom for the quick-choice buttons.
+     */
     protected function dateRange(Request $request): array
     {
-        return [
-            $request->input('from', date('Y-m-d', strtotime('-30 days'))),
-            $request->input('to', date('Y-m-d')),
-        ];
+        $tz = 'Asia/Manila';
+        $monthStart = now($tz)->startOfMonth()->format('Y-m-d');
+        $today = now($tz)->format('Y-m-d');
+
+        $from = $this->validDate($request->input('from'), $monthStart);
+        $to = $this->validDate($request->input('to'), $today);
+        $notice = null;
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+            $notice = 'Date From was after Date To — the dates were swapped so results still show.';
+        }
+
+        return [$from, $to, $notice, $this->detectPreset($from, $to, $tz)];
     }
 
-    /** Resolve the requested branch, honouring branch scoping. */
+    /** Which quick-choice preset the applied range matches, else custom. */
+    private function detectPreset(string $from, string $to, string $tz): string
+    {
+        $today = now($tz)->format('Y-m-d');
+        if ($from === $today && $to === $today) {
+            return 'today';
+        }
+        if ($from === now($tz)->subDays(6)->format('Y-m-d') && $to === $today) {
+            return 'last7';
+        }
+        if ($from === now($tz)->startOfMonth()->format('Y-m-d') && $to === $today) {
+            return 'month';
+        }
+
+        return 'custom';
+    }
+
+    /** Human-readable applied period, e.g. "October 1–25, 2026". */
+    private function formatPeriod(string $from, string $to): string
+    {
+        $f = Carbon::parse($from);
+        $t = Carbon::parse($to);
+        if ($f->year === $t->year && $f->month === $t->month) {
+            return $f->format('F j').'–'.$t->format('j, Y');
+        }
+        if ($f->year === $t->year) {
+            return $f->format('M j').' – '.$t->format('M j, Y');
+        }
+
+        return $f->format('M j, Y').' – '.$t->format('M j, Y');
+    }
+
+    /** Return a valid Y-m-d string, else the given default. */
+    private function validDate($value, string $default): string
+    {
+        $value = trim((string) $value);
+        $d = \DateTime::createFromFormat('Y-m-d', $value);
+
+        return ($d && $d->format('Y-m-d') === $value) ? $value : $default;
+    }
+
+    /**
+     * Resolve the requested branch, honouring branch scoping. A non-scoped user's
+     * ?branch=… is validated against the authorized, non-Commissary, active branch
+     * set, so a manually edited URL cannot slip an excluded or unknown branch past
+     * the filter (falls back to 0 = All Branches). A branch-scoped user is always
+     * pinned to their own branch — a Commissary-scoped account therefore resolves
+     * to the Commissary (which the branch reports exclude, yielding an empty
+     * access-appropriate result) and never silently gains all-branch access.
+     */
     protected function resolveBranchFilter(Request $request, $user): int
     {
         if ($user->isBranchScoped()) {
             return (int) $user->branch_id;
         }
 
-        return (int) $request->input('branch', 0);
+        $branch = (int) $request->input('branch', 0);
+        if ($branch > 0) {
+            $valid = Branch::where('id', $branch)
+                ->where('is_active', true)
+                ->where('branch_type', '<>', 'commissary')
+                ->exists();
+            if (! $valid) {
+                $branch = 0;
+            }
+        }
+
+        return $branch;
     }
 
     protected function mainWarehouse(): ?Branch
@@ -68,10 +157,16 @@ class ReportController extends Controller
         return Branch::where('branch_type', 'main')->where('is_active', true)->orderBy('id')->first();
     }
 
-    /** Branches this user may view (own branch only when scoped). */
+    /**
+     * Branches selectable in these branch inventory reports (own branch only when
+     * scoped). The Commissary is the production/dispatch source, not a reportable
+     * branch, so it is excluded from the options everywhere.
+     */
     protected function authorizedBranches($user)
     {
-        $q = Branch::where('is_active', true)->orderBy('branch_name');
+        $q = Branch::where('is_active', true)
+            ->where('branch_type', '<>', 'commissary')
+            ->orderBy('branch_name');
         if ($user->isBranchScoped()) {
             $q->where('id', $user->branch_id);
         }
@@ -85,7 +180,7 @@ class ReportController extends Controller
      */
     protected function buildReportData(int $branchFilter, string $dateFrom, string $dateTo): array
     {
-        // ── REPORT 1: CURRENT STOCK SUMMARY (snapshot) ──
+        // Current balances, restricted to batches received during the selected period.
         $stockSql = '
             SELECT i.id, i.item_name, i.unit, i.reorder_level,
                    c.name AS category_name, c.goods_type,
@@ -97,9 +192,10 @@ class ReportController extends Controller
             LEFT JOIN categories c ON c.id = i.category_id
             CROSS JOIN branches b
             LEFT JOIN stock_batches sb ON sb.item_id = i.id AND sb.branch_id = b.id AND sb.quantity_left > 0
-            WHERE i.is_active = 1 AND b.is_active = 1
+                AND DATE(sb.received_at) BETWEEN ? AND ?
+            WHERE i.is_active = 1 AND b.is_active = 1 AND b.branch_type <> \'commissary\'
         ';
-        $stockParams = [];
+        $stockParams = [$dateFrom, $dateTo];
         if ($branchFilter > 0) {
             $stockSql .= ' AND b.id = ?';
             $stockParams[] = $branchFilter;
@@ -113,13 +209,12 @@ class ReportController extends Controller
         $moveSql = "
             SELECT i.item_name, i.unit, c.name AS category_name, b.branch_name,
                    SUM(CASE WHEN st.type = 'in' THEN st.quantity ELSE 0 END) AS total_in,
-                   SUM(CASE WHEN st.type = 'out' THEN ABS(st.quantity) ELSE 0 END) AS total_out,
-                   SUM(CASE WHEN st.type IN ('adjustment','expired','damaged') THEN ABS(st.quantity) ELSE 0 END) AS total_adj
+                   SUM(CASE WHEN st.type IN ('out','adjustment','expired','damaged') THEN ABS(st.quantity) ELSE 0 END) AS total_out
             FROM stock_transactions st
             JOIN items i ON i.id = st.item_id
             LEFT JOIN categories c ON c.id = i.category_id
             JOIN branches b ON b.id = st.branch_id
-            WHERE DATE(st.created_at) BETWEEN ? AND ?
+            WHERE DATE(st.created_at) BETWEEN ? AND ? AND b.branch_type <> 'commissary'
         ";
         $moveParams = [$dateFrom, $dateTo];
         if ($branchFilter > 0) {
@@ -145,7 +240,7 @@ class ReportController extends Controller
                    SUM(CASE WHEN o.status NOT IN ('cancelled','declined') THEN COALESCE(o.fulfilled_amount, o.total_amount) ELSE 0 END) AS total_value
             FROM orders o
             JOIN branches b ON b.id = o.branch_id
-            WHERE DATE(o.created_at) BETWEEN ? AND ?
+            WHERE DATE(o.created_at) BETWEEN ? AND ? AND b.branch_type <> 'commissary'
         ";
         $orderParams = [$dateFrom, $dateTo];
         if ($branchFilter > 0) {
@@ -164,7 +259,7 @@ class ReportController extends Controller
             $orderGrand['value'] += (float) $r->total_value;
         }
 
-        // ── REPORT 4: EXPIRY REPORT (snapshot) ──
+        // Current batch balances and statuses, restricted to the selected expiry dates.
         // days_left is computed in PHP (Asia/Manila) rather than via MySQL-only
         // DATEDIFF/CURDATE, so the report is portable and testable.
         $expirySql = '
@@ -173,9 +268,10 @@ class ReportController extends Controller
             FROM stock_batches sb
             JOIN items i ON i.id = sb.item_id
             JOIN branches b ON b.id = sb.branch_id
-            WHERE sb.quantity_left > 0 AND sb.expiry_date IS NOT NULL
+            WHERE sb.quantity_left > 0 AND sb.expiry_date IS NOT NULL AND b.branch_type <> \'commissary\'
+                AND DATE(sb.expiry_date) BETWEEN ? AND ?
         ';
-        $expiryParams = [];
+        $expiryParams = [$dateFrom, $dateTo];
         if ($branchFilter > 0) {
             $expirySql .= ' AND sb.branch_id = ?';
             $expiryParams[] = $branchFilter;
@@ -229,15 +325,25 @@ class ReportController extends Controller
         ];
     }
 
-    /** Visible archive entries scoped to a branch (0 = all authorized). */
+    /**
+     * Visible archive entries scoped to a branch (0 = all authorized). The
+     * Commissary is excluded to match the branch inventory reports it sits beside.
+     */
     protected function archiveQuery(int $branchFilter)
     {
-        $q = ExpiredBatchArchive::visible();
+        $q = ExpiredBatchArchive::visible()
+            ->whereNotIn('expired_batch_archives.branch_id', $this->commissaryBranchIds());
         if ($branchFilter > 0) {
             $q->where('branch_id', $branchFilter);
         }
 
         return $q;
+    }
+
+    /** Branch ids classified as the Commissary production/dispatch source. */
+    protected function commissaryBranchIds(): array
+    {
+        return Branch::where('branch_type', 'commissary')->pluck('id')->all();
     }
 
     // ───────────────────── archive actions ─────────────────────
@@ -341,7 +447,8 @@ class ReportController extends Controller
             ->join('stock_batches as sb', 'sb.id', '=', 'expired_batch_archives.batch_id')
             ->join('items as i', 'i.id', '=', 'sb.item_id')
             ->join('branches as b', 'b.id', '=', 'expired_batch_archives.branch_id')
-            ->leftJoin('users as u', 'u.id', '=', 'expired_batch_archives.archived_by');
+            ->leftJoin('users as u', 'u.id', '=', 'expired_batch_archives.archived_by')
+            ->where('b.branch_type', '<>', 'commissary');
 
         if ($user->isBranchScoped()) {
             $q->where('expired_batch_archives.branch_id', $user->branch_id);
@@ -436,6 +543,11 @@ class ReportController extends Controller
     {
         $user = Auth::user();
         $type = $request->input('type', 'stock');
+        if (in_array($type, ['sales', 'orders'], true)) {
+            abort_unless($user->isOwner() || $user->isCommissaryManager(), 403);
+
+            return response('Commissary Sales unavailable: verified payment data is not available. Order values and submitted payment proofs are not verified sales.', 409);
+        }
 
         [$dateFrom, $dateTo] = $this->dateRange($request);
         $branchFilter = $this->resolveBranchFilter($request, $user);
@@ -453,8 +565,9 @@ class ReportController extends Controller
                                MIN(CASE WHEN sb.quantity_left > 0 THEN sb.expiry_date END) AS nearest_expiry
                         FROM items i LEFT JOIN categories c ON c.id = i.category_id
                         CROSS JOIN branches b LEFT JOIN stock_batches sb ON sb.item_id = i.id AND sb.branch_id = b.id AND sb.quantity_left > 0
-                        WHERE i.is_active = 1 AND b.is_active = 1';
-                $params = [];
+                            AND DATE(sb.received_at) BETWEEN ? AND ?
+                        WHERE i.is_active = 1 AND b.is_active = 1 AND b.branch_type <> \'commissary\'';
+                $params = [$dateFrom, $dateTo];
                 if ($branchFilter > 0) {
                     $sql .= ' AND b.id = ?';
                     $params[] = $branchFilter;
@@ -464,13 +577,12 @@ class ReportController extends Controller
                     fputcsv($handle, [$r->item_name, $r->category_name, $r->goods_type, $r->branch_name, $r->total_qty, $r->unit, $r->reorder_level, $r->active_batches, $r->nearest_expiry]);
                 }
             } elseif ($type === 'movements') {
-                fputcsv($handle, ['Product', 'Category', 'Branch', 'Stock In', 'Stock Out', 'Adjustments', 'Net']);
+                fputcsv($handle, ['Product', 'Category', 'Branch', 'Stock In', 'Stock Out', 'Net']);
                 $sql = "SELECT i.item_name, c.name AS category_name, b.branch_name,
                                SUM(CASE WHEN st.type='in' THEN st.quantity ELSE 0 END) AS total_in,
-                               SUM(CASE WHEN st.type='out' THEN ABS(st.quantity) ELSE 0 END) AS total_out,
-                               SUM(CASE WHEN st.type IN ('adjustment','expired','damaged') THEN ABS(st.quantity) ELSE 0 END) AS total_adj
+                               SUM(CASE WHEN st.type IN ('out','adjustment','expired','damaged') THEN ABS(st.quantity) ELSE 0 END) AS total_out
                         FROM stock_transactions st JOIN items i ON i.id = st.item_id LEFT JOIN categories c ON c.id = i.category_id
-                        JOIN branches b ON b.id = st.branch_id WHERE DATE(st.created_at) BETWEEN ? AND ?";
+                        JOIN branches b ON b.id = st.branch_id WHERE DATE(st.created_at) BETWEEN ? AND ? AND b.branch_type <> 'commissary'";
                 $params = [$dateFrom, $dateTo];
                 if ($branchFilter > 0) {
                     $sql .= ' AND st.branch_id = ?';
@@ -478,37 +590,16 @@ class ReportController extends Controller
                 }
                 $sql .= ' GROUP BY i.id, b.id, i.item_name, c.name, b.branch_name ORDER BY c.name, i.item_name';
                 foreach (DB::select($sql, $params) as $r) {
-                    $net = $r->total_in - $r->total_out - $r->total_adj;
-                    fputcsv($handle, [$r->item_name, $r->category_name, $r->branch_name, $r->total_in, $r->total_out, $r->total_adj, $net]);
-                }
-            } elseif ($type === 'orders') {
-                fputcsv($handle, ['Branch', 'Total', 'Pending', 'Approved', 'Preparing', 'Delivering', 'Delivered', 'Settled', 'Cancelled', 'Declined', 'Value']);
-                $sql = "SELECT b.branch_name, COUNT(*) AS total_orders,
-                               SUM(CASE WHEN o.status='pending' THEN 1 ELSE 0 END) AS pending_count,
-                               SUM(CASE WHEN o.status='approved' THEN 1 ELSE 0 END) AS approved_count,
-                               SUM(CASE WHEN o.status='preparing' THEN 1 ELSE 0 END) AS preparing_count,
-                               SUM(CASE WHEN o.status='delivering' THEN 1 ELSE 0 END) AS delivering_count,
-                               SUM(CASE WHEN o.status='delivered' THEN 1 ELSE 0 END) AS delivered_count,
-                               SUM(CASE WHEN o.status='settled' THEN 1 ELSE 0 END) AS settled_count,
-                               SUM(CASE WHEN o.status='cancelled' THEN 1 ELSE 0 END) AS cancelled_count,
-                               SUM(CASE WHEN o.status='declined' THEN 1 ELSE 0 END) AS declined_count,
-                               SUM(CASE WHEN o.status NOT IN ('cancelled','declined') THEN COALESCE(o.fulfilled_amount, o.total_amount) ELSE 0 END) AS total_value
-                        FROM orders o JOIN branches b ON b.id = o.branch_id WHERE DATE(o.created_at) BETWEEN ? AND ?";
-                $params = [$dateFrom, $dateTo];
-                if ($branchFilter > 0) {
-                    $sql .= ' AND o.branch_id = ?';
-                    $params[] = $branchFilter;
-                }
-                $sql .= ' GROUP BY b.id, b.branch_name ORDER BY b.branch_name';
-                foreach (DB::select($sql, $params) as $r) {
-                    fputcsv($handle, [$r->branch_name, $r->total_orders, $r->pending_count, $r->approved_count, $r->preparing_count, $r->delivering_count, $r->delivered_count, $r->settled_count, $r->cancelled_count, $r->declined_count, $r->total_value]);
+                    $net = $r->total_in - $r->total_out;
+                    fputcsv($handle, [$r->item_name, $r->category_name, $r->branch_name, $r->total_in, $r->total_out, $net]);
                 }
             } elseif ($type === 'expiry') {
                 fputcsv($handle, ['Batch #', 'Product', 'Branch', 'Qty Left', 'Unit', 'Expiry Date', 'Days Left']);
                 $sql = 'SELECT sb.id AS batch_id, i.item_name, i.unit, b.branch_name, sb.quantity_left, sb.expiry_date
                         FROM stock_batches sb JOIN items i ON i.id = sb.item_id JOIN branches b ON b.id = sb.branch_id
-                        WHERE sb.quantity_left > 0 AND sb.expiry_date IS NOT NULL';
-                $params = [];
+                        WHERE sb.quantity_left > 0 AND sb.expiry_date IS NOT NULL AND b.branch_type <> \'commissary\'
+                            AND DATE(sb.expiry_date) BETWEEN ? AND ?';
+                $params = [$dateFrom, $dateTo];
                 if ($branchFilter > 0) {
                     $sql .= ' AND sb.branch_id = ?';
                     $params[] = $branchFilter;

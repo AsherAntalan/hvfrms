@@ -6,7 +6,6 @@ use App\Models\Alert;
 use App\Models\Branch;
 use App\Models\Item;
 use App\Models\Order;
-use App\Models\StockBatch;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +36,7 @@ class DashboardController extends Controller
         // Order counts by status
         $orderCountsQuery = Order::select('status', DB::raw('COUNT(*) as cnt'))
             ->whereIn('status', ['pending', 'approved', 'preparing', 'delivering']);
-        if ($isBranchScoped && !$isWarehouse) {
+        if ($isBranchScoped && ! $isWarehouse) {
             $orderCountsQuery->where('branch_id', $branchId);
         }
         $orderCounts = $orderCountsQuery->groupBy('status')->pluck('cnt', 'status');
@@ -50,7 +49,7 @@ class DashboardController extends Controller
         // Delivered today
         $deliveredTodayQuery = Order::where('status', 'delivered')
             ->whereDate('updated_at', today());
-        if ($isBranchScoped && !$isWarehouse) {
+        if ($isBranchScoped && ! $isWarehouse) {
             $deliveredTodayQuery->where('branch_id', $branchId);
         }
         $stats['delivered_today'] = $deliveredTodayQuery->count();
@@ -58,7 +57,7 @@ class DashboardController extends Controller
         // Alert counts by severity
         $alertCountsQuery = Alert::select('severity', DB::raw('COUNT(*) as cnt'))
             ->where('is_resolved', false);
-        if ($isBranchScoped && !$isWarehouse) {
+        if ($isBranchScoped && ! $isWarehouse) {
             $alertCountsQuery->where('branch_id', $branchId);
         }
         $alertCounts = $alertCountsQuery->groupBy('severity')->pluck('cnt', 'severity');
@@ -73,14 +72,29 @@ class DashboardController extends Controller
             $stats['users_disabled'] = User::where('status', 'disabled')->count();
         }
 
+        // Monthly Commissary Sales (verified payments only). This application
+        // records payment *submission* artifacts (reference, screenshot,
+        // payment_submitted_at) and an operational order status, but no payment
+        // *verification* record — there is no verified flag/amount/timestamp and
+        // no payments table. Without an authoritative verified-payment source the
+        // amount is reported as unavailable rather than fabricated or shown as
+        // ₱0.00. Visible to Owner/Admin and Commissary Admin only.
+        $salesAuthorized = $isOwner || $isWA;
+        $salesAvailable = false;
+        $salesAmount = null;
+        $salesMonthStart = now('Asia/Manila')->startOfMonth();
+        $salesMonthEnd = now('Asia/Manila')->endOfMonth();
+        $salesPeriodLabel = $salesMonthStart->format('F Y');
+        $salesRangeLabel = $salesMonthStart->format('M j').'–'.$salesMonthEnd->format('j, Y');
+
         $branchName = $user->branch ? $user->branch->branch_name : 'N/A';
 
         // Low stock count (warehouse sees main branch, others see their scope)
         $branchFilter = '';
         if ($isWarehouse) {
-            $branchFilter = 'AND b.id = ' . intval($mainBid);
+            $branchFilter = 'AND b.id = '.intval($mainBid);
         } elseif ($isBranchScoped) {
-            $branchFilter = 'AND b.id = ' . intval($branchId);
+            $branchFilter = 'AND b.id = '.intval($branchId);
         }
 
         $lowStockCount = DB::selectOne("
@@ -105,7 +119,7 @@ class DashboardController extends Controller
 
         // Expired stock count (warehouse roles)
         if ($isWarehouse || $isOwner) {
-            $expiredFilter = $isWarehouse ? 'AND sb.branch_id = ' . intval($mainBid) : '';
+            $expiredFilter = $isWarehouse ? 'AND sb.branch_id = '.intval($mainBid) : '';
             $expiredCount = DB::selectOne("
                 SELECT COUNT(*) AS cnt FROM stock_batches sb
                 WHERE sb.quantity_left > 0
@@ -119,7 +133,7 @@ class DashboardController extends Controller
         // Recent orders
         $recentOrdersQuery = Order::select('orders.*', 'branches.branch_name')
             ->join('branches', 'branches.id', '=', 'orders.branch_id');
-        if ($isBranchScoped && !$isWarehouse) {
+        if ($isBranchScoped && ! $isWarehouse) {
             $recentOrdersQuery->where('orders.branch_id', $branchId);
         }
         $recentOrders = $recentOrdersQuery
@@ -135,7 +149,7 @@ class DashboardController extends Controller
                 ->leftJoin('branches', 'branches.id', '=', 'alerts.branch_id')
                 ->where('alerts.is_resolved', false);
 
-            if ($isBranchScoped && !$isWarehouse) {
+            if ($isBranchScoped && ! $isWarehouse) {
                 $alertQuery->where('alerts.branch_id', $branchId);
             }
 
@@ -180,6 +194,11 @@ class DashboardController extends Controller
             'recentOrders',
             'activeAlerts',
             'lowStock',
+            'salesAuthorized',
+            'salesAvailable',
+            'salesAmount',
+            'salesPeriodLabel',
+            'salesRangeLabel',
         ));
     }
 }

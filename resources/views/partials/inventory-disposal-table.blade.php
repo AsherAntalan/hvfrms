@@ -11,6 +11,7 @@
                             <th>Batch Expiry</th>
                             <th>Performed By</th>
                             <th>Date</th>
+                            <th class="text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -40,9 +41,19 @@
                             </td>
                             <td class="small">{{ $d->performed_by_name ?? '—' }}</td>
                             <td class="small text-muted">{{ \Carbon\Carbon::parse($d->created_at)->format('M j, g:i A') }}</td>
+                            <td class="text-center">
+                                @if(($canArchiveBatches ?? false) && !empty($d->batch_id) && $d->batch_expiry && $d->batch_expiry < date('Y-m-d'))
+                                    <button class="btn btn-sm btn-outline-secondary" title="Archive this expired batch record"
+                                            onclick="archiveBatch({{ (int)$d->batch_id }}, '{{ e($d->item_name) }}')">
+                                        <i class="ph ph-archive-box me-1"></i> Archive
+                                    </button>
+                                @else
+                                    <span class="text-muted">&mdash;</span>
+                                @endif
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="text-center text-muted py-4">No disposal records yet.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">No disposal records yet.</td></tr>
                     @endforelse
                     </tbody>
                 </table>

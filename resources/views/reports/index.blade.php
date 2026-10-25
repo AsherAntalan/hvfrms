@@ -4,90 +4,107 @@
 
 @section('content')
 
+@php
+    $requestedReport = request('tab') === 'orders' ? 'sales' : request('tab');
+    $activeReport = in_array($requestedReport, ['stock', 'movements', 'sales', 'expiry'], true) ? $requestedReport : 'stock';
+    $dateFilterDescriptions = [
+        'stock' => 'Filter by batch received date. Quantities are the current remaining stock of those batches; older batches are excluded.',
+        'movements' => 'Filter by stock movement date. Only transactions within the selected dates are included.',
+        'sales' => 'Selected sales period. Only verified payments qualify as Commissary Sales; verified payment data is currently unavailable.',
+        'expiry' => 'Filter by batch expiry date. Remaining quantities and expiry status are current.',
+    ];
+@endphp
 
-<!-- Filter Bar -->
+@if(!empty($dateNotice))
+<div class="alert alert-warning py-2 small mb-3"><i class="ph ph-warning me-1"></i>{{ $dateNotice }}</div>
+@endif
+
+<!-- One filter panel; the selected report determines which date is filtered. -->
 <div class="hv-card p-3 mb-3">
     <form method="GET" action="{{ route('reports') }}" class="row g-2 align-items-end">
-        <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Date From</label>
-            <input type="date" class="form-control form-control-sm" name="from" value="{{ $dateFrom }}">
+        <input type="hidden" name="tab" id="reportTabField" value="{{ $activeReport }}">
+        <div class="col-12" id="presetRow">
+            <label class="form-label small fw-semibold mb-1 d-block">Period</label>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Date presets">
+                <button type="button" class="btn hv-preset {{ $datePreset === 'today' ? 'active' : '' }}" data-preset="today">Today</button>
+                <button type="button" class="btn hv-preset {{ $datePreset === 'last7' ? 'active' : '' }}" data-preset="last7">Last 7 Days</button>
+                <button type="button" class="btn hv-preset {{ $datePreset === 'month' ? 'active' : '' }}" data-preset="month">This Month</button>
+                <button type="button" class="btn hv-preset {{ $datePreset === 'custom' ? 'active' : '' }}" data-preset="custom">Custom Range</button>
+            </div>
         </div>
-        <div class="col-md-3">
-            <label class="form-label small fw-semibold mb-1">Date To</label>
-            <input type="date" class="form-control form-control-sm" name="to" value="{{ $dateTo }}">
+        <div class="col-md-3" id="colDateFrom">
+            <label class="form-label small fw-semibold mb-1" for="reportDateFrom">Date From</label>
+            <input type="date" class="form-control form-control-sm" id="reportDateFrom" name="from" value="{{ $dateFrom }}" aria-describedby="reportDateHelp">
+        </div>
+        <div class="col-md-3" id="colDateTo">
+            <label class="form-label small fw-semibold mb-1" for="reportDateTo">Date To</label>
+            <input type="date" class="form-control form-control-sm" id="reportDateTo" name="to" value="{{ $dateTo }}" aria-describedby="reportDateHelp">
         </div>
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Branch</label>
-            <select class="form-select form-select-sm" name="branch">
-                @unless(auth()->user()->isBranchScoped())
-                <option value="0">All Branches</option>
-                @endunless
-                @foreach($branches as $br)
-                    <option value="{{ $br->id }}" {{ $branchFilter === $br->id ? 'selected' : '' }}>
-                        {{ $br->branch_name }}
-                    </option>
-                @endforeach
-            </select>
+            @if(auth()->user()->isBranchScoped())
+                {{-- Branch Managers are pinned to their own branch (enforced server-side) --}}
+                <div class="form-control form-control-sm bg-light" style="pointer-events:none;">
+                    {{ $branches->firstWhere('id', $branchFilter)->branch_name ?? ($branches->first()->branch_name ?? 'Your branch') }}
+                </div>
+            @else
+                <select class="form-select form-select-sm" name="branch">
+                    <option value="0" {{ $branchFilter === 0 ? 'selected' : '' }}>All Branches</option>
+                    @foreach($branches as $br)
+                        <option value="{{ $br->id }}" {{ $branchFilter === $br->id ? 'selected' : '' }}>
+                            {{ $br->branch_name }}
+                        </option>
+                    @endforeach
+                </select>
+            @endif
         </div>
         <div class="col-md-3">
             <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="bi bi-funnel me-1"></i> Apply Filters
+                <i class="ph ph-funnel me-1"></i> Apply Filters
             </button>
+        </div>
+        <div class="col-12">
+            <p class="small text-muted mb-0" id="reportDateHelp" role="status" aria-live="polite">{{ $dateFilterDescriptions[$activeReport] }}</p>
         </div>
     </form>
 </div>
 
-<!-- Branch filter chips (inline navigation) + Archives -->
-<div class="hv-card p-3 mb-3 no-print">
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-        <div class="flex-grow-1">
-            @include('partials.branch-chips', [
-                'chipRoute'    => 'reports',
-                'chipBranches' => $branches,
-                'chipSelected' => $branchFilter,
-                'chipAllValue' => 0,
-                'chipAllowAll' => $allowAllBranches,
-                'chipMainId'   => $mainBranch?->id,
-                'chipPreserve' => ['from' => $dateFrom, 'to' => $dateTo],
-            ])
-        </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="archivesBtn" data-branch="{{ $branchFilter }}">
-            <i class="bi bi-archive me-1"></i> Archives
-            <span class="badge bg-secondary ms-1" id="archivesCount">{{ $archiveCount }}</span>
-        </button>
-    </div>
-</div>
-
-<!-- Export buttons -->
+<!-- Grouped actions: Archives · Export CSV · Print -->
 <div class="d-flex justify-content-end gap-2 mb-3 no-print">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="archivesBtn" data-branch="{{ $branchFilter }}">
+        <i class="ph ph-archive-box me-1"></i> Archives
+        <span class="badge bg-secondary ms-1" id="archivesCount">{{ $archiveCount }}</span>
+    </button>
     <a id="csvExportBtn" href="#" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-filetype-csv me-1"></i> Export CSV
+        <i class="ph ph-file-csv me-1"></i> Export CSV
     </a>
     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
-        <i class="bi bi-printer me-1"></i> Print
+        <i class="ph ph-printer me-1"></i> Print
     </button>
 </div>
 
 <!-- Report Tabs -->
 <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabStock">
-            <i class="bi bi-boxes me-1"></i> Stock Summary
+        <button class="nav-link {{ $activeReport === 'stock' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabStock">
+            <i class="ph ph-stack me-1"></i> Stock Summary
         </button>
     </li>
     <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabMovement">
-            <i class="bi bi-arrow-left-right me-1"></i> Stock Movements
+        <button class="nav-link {{ $activeReport === 'movements' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabMovement">
+            <i class="ph ph-arrows-left-right me-1"></i> Stock Movements
         </button>
     </li>
+    @if($salesAuthorized)
     <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabOrders">
-            <i class="bi bi-cart3 me-1"></i> Order Summary
+        <button class="nav-link {{ $activeReport === 'sales' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabSales">
+            <i class="ph ph-currency-circle-dollar me-1"></i> Commissary Sales
         </button>
     </li>
+    @endif
     <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExpiry">
-            <i class="bi bi-calendar-x me-1"></i> Expiry Report
+        <button class="nav-link {{ $activeReport === 'expiry' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabExpiry">
+            <i class="ph ph-calendar-x me-1"></i> Expiry Report
             @if(count($expired) > 0)
                 <span class="badge bg-danger ms-1">{{ count($expired) }}</span>
             @endif
@@ -98,9 +115,9 @@
 <div class="tab-content">
 
 <!-- Tab 1: Stock Summary -->
-<div class="tab-pane fade show active" id="tabStock">
+<div class="tab-pane fade {{ $activeReport === 'stock' ? 'show active' : '' }}" id="tabStock">
     <div class="small text-muted mb-2" id="stockScopeLabel">
-        Current on-hand snapshot &mdash; <strong>{{ $branchFilter === 0 ? 'All Branches' : ($branches->firstWhere('id', $branchFilter)->branch_name ?? 'Selected branch') }}</strong>.
+        <strong>{{ $scopeText }}</strong> &middot; Batches received: {{ $periodText }} &middot; Remaining stock as of {{ now('Asia/Manila')->format('M j, Y g:i A') }}
     </div>
     <div class="hv-card p-0">
         <div class="table-responsive">
@@ -119,7 +136,7 @@
                 </thead>
                 <tbody id="stockSummaryBody">
                 @if(empty($stockRows))
-                    <tr><td colspan="8" class="text-center text-muted py-4">No stock data found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-4">No remaining stock from batches received in this period.</td></tr>
                 @else
                     @foreach($stockRows as $sr)
                         @php
@@ -156,13 +173,13 @@
             </table>
         </div>
     </div>
-    <div class="text-muted small mt-2">{{ count($stockRows) }} row(s) with stock on hand.</div>
+    <div class="text-muted small mt-2">{{ count($stockRows) }} row(s) with remaining stock from batches received in this period.</div>
 </div>
 
 <!-- Tab 2: Stock Movements -->
-<div class="tab-pane fade" id="tabMovement">
+<div class="tab-pane fade {{ $activeReport === 'movements' ? 'show active' : '' }}" id="tabMovement">
     <div class="text-muted small mb-2">
-        Showing movements from <strong>{{ $dateFrom }}</strong> to <strong>{{ $dateTo }}</strong>.
+        <strong>{{ $scopeText }}</strong> &middot; {{ $periodText }}
     </div>
     <div class="hv-card p-0">
         <div class="table-responsive">
@@ -174,42 +191,39 @@
                         <th>Branch</th>
                         <th class="text-center text-success">Stock In</th>
                         <th class="text-center text-danger">Stock Out</th>
-                        <th class="text-center text-warning">Adjustments</th>
                         <th class="text-center">Net</th>
                     </tr>
                 </thead>
                 <tbody>
                 @if(empty($moveRows))
-                    <tr><td colspan="7" class="text-center text-muted py-4">No movements in this period.</td></tr>
+                    <tr><td colspan="6" class="text-center text-muted py-4">No movements in this period.</td></tr>
                 @else
                     @php
-                        $grandIn = $grandOut = $grandAdj = 0;
+                        $grandIn = $grandOut = 0;
                     @endphp
                     @foreach($moveRows as $mr)
                         @php
-                            $net = $mr->total_in - $mr->total_out - $mr->total_adj;
+                            // Stock Out already includes sales/usage, disposals, expiry and damage.
+                            $net = $mr->total_in - $mr->total_out;
                             $grandIn  += $mr->total_in;
                             $grandOut += $mr->total_out;
-                            $grandAdj += $mr->total_adj;
                         @endphp
                         <tr>
                             <td class="ps-3 fw-semibold">{{ $mr->item_name }}</td>
                             <td class="small">{{ $mr->category_name ?? '—' }}</td>
                             <td class="small">{{ $mr->branch_name }}</td>
                             <td class="text-center text-success fw-semibold">+{{ (int)$mr->total_in }}</td>
-                            <td class="text-center text-danger fw-semibold">-{{ (int)$mr->total_out }}</td>
-                            <td class="text-center text-warning fw-semibold">-{{ (int)$mr->total_adj }}</td>
+                            <td class="text-center text-danger fw-semibold">{{ (int)$mr->total_out ? '-'.(int)$mr->total_out : 0 }}</td>
                             <td class="text-center fw-bold {{ $net >= 0 ? 'text-success' : 'text-danger' }}">
                                 {{ $net >= 0 ? '+' : '' }}{{ $net }}
                             </td>
                         </tr>
                     @endforeach
-                    @php $gn = $grandIn - $grandOut - $grandAdj; @endphp
+                    @php $gn = $grandIn - $grandOut; @endphp
                     <tr class="table-light fw-bold">
                         <td class="ps-3" colspan="3">GRAND TOTAL</td>
                         <td class="text-center text-success">+{{ $grandIn }}</td>
-                        <td class="text-center text-danger">-{{ $grandOut }}</td>
-                        <td class="text-center text-warning">-{{ $grandAdj }}</td>
+                        <td class="text-center text-danger">{{ $grandOut ? '-'.$grandOut : 0 }}</td>
                         <td class="text-center">{{ ($gn >= 0 ? '+' : '') . $gn }}</td>
                     </tr>
                 @endif
@@ -218,102 +232,52 @@
         </div>
     </div>
     <div class="text-muted small mt-2">{{ count($moveRows) }} row(s).</div>
+    <div class="alert alert-light border small py-2 mt-2 mb-0">
+        <strong>How to read this:</strong> <strong>Net = Stock In − Stock Out.</strong>
+        Stock Out includes everything that left the shelf — sales/usage, disposals, expiry, and damage.
+        A <span class="text-danger">negative Net</span> means stock decreased over the period;
+        a <span class="text-success">positive Net</span> means it grew.
+    </div>
 </div>
 
-<!-- Tab 3: Order Summary -->
-<div class="tab-pane fade" id="tabOrders">
+<!-- Tab 3: Commissary Sales -->
+@if($salesAuthorized)
+<div class="tab-pane fade {{ $activeReport === 'sales' ? 'show active' : '' }}" id="tabSales">
     <div class="text-muted small mb-2">
-        Orders from <strong>{{ $dateFrom }}</strong> to <strong>{{ $dateTo }}</strong>.
+        <strong>{{ $scopeText }}</strong> &middot; {{ $periodText }}
     </div>
 
-    <!-- Summary cards -->
-    <div class="row g-2 mb-3">
-        <div class="col-6 col-md-3">
-            <div class="hv-card p-3 text-center">
-                <div class="text-muted small">Total Orders</div>
-                <div class="fs-4 fw-bold" style="color:var(--maroon);">{{ $orderGrand['orders'] }}</div>
-            </div>
+    <div class="hv-card p-4">
+        <h6 class="mb-2">Commissary Sales</h6>
+        <p class="text-muted small mb-3">Verified payments received from branch orders for the selected period.</p>
+        <div class="hv-summary-metric p-0 mb-3">
+            <div class="hv-summary-label">Verified Sales</div>
+            <div class="hv-summary-value" style="color:var(--maroon);">Unavailable</div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="hv-card p-3 text-center">
-                <div class="text-muted small">Pending</div>
-                <div class="fs-4 fw-bold text-warning">{{ $orderGrand['pending'] }}</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="hv-card p-3 text-center">
-                <div class="text-muted small">Settled</div>
-                <div class="fs-4 fw-bold text-success">{{ $orderGrand['settled'] }}</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="hv-card p-3 text-center">
-                <div class="text-muted small">Total Value</div>
-                <div class="fs-4 fw-bold" style="color:var(--maroon);">&#8369;{{ number_format($orderGrand['value'], 2) }}</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="hv-card p-0">
-        <div class="table-responsive">
-            <table class="table table-hover table-sm align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="ps-3">Branch</th>
-                        <th class="text-center">Total</th>
-                        <th class="text-center">Pending</th>
-                        <th class="text-center">Approved</th>
-                        <th class="text-center">Preparing</th>
-                        <th class="text-center">Delivering</th>
-                        <th class="text-center">Delivered</th>
-                        <th class="text-center">Settled</th>
-                        <th class="text-center">Cancelled</th>
-                        <th class="text-center">Declined</th>
-                        <th class="text-end">Value (excl. cancelled/declined)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @if(empty($orderRows))
-                    <tr><td colspan="11" class="text-center text-muted py-4">No orders in this period.</td></tr>
-                @else
-                    @foreach($orderRows as $or)
-                    <tr>
-                        <td class="ps-3 fw-semibold">{{ $or->branch_name }}</td>
-                        <td class="text-center fw-bold">{{ $or->total_orders }}</td>
-                        <td class="text-center">{{ (int) ($or->pending_count ?? 0) }}</td>
-                        <td class="text-center">{{ (int) ($or->approved_count ?? 0) }}</td>
-                        <td class="text-center">{{ (int) ($or->preparing_count ?? 0) }}</td>
-                        <td class="text-center">{{ (int) ($or->delivering_count ?? 0) }}</td>
-                        <td class="text-center">{{ (int) ($or->delivered_count ?? 0) }}</td>
-                        <td class="text-center text-success fw-semibold">{{ (int) ($or->settled_count ?? 0) }}</td>
-                        <td class="text-center text-danger">{{ (int) ($or->cancelled_count ?? 0) }}</td>
-                        <td class="text-center text-danger">{{ (int) ($or->declined_count ?? 0) }}</td>
-                        <td class="text-end fw-semibold">&#8369;{{ number_format($or->total_value, 2) }}</td>
-                    </tr>
-                    @endforeach
-                @endif
-                </tbody>
-            </table>
-        </div>
+        <p class="small mb-0" role="status">Verified payment data is not available yet. Submitted payment proofs and received/closed orders are excluded until payment verification is recorded. Sales totals and CSV export will be available once that data is available.</p>
     </div>
 </div>
+@endif
 
 <!-- Tab 4: Expiry Report -->
-<div class="tab-pane fade" id="tabExpiry">
+<div class="tab-pane fade {{ $activeReport === 'expiry' ? 'show active' : '' }}" id="tabExpiry">
+    <div class="small text-muted mb-2">
+        <strong>{{ $scopeText }}</strong> &middot; Expiry dates: {{ $periodText }} &middot; Status as of {{ now('Asia/Manila')->format('M j, Y g:i A') }}
+    </div>
     <!-- Expired -->
     @if(!empty($expired))
     <div class="alert alert-danger py-2 small mb-3">
-        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <i class="ph-fill ph-warning me-1"></i>
         <strong>{{ count($expired) }}</strong> expired batch(es) pending review.
         @if($expiredArchivedCount > 0)
             <span class="text-muted">({{ $expiredArchivedCount }} archived, hidden here but still physically expired.)</span>
         @endif
         <span class="d-block mt-1 text-muted">
-            Total physical expired stock remaining: <strong>{{ $expiredPhysicalQty }}</strong> unit(s). Archiving is a reporting action — it does not dispose stock or change balances.
+            Physical expired stock remaining within this expiry range: <strong>{{ $expiredPhysicalQty }}</strong> unit(s). Archiving is a reporting action — it does not dispose stock or change balances.
         </span>
     </div>
 
-    <h6 class="text-danger mb-2"><i class="bi bi-x-circle me-1"></i>Expired Batches <span class="text-muted fw-normal small">(pending review)</span></h6>
+    <h6 class="text-danger mb-2"><i class="ph ph-x-circle me-1"></i>Expired Batches <span class="text-muted fw-normal small">(pending review)</span></h6>
     <div class="hv-card p-0 mb-3">
         <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0" id="expiredTable">
@@ -345,7 +309,7 @@
                                     data-branch="{{ $e->branch_name }}"
                                     data-qty="{{ $e->quantity_left }} {{ $e->unit }}"
                                     data-expiry="{{ date('M j, Y', strtotime($e->expiry_date)) }}">
-                                <i class="bi bi-archive me-1"></i>Archive
+                                <i class="ph ph-archive-box me-1"></i>Archive
                             </button>
                         </td>
                         @endif
@@ -359,7 +323,7 @@
 
     <!-- Expiring soon -->
     @if(!empty($expiringSoon))
-    <h6 class="text-warning mb-2"><i class="bi bi-exclamation-circle me-1"></i>Expiring Within 7 Days</h6>
+    <h6 class="text-warning mb-2"><i class="ph ph-warning-circle me-1"></i>Expiring Within 7 Days</h6>
     <div class="hv-card p-0 mb-3">
         <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0">
@@ -392,14 +356,14 @@
 
     @if(empty($expired) && empty($expiringSoon))
         <div class="hv-card p-4 text-center text-muted">
-            <i class="bi bi-check-circle fs-3 text-success d-block mb-2"></i>
-            No expired or soon-to-expire batches found. All stock is within shelf life.
+            <i class="ph ph-check-circle fs-3 text-success d-block mb-2"></i>
+            No expired or soon-to-expire batches found within the selected expiry dates.
         </div>
     @endif
 
     <!-- All batches with expiry -->
     @if(!empty($expiryOk))
-    <h6 class="text-muted mb-2 mt-3"><i class="bi bi-calendar-check me-1"></i>All Other Batches with Expiry ({{ count($expiryOk) }})</h6>
+    <h6 class="text-muted mb-2 mt-3"><i class="ph ph-calendar-check me-1"></i>All Other Batches with Expiry ({{ count($expiryOk) }})</h6>
     <div class="hv-card p-0">
         <div class="table-responsive">
             <table class="table table-hover table-sm align-middle mb-0">
@@ -438,7 +402,7 @@
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header" style="background:var(--maroon-dark);color:#fff;">
-        <h5 class="modal-title" id="archivesModalLabel"><i class="bi bi-archive me-2"></i>Archived Expired Batches</h5>
+        <h5 class="modal-title" id="archivesModalLabel"><i class="ph ph-archive-box me-2"></i>Archived Expired Batches</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -469,6 +433,12 @@
 
 @push('styles')
 <style>
+/* Date quick-choice presets — burgundy active state, flat and compact */
+.hv-preset{ border:1px solid var(--border); background:#fff; color:var(--ink); font-size:12.5px; }
+.hv-preset:hover{ background:var(--gold-soft); border-color:var(--gold); color:var(--maroon-dark); }
+.hv-preset.active{ background:var(--maroon); border-color:var(--maroon); color:#fff; }
+.hv-preset.active:hover{ background:var(--maroon-dark); color:#fff; }
+.hv-preset:focus-visible{ outline:2px solid var(--maroon); outline-offset:2px; }
 @media print {
     .hv-sidebar, .hv-topbar, .no-print, .nav-tabs, form, .alert { display: none !important; }
     .tab-pane { display: block !important; opacity: 1 !important; }
@@ -502,19 +472,99 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ---- CSV link for the full-page export ----
-    var typeMap = {tabStock:'stock', tabMovement:'movements', tabOrders:'orders', tabExpiry:'expiry'};
+    var typeMap = {tabStock:'stock', tabMovement:'movements', tabSales:'sales', tabExpiry:'expiry'};
     function updateCsvLink() {
-        var active = document.querySelector('#tabStock,#tabMovement,#tabOrders,#tabExpiry');
         var activePane = document.querySelector('.tab-content > .tab-pane.active');
         var type = activePane ? (typeMap[activePane.id] || 'stock') : 'stock';
+        var exportButton = $('csvExportBtn');
+        var salesUnavailable = type === 'sales';
+        exportButton.classList.toggle('disabled', salesUnavailable);
+        exportButton.setAttribute('aria-disabled', String(salesUnavailable));
+        if (salesUnavailable) {
+            exportButton.removeAttribute('href');
+            exportButton.setAttribute('tabindex', '-1');
+            exportButton.title = 'Verified payment data is not available yet.';
+            return;
+        }
+        exportButton.removeAttribute('tabindex');
+        exportButton.removeAttribute('title');
         var params = new URLSearchParams(window.location.search);
         params.set('type', type);
+        params.set('from', @json($dateFrom));
+        params.set('to', @json($dateTo));
+        params.set('branch', @json($branchFilter));
         $('csvExportBtn').href = ROUTES.export + "?" + params.toString();
     }
     updateCsvLink();
     document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(function(tab){
         tab.addEventListener('shown.bs.tab', updateCsvLink);
     });
+
+    // Date controls stay visible; explain the date basis of the selected report.
+    var dateDescriptions = @json($dateFilterDescriptions);
+    function syncFilterControls(){
+        var pane = document.querySelector('.tab-content > .tab-pane.active');
+        var type = pane ? (typeMap[pane.id] || 'stock') : 'stock';
+        $('reportDateHelp').textContent = dateDescriptions[type];
+    }
+    syncFilterControls();
+    document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(function(tab){
+        tab.addEventListener('shown.bs.tab', syncFilterControls);
+    });
+
+    // ---- Date quick-choice presets (Asia/Manila business date) ----
+    function ymd(d){ var m=d.getMonth()+1, day=d.getDate(); return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(day<10?'0':'')+day; }
+    function presetDates(p){
+        var parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric', day: 'numeric'
+        }).formatToParts(new Date());
+        var businessDate = {};
+        parts.forEach(function(part){ businessDate[part.type] = part.value; });
+        var now = new Date(Number(businessDate.year), Number(businessDate.month) - 1, Number(businessDate.day));
+        if (p === 'today')  { return { from: ymd(now), to: ymd(now) }; }
+        if (p === 'last7')  { var s = new Date(now); s.setDate(s.getDate()-6); return { from: ymd(s), to: ymd(now) }; }
+        if (p === 'month')  { return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(now) }; }
+        return null; // custom → leave dates as-is
+    }
+    function setActivePreset(p){
+        document.querySelectorAll('.hv-preset').forEach(function(b){ b.classList.toggle('active', b.dataset.preset === p); });
+    }
+    document.querySelectorAll('.hv-preset').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var p = btn.dataset.preset;
+            var d = presetDates(p);
+            if (d) {
+                var f = document.querySelector('input[name=from]'), t = document.querySelector('input[name=to]');
+                if (f) f.value = d.from;
+                if (t) t.value = d.to;
+            }
+            setActivePreset(p);
+        });
+    });
+    // Editing either date switches the selection to Custom Range.
+    ['from','to'].forEach(function(n){
+        var el = document.querySelector('input[name='+n+']');
+        if (el) el.addEventListener('input', function(){ setActivePreset('custom'); });
+    });
+
+    // ---- Keep the open tab across "Apply Filters" (GET reload) ----
+    // The URL hash is not submitted with the form, so remember the tab in a
+    // hidden field that posts as ?tab=... and re-open it on load.
+    var tabField = document.getElementById('reportTabField');
+    var paneByType = {stock:'#tabStock', movements:'#tabMovement', sales:'#tabSales', expiry:'#tabExpiry'};
+    document.querySelectorAll('.nav-tabs [data-bs-toggle="tab"]').forEach(function(tab){
+        tab.addEventListener('shown.bs.tab', function(){
+            var pane = document.querySelector('.tab-content > .tab-pane.active');
+            if (pane && tabField) tabField.value = typeMap[pane.id] || 'stock';
+        });
+    });
+    (function openSavedTab(){
+        var sel = paneByType[tabField ? tabField.value : 'stock'];
+        if (sel && sel !== '#tabStock' && !window.location.hash) {
+            var tr = document.querySelector('.nav-tabs [data-bs-target="'+sel+'"]');
+            if (tr) { try { bootstrap.Tab.getOrCreateInstance(tr).show(); } catch(e){} }
+        }
+    })();
 
     // ---- Preserve the active report tab across branch navigation ----
     // Branch chips are plain links (page navigation = one authoritative scope).
@@ -528,6 +578,7 @@ document.addEventListener('DOMContentLoaded', function() {
     (function restoreTab(){
         var h = window.location.hash;
         if (!h) return;
+        if (h === '#tabOrders') h = '#tabSales';
         var trigger = document.querySelector('.nav-tabs [data-bs-target="'+h+'"]');
         if (trigger) { try { bootstrap.Tab.getOrCreateInstance(trigger).show(); } catch(e){} }
     })();
@@ -551,12 +602,12 @@ document.addEventListener('DOMContentLoaded', function() {
             fetch(ROUTES.archive, { method:'POST', headers:{'X-CSRF-TOKEN':CSRF,'X-Requested-With':'XMLHttpRequest'}, body:fd })
               .then(function(r){ return r.json(); })
               .then(function(res){
-                  if(!res.ok){ alert(res.error||'Could not archive.'); btn.disabled=false; btn.innerHTML='<i class="bi bi-archive me-1"></i>Archive'; return; }
+                  if(!res.ok){ alert(res.error||'Could not archive.'); btn.disabled=false; btn.innerHTML='<i class="ph ph-archive-box me-1"></i>Archive'; return; }
                   var row = document.querySelector('[data-expired-row="'+b.batch+'"]');
                   if(row) row.remove();
                   bumpArchiveCount(res.already ? 0 : 1);
               })
-              .catch(function(){ alert('Network error.'); btn.disabled=false; btn.innerHTML='<i class="bi bi-archive me-1"></i>Archive'; });
+              .catch(function(){ alert('Network error.'); btn.disabled=false; btn.innerHTML='<i class="ph ph-archive-box me-1"></i>Archive'; });
         });
     });
     function bumpArchiveCount(delta){
@@ -587,7 +638,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         + '<td class="text-center">'+esc(a.quantity_left)+' '+esc(a.unit)+'</td><td>'+esc(a.expiry_date)+'</td>'
                         + '<td class="small">'+esc(a.archived_at)+'</td><td class="small">'+esc(a.archived_by)+'</td>'
                         + '<td class="small">'+esc(a.removal_at)+'<div class="text-muted" style="font-size:11px">in '+esc(a.days_left)+' day(s)</div></td>'
-                        + '<td class="text-end"><button class="btn btn-sm btn-outline-danger arch-del" data-id="'+a.id+'"><i class="bi bi-trash"></i></button></td></tr>';
+                        + '<td class="text-end"><button class="btn btn-sm btn-outline-danger arch-del" data-id="'+a.id+'"><i class="ph ph-trash"></i></button></td></tr>';
                   }).join('');
                   bindArchDelete();
               }

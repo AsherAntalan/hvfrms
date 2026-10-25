@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Reset Password — {{ config('app.name') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" rel="stylesheet">
     <link href="{{ asset('assets/css/theme.css') }}" rel="stylesheet">
     <style>
     .hv-auth-box {
@@ -69,11 +70,11 @@
 
         @if(session('success'))
             <div class="alert alert-success py-2 small">
-                <i class="bi bi-check-circle me-1"></i>
+                <i class="ph ph-check-circle me-1"></i>
                 {{ session('success') }}
             </div>
             <a href="{{ route('login') }}" class="btn btn-maroon w-100 py-2 fw-bold">
-                <i class="bi bi-box-arrow-in-right me-1"></i> Go to Login
+                <i class="ph ph-sign-in me-1"></i> Go to Login
             </a>
 
         @elseif($valid)
@@ -81,38 +82,38 @@
                 @csrf
                 <input type="hidden" name="token" value="{{ $token }}">
                 <div class="hv-input-icon mb-3" style="position:relative;">
-                    <i class="bi bi-lock"></i>
+                    <i class="ph ph-lock"></i>
                     <input type="password" name="password" id="pw1" class="form-control py-2"
                            placeholder="New password (min 6 chars)" required minlength="6"
                            style="padding-right:40px;">
                     <button type="button" class="hv-pw-toggle" onclick="togglePw('pw1', this)">
-                        <i class="bi bi-eye"></i>
+                        <i class="ph ph-eye"></i>
                     </button>
                 </div>
                 <div class="hv-input-icon mb-3" style="position:relative;">
-                    <i class="bi bi-lock-fill"></i>
+                    <i class="ph-fill ph-lock"></i>
                     <input type="password" name="confirm_password" id="pw2" class="form-control py-2"
                            placeholder="Confirm new password" required minlength="6"
                            style="padding-right:40px;">
                     <button type="button" class="hv-pw-toggle" onclick="togglePw('pw2', this)">
-                        <i class="bi bi-eye"></i>
+                        <i class="ph ph-eye"></i>
                     </button>
                 </div>
                 <button type="submit" class="btn btn-maroon w-100 py-2 fw-bold">
-                    <i class="bi bi-check-lg me-1"></i> Reset Password
+                    <i class="ph ph-check me-1"></i> Reset Password
                 </button>
             </form>
 
         @else
             <!-- Invalid / expired token -->
             <a href="{{ route('password.request') }}" class="btn btn-outline-maroon w-100 py-2">
-                <i class="bi bi-arrow-counterclockwise me-1"></i> Request New Reset Link
+                <i class="ph ph-arrow-counter-clockwise me-1"></i> Request New Reset Link
             </a>
         @endif
 
         <div class="text-center mt-3">
             <a href="{{ route('login') }}" class="text-muted small text-decoration-none">
-                <i class="bi bi-arrow-left"></i> Back to Login
+                <i class="ph ph-arrow-left"></i> Back to Login
             </a>
         </div>
     </div>
@@ -124,10 +125,10 @@ function togglePw(id, btn) {
     const icon  = btn.querySelector('i');
     if (input.type === 'password') {
         input.type = 'text';
-        icon.classList.replace('bi-eye', 'bi-eye-slash');
+        icon.classList.replace('ph-eye', 'ph-eye-slash');
     } else {
         input.type = 'password';
-        icon.classList.replace('bi-eye-slash', 'bi-eye');
+        icon.classList.replace('ph-eye-slash', 'ph-eye');
     }
 }
 </script>

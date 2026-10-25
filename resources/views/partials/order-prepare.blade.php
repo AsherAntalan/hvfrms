@@ -62,12 +62,13 @@
             fulfillment[row.dataset.line] = {quantity:Number(quantity.value),source:'produced',reason:row.querySelector('.piece-reason').value.trim()};
         }
         button.disabled = true; document.getElementById('piecePrepareError').textContent = '';
-        const printWindow = window.open('', '_blank'); if (printWindow) printWindow.document.body.textContent = 'Saving preparation…';
         try {
             const result = await post({action:'prepare_order',id:orderId,expiry:JSON.stringify(expiry),fulfillment:JSON.stringify(fulfillment)});
             if (!result.ok) throw new Error(message(result));
-            if (printWindow) {printWindow.location.href = result.labels_url; modal.hide(); location.reload();} else location.href = result.labels_url;
-        } catch(error) {if (printWindow) printWindow.close(); document.getElementById('piecePrepareError').textContent = error.message;}
+            modal.hide();
+            // Print the saved labels in-place (hidden iframe) — no new tab, page stays.
+            if (window.hvPrintLabelsUrl) { window.hvPrintLabelsUrl(result.labels_url); } else { location.href = result.labels_url; }
+        } catch(error) {document.getElementById('piecePrepareError').textContent = error.message;}
         finally {button.disabled = false;}
     };
 })();

@@ -44,7 +44,7 @@
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="bi bi-funnel me-1"></i> Filter
+                <i class="ph ph-funnel me-1"></i> Filter
             </button>
         </div>
     </form>

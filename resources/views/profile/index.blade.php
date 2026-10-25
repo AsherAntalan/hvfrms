@@ -17,7 +17,7 @@
                 @else
                     <div class="d-inline-flex align-items-center justify-content-center rounded-circle"
                          style="width:100px; height:100px; background:var(--maroon); color:#fff; font-size:2.5rem;">
-                        <i class="bi bi-person-fill"></i>
+                        <i class="ph-fill ph-user"></i>
                     </div>
                 @endif
             </div>
@@ -26,7 +26,7 @@
             <span class="hv-badge hv-badge-info">{{ ucwords(str_replace('_', ' ', $user->role->role_name ?? '')) }}</span>
             @if($user->branch)
                 <div class="mt-2">
-                    <span class="text-muted small"><i class="bi bi-geo-alt me-1"></i>{{ $user->branch->branch_name }}</span>
+                    <span class="text-muted small"><i class="ph ph-map-pin me-1"></i>{{ $user->branch->branch_name }}</span>
                 </div>
             @endif
 
@@ -39,7 +39,7 @@
                     <input type="file" class="form-control form-control-sm" name="profile_photo" accept="image/*" required>
                 </div>
                 <button type="submit" class="btn btn-maroon btn-sm w-100">
-                    <i class="bi bi-upload me-1"></i> Upload Photo
+                    <i class="ph ph-upload-simple me-1"></i> Upload Photo
                 </button>
             </form>
         </div>
@@ -50,7 +50,7 @@
 
         <!-- Info Card -->
         <div class="hv-card p-4 mb-3">
-            <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Account Information</h6>
+            <h6 class="fw-bold mb-3"><i class="ph ph-info me-2"></i>Account Information</h6>
             <div class="row g-3">
                 <div class="col-sm-6">
                     <div class="small text-muted mb-1">Full Name</div>
@@ -87,7 +87,7 @@
 
         <!-- Change Password Card -->
         <div class="hv-card p-4">
-            <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock me-2"></i>Change Password</h6>
+            <h6 class="fw-bold mb-3"><i class="ph ph-shield-check me-2"></i>Change Password</h6>
             <form method="POST" action="{{ route('profile.password') }}">
                 @csrf
                 <div class="mb-3">
@@ -104,7 +104,7 @@
                     <input type="password" class="form-control" name="new_password_confirmation" required minlength="8">
                 </div>
                 <button type="submit" class="btn btn-maroon">
-                    <i class="bi bi-check-lg me-1"></i> Update Password
+                    <i class="ph ph-check me-1"></i> Update Password
                 </button>
             </form>
         </div>

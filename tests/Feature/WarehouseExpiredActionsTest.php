@@ -83,4 +83,40 @@ class WarehouseExpiredActionsTest extends TestCase
         $this->actingAs($bm)->postJson('/reports/archive', ['batch_id' => $other->id])->assertStatus(403);
         $this->assertDatabaseMissing('expired_batch_archives', ['batch_id' => $other->id]);
     }
+
+    public function test_archiving_a_disposed_batch_removes_it_from_disposal_records(): void
+    {
+        $main = Branch::create(['branch_name' => 'Tanza', 'branch_type' => 'main', 'is_active' => 1]);
+        $owner = User::create(['full_name' => 'O', 'email' => 'o@t.com', 'password_hash' => Hash::make('x'), 'role_id' => $this->role('owner')->id, 'branch_id' => $main->id, 'status' => 'active']);
+        $item = Item::create(['item_name' => 'Pho', 'unit' => 'pack', 'price' => 10, 'is_active' => 1]);
+        $batch = $this->expiredBatch($item->id, $main->id, 5);
+
+        // Dispose (creates a disposal transaction, zeroes the batch) then archive it.
+        $this->actingAs($owner)->postJson('/warehouse/api', ['action' => 'dispose_batch', 'batch_id' => $batch->id])->assertOk()->assertJson(['ok' => true]);
+        $this->actingAs($owner)->postJson('/reports/archive', ['batch_id' => $batch->id])->assertOk()->assertJson(['ok' => true]);
+
+        // The disposal row for the archived batch must drop out on a fresh request.
+        $this->actingAs($owner)->get('/warehouse')->assertOk()
+            ->assertViewHas('disposalRecords', fn ($rows) => ! collect($rows)->contains('batch_id', $batch->id));
+
+        // The JSON panel refresh excludes it too.
+        $this->actingAs($owner)->getJson('/warehouse/panel')->assertOk()->assertJson(['ok' => true]);
+    }
+
+    public function test_archives_viewer_shows_disposed_batch_with_zero_quantity(): void
+    {
+        $main = Branch::create(['branch_name' => 'Tanza', 'branch_type' => 'main', 'is_active' => 1]);
+        $owner = User::create(['full_name' => 'O', 'email' => 'o@t.com', 'password_hash' => Hash::make('x'), 'role_id' => $this->role('owner')->id, 'branch_id' => $main->id, 'status' => 'active']);
+        $item = Item::create(['item_name' => 'Pho', 'unit' => 'pack', 'price' => 10, 'is_active' => 1]);
+        $batch = $this->expiredBatch($item->id, $main->id, 6);
+
+        $this->actingAs($owner)->postJson('/warehouse/api', ['action' => 'dispose_batch', 'batch_id' => $batch->id])->assertOk();
+        $this->assertEquals(0, $batch->fresh()->quantity_left);
+        $this->actingAs($owner)->postJson('/reports/archive', ['batch_id' => $batch->id])->assertOk()->assertJson(['ok' => true]);
+
+        // Even with zero remaining quantity, the archived disposed batch is discoverable.
+        $this->actingAs($owner)->getJson('/reports/archives')->assertOk()
+            ->assertJson(['ok' => true])
+            ->assertJsonFragment(['batch_id' => $batch->id, 'quantity_left' => 0]);
+    }
 }
