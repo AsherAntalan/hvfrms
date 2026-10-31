@@ -90,7 +90,7 @@ class OrderGroupLabelService
         $production = $this->production($qr);
         abort_unless($this->canUse($production, $user, $branchId), 403);
         $reason = trim($reason);
-        if (! in_array($reason, ['Used in Production', 'Consumed', 'Other'], true)) {
+        if (! in_array($reason, ['Consumed', 'Dispose'], true)) {
             $this->fail('reason', 'Choose a usage reason for this branch stock out.');
         }
 
@@ -209,12 +209,12 @@ class OrderGroupLabelService
         });
     }
 
-    public function receive(string $qr, User $user, mixed $quantity = null, ?string $reason = null, ?string $key = null, bool $finalize = false): array
+    public function receive(string $qr, User $user, mixed $quantity = null, ?string $reason = null, ?string $key = null, bool $finalize = false, ?string $receiptStatus = null): array
     {
         $production = $this->production($qr);
         abort_unless($this->canReceive($production->order, $user), 403);
 
-        return DB::transaction(function () use ($production, $user, $quantity, $reason, $key, $finalize) {
+        return DB::transaction(function () use ($production, $user, $quantity, $reason, $key, $finalize, $receiptStatus) {
             $order = Order::whereKey($production->order_id)->lockForUpdate()->firstOrFail();
             $production = OrderProduction::whereKey($production->id)->lockForUpdate()->firstOrFail();
             if (in_array($order->status, ['delivered', 'settled'], true)) {
@@ -233,6 +233,15 @@ class OrderGroupLabelService
             $quantity = $this->quantity($quantity, $units->count(), true);
             if ($reason && ! in_array($reason, ['Missing Quantity', 'Damaged in Transit', 'Incorrect Quantity', 'Incorrect Item', 'Other'], true)) {
                 $this->fail('reason', 'Invalid receipt discrepancy reason.');
+            }
+            if ($receiptStatus !== null && ! in_array($receiptStatus, ['good', 'issue'], true)) {
+                $this->fail('receipt_status', 'Choose No issue or Report a delivery issue.');
+            }
+            if ($receiptStatus === 'good' && ($reason || ($finalize && $quantity < $units->count()))) {
+                $this->fail('receipt_status', 'A no-issue partial receipt must leave the remaining quantity pending.');
+            }
+            if ($receiptStatus === 'issue' && (! $reason || ! $finalize || $quantity >= $units->count())) {
+                $this->fail('reason', 'Select an issue reason, accept only the good quantity, and confirm closing this product receipt.');
             }
             $lots = [];
             $acceptedIds = [];

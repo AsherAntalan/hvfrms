@@ -80,6 +80,13 @@
 .hv-login-forgot:hover { text-decoration: underline; }
 .hv-login-forgot:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
 .hv-login-alert { text-align: left; margin-bottom: 16px; }
+.hv-reset-success .modal-content { border: 1px solid var(--gold); border-radius: 22px;
+  padding: 32px 24px; text-align: center; box-shadow: 0 24px 70px rgba(60,8,8,.25); }
+.hv-reset-success-mark { display: grid; place-items: center; width: 76px; height: 76px;
+  margin: 0 auto 20px; border-radius: 50%; background: #eaf5ed; color: #28743a; font-size: 40px; }
+.hv-reset-success h2 { color: var(--maroon); font-size: 25px; font-weight: 800; margin-bottom: 12px; }
+.hv-reset-success p { color: var(--ink); font-size: 15px; line-height: 1.65; }
+.hv-reset-success .btn { min-height: 48px; border-radius: 11px; font-weight: 700; }
 
 @media (max-width: 991.98px) {
     .hv-auth-wrap { display: flex; flex-direction: column; }
@@ -169,7 +176,7 @@
             <p class="hv-login-sub">Login to your account</p>
 
             @if(session('success'))
-                <div class="alert alert-success py-2 small hv-login-alert" role="status">{{ session('success') }}</div>
+                <div id="resetSuccessNotice" class="alert alert-success py-2 small hv-login-alert" role="status">{{ session('success') }}</div>
             @endif
             @if(session('warning'))
                 <div class="alert alert-warning py-2 small hv-login-alert" role="alert">{{ session('warning') }}</div>
@@ -189,7 +196,7 @@
                         <div class="hv-input-icon">
                             <i class="ph ph-user" aria-hidden="true"></i>
                             <input id="loginUsername" type="text" name="login" class="form-control"
-                                   placeholder="Enter your registered username" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+                                   placeholder="Enter your username or password" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
                         </div>
                     </div>
                     <div>
@@ -210,11 +217,26 @@
 
             <p class="hv-login-help">
                 <a href="{{ route('password.request') }}" class="hv-login-forgot">Forgot password?</a>
-                <br>Contact your Owner or Admin to reset your password
+                <br>Reset your password using your registered email.
             </p>
         </div>
     </section>
 </main>
+
+@if(session('success'))
+<div class="modal fade hv-reset-success" id="resetSuccessModal" tabindex="-1"
+     aria-labelledby="resetSuccessTitle" aria-describedby="resetSuccessDescription resetSuccessHint" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="hv-reset-success-mark" aria-hidden="true"><i class="ph ph-check-circle"></i></div>
+            <h2 id="resetSuccessTitle">Password reset successful!</h2>
+            <p id="resetSuccessDescription">{{ session('success') }}</p>
+            <p id="resetSuccessHint" class="small mb-4">Your reset link has been used. Sign in below with your new password.</p>
+            <button type="button" class="btn btn-maroon w-100" data-bs-dismiss="modal">Go to sign in</button>
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Full-screen loading overlay shown while authentication is processing --}}
 <div id="hvAuthLoading" class="hv-auth-loading" role="status" aria-live="polite" aria-hidden="true" hidden>
@@ -231,6 +253,20 @@
 
 @push('scripts')
 <script>
+(function () {
+    var modalElement = document.getElementById('resetSuccessModal');
+    if (!modalElement || !window.bootstrap || !window.bootstrap.Modal) { return; }
+    var successModal = new bootstrap.Modal(modalElement);
+    modalElement.addEventListener('shown.bs.modal', function () {
+        modalElement.querySelector('[data-bs-dismiss="modal"]').focus();
+    });
+    modalElement.addEventListener('hidden.bs.modal', function () {
+        document.getElementById('loginUsername').focus();
+    });
+    successModal.show();
+    document.getElementById('resetSuccessNotice').hidden = true;
+})();
+
 (function () {
     const password = document.getElementById('loginPassword');
     const toggle = document.getElementById('toggleLoginPassword');

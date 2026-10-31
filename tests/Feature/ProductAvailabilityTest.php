@@ -166,7 +166,7 @@ class ProductAvailabilityTest extends TestCase
         $this->assertEquals(0, AuditLog::count());
     }
 
-    public function test_main_manager_can_reach_controls_without_owner_catalog_editing(): void
+    public function test_commissary_manager_can_reach_availability_and_catalog_controls(): void
     {
         $main = $this->branch('Tanza', 'main');
         $manager = $this->user('commissary_manager', $main);
@@ -176,8 +176,8 @@ class ProductAvailabilityTest extends TestCase
             ->assertSee('Commissary Products')
             ->assertSee('Mark Buns unavailable for orders')
             ->assertSee('async function toggleProduct', false)
-            ->assertDontSee('Add Product')
-            ->assertDontSee('onclick="openProductModal', false);
+            ->assertSee('Add Product')
+            ->assertSee('onclick="openProductModal', false);
 
         $this->actingAs($manager)->get('/inventory')->assertOk()
             ->assertDontSee('Mark Buns unavailable for orders')
@@ -191,13 +191,13 @@ class ProductAvailabilityTest extends TestCase
             ->assertDontSee('onclick="openModal', false);
     }
 
-    public function test_non_owners_cannot_create_or_edit_catalog_products_through_inventory(): void
+    public function test_branch_accounts_cannot_create_or_edit_catalog_products_through_inventory(): void
     {
         $main = $this->branch('Tanza', 'main');
         $item = $this->item();
         $item->update(['is_active' => false]);
 
-        foreach (['commissary_manager', 'branch_manager'] as $role) {
+        foreach (['commissary_staff', 'branch_manager', 'branch_staff'] as $role) {
             $actor = $this->user($role, $main);
             $this->actingAs($actor)->postJson('/inventory/api', [
                 'action' => 'save', 'item_name' => 'New Buns', 'is_active' => true,

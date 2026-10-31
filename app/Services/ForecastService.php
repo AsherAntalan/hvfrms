@@ -12,13 +12,65 @@ use Illuminate\Support\Facades\DB;
 class ForecastService
 {
     protected int $weeks;
+
     protected float $safetyFactor;
+
     protected array $weights = [1, 2, 3, 4];
 
     public function __construct()
     {
         $this->weeks = max(4, (int) Setting::get('forecast_weeks', '8'));
         $this->safetyFactor = max(1.0, (float) Setting::get('safety_stock_factor', '1.5'));
+    }
+
+    /** Effective historical window in completed weeks (>= 4). */
+    public function weeks(): int
+    {
+        return $this->weeks;
+    }
+
+    /** Effective safety-stock multiplier (>= 1.0). */
+    public function safetyFactor(): float
+    {
+        return $this->safetyFactor;
+    }
+
+    /**
+     * Effective configuration and calculation metadata for the UI, so the page
+     * can describe exactly what the service computes without re-deriving any
+     * formula or re-reading settings per product row.
+     *
+     * @return array{
+     *   weeks:int, safety_factor:float,
+     *   wma_weeks:int, wma_weights:array<int,int>,
+     *   trend_first_group:int, trend_second_group:int,
+     *   historical_start:string, historical_end:string,
+     *   target_start:string, target_end:string
+     * }
+     */
+    public function metadata(): array
+    {
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+        $historicalStart = (clone $weekStart)->subDays($this->weeks * 7);
+        $historicalEnd = (clone $weekStart)->subDay(); // last completed day before this week
+        $targetStart = (clone $weekStart);
+        $targetEnd = (clone $weekStart)->addDays(6);
+
+        $wmaWeeks = min(count($this->weights), $this->weeks);
+        $wmaWeights = array_slice($this->weights, count($this->weights) - $wmaWeeks);
+
+        return [
+            'weeks' => $this->weeks,
+            'safety_factor' => $this->safetyFactor,
+            'wma_weeks' => $wmaWeeks,
+            'wma_weights' => array_values($wmaWeights),
+            'trend_first_group' => intdiv($this->weeks, 2),
+            'trend_second_group' => $this->weeks - intdiv($this->weeks, 2),
+            'historical_start' => $historicalStart->format('Y-m-d'),
+            'historical_end' => $historicalEnd->format('Y-m-d'),
+            'target_start' => $targetStart->format('Y-m-d'),
+            'target_end' => $targetEnd->format('Y-m-d'),
+        ];
     }
 
     /**
@@ -55,7 +107,7 @@ class ForecastService
             $we = (clone $ws)->addDays(6);
             $weekRanges[$w] = [
                 'start' => $ws->format('Y-m-d'),
-                'end'   => $we->format('Y-m-d'),
+                'end' => $we->format('Y-m-d'),
             ];
         }
 
@@ -63,12 +115,12 @@ class ForecastService
         $result = [];
         foreach ($dailyData as $dd) {
             $itemId = $dd->item_id;
-            if (!isset($result[$itemId])) {
+            if (! isset($result[$itemId])) {
                 // Initialize weekly totals
                 foreach ($weekRanges as $w => $range) {
                     $result[$itemId][$w] = [
                         'start' => $range['start'],
-                        'end'   => $range['end'],
+                        'end' => $range['end'],
                         'total' => 0,
                     ];
                 }
@@ -77,7 +129,7 @@ class ForecastService
             $txDate = $dd->tx_date;
             foreach ($weekRanges as $w => $range) {
                 if ($txDate >= $range['start'] && $txDate <= $range['end']) {
-                    $result[$itemId][$w]['total'] += (int)$dd->daily_out;
+                    $result[$itemId][$w]['total'] += (int) $dd->daily_out;
                     break;
                 }
             }
@@ -118,7 +170,7 @@ class ForecastService
     {
         $values = array_column($weeklyTotals, 'total');
         $totalAll = array_sum($values);
-        $activeWeeks = count(array_filter($values, fn($v) => $v > 0));
+        $activeWeeks = count(array_filter($values, fn ($v) => $v > 0));
 
         if ($activeWeeks < 2) {
             return 'insufficient';
@@ -141,8 +193,12 @@ class ForecastService
 
         $ratio = $firstHalf > 0 ? $secondHalf / $firstHalf : 1;
 
-        if ($ratio > 1.15) return 'rising';
-        if ($ratio < 0.85) return 'falling';
+        if ($ratio > 1.15) {
+            return 'rising';
+        }
+        if ($ratio < 0.85) {
+            return 'falling';
+        }
 
         return 'stable';
     }
@@ -173,7 +229,7 @@ class ForecastService
             $we = (clone $ws)->addDays(6);
             $weekRanges[$w] = [
                 'start' => $ws->format('Y-m-d'),
-                'end'   => $we->format('Y-m-d'),
+                'end' => $we->format('Y-m-d'),
                 'total' => 0,
             ];
         }
@@ -184,59 +240,73 @@ class ForecastService
             $weekly = $weeklySales[$item->id] ?? $weekRanges;
 
             $values = array_column($weekly, 'total');
-            $activeWeeks = count(array_filter($values, fn($v) => $v > 0));
+            $activeWeeks = count(array_filter($values, fn ($v) => $v > 0));
 
             if ($activeWeeks < 2) {
                 $forecasts[] = [
-                    'item'          => $item,
-                    'weekly'        => $weekly,
-                    'avg_weekly'    => 0,
-                    'wma'           => 0,
-                    'trend'         => 'insufficient',
-                    'forecast_qty'  => 0,
+                    'item' => $item,
+                    'weekly' => $weekly,
+                    'avg_weekly' => 0,
+                    'wma' => 0,
+                    'trend' => 'insufficient',
+                    'forecast_qty' => 0,
                     'stock_on_hand' => 0,
+                    'target_stock' => 0,
                     'recommend_qty' => 0,
+                    'active_weeks' => $activeWeeks,
+                    'wma_fallback' => false,
                 ];
+
                 continue;
             }
 
-            // Simple average
+            // Simple average (divided by weeks with positive movement, not all weeks)
             $totalAll = array_sum($values);
             $avgWeekly = round($totalAll / max($activeWeeks, 1), 2);
 
-            // WMA
-            $wma = $this->weightedAverage($weekly);
-            if ($wma == 0) $wma = $avgWeekly;
+            // WMA — most recent weeks only. When it is zero (e.g. all recent
+            // weeks are empty) the active-week average supplies the base.
+            $rawWma = $this->weightedAverage($weekly);
+            $wmaFallback = ($rawWma == 0);
+            $wma = $wmaFallback ? $avgWeekly : $rawWma;
 
             // Trend
             $trend = $this->demandPattern($weekly);
 
             // Forecast with trend adjustment
-            $forecastQty = (int)ceil($wma);
-            if ($trend === 'rising') $forecastQty = (int)ceil($wma * 1.1);
-            if ($trend === 'falling') $forecastQty = (int)ceil($wma * 0.9);
+            $forecastQty = (int) ceil($wma);
+            if ($trend === 'rising') {
+                $forecastQty = (int) ceil($wma * 1.1);
+            }
+            if ($trend === 'falling') {
+                $forecastQty = (int) ceil($wma * 0.9);
+            }
 
-            // Stock on hand
+            // Stock on hand (recorded remaining quantity; NOT filtered for
+            // expired/damaged batches — see UI note).
             $sohQuery = StockBatch::where('item_id', $item->id)
                 ->where('quantity_left', '>', 0);
             if ($branchId && $branchId > 0) {
                 $sohQuery->where('branch_id', $branchId);
             }
-            $stockOnHand = (int)$sohQuery->sum('quantity_left');
+            $stockOnHand = (int) $sohQuery->sum('quantity_left');
 
-            // Recommend (apply safety stock factor)
+            // Target = ceil(forecast × safety factor); suggested = max(0, target − stock).
             $safeTarget = (int) ceil($forecastQty * $this->safetyFactor);
             $recommendQty = max(0, $safeTarget - $stockOnHand);
 
             $forecasts[] = [
-                'item'          => $item,
-                'weekly'        => $weekly,
-                'avg_weekly'    => $avgWeekly,
-                'wma'           => $wma,
-                'trend'         => $trend,
-                'forecast_qty'  => $forecastQty,
+                'item' => $item,
+                'weekly' => $weekly,
+                'avg_weekly' => $avgWeekly,
+                'wma' => $wma,
+                'trend' => $trend,
+                'forecast_qty' => $forecastQty,
                 'stock_on_hand' => $stockOnHand,
+                'target_stock' => $safeTarget,
                 'recommend_qty' => $recommendQty,
+                'active_weeks' => $activeWeeks,
+                'wma_fallback' => $wmaFallback,
             ];
         }
 
@@ -255,15 +325,17 @@ class ForecastService
 
         $count = 0;
         foreach ($forecasts as $fc) {
-            if ($fc['recommend_qty'] <= 0) continue;
+            if ($fc['recommend_qty'] <= 0) {
+                continue;
+            }
 
             ForecastRecommendation::create([
-                'item_id'      => $fc['item']->id,
-                'week_start'   => $weekStart,
-                'avg_weekly'   => $fc['avg_weekly'],
+                'item_id' => $fc['item']->id,
+                'week_start' => $weekStart,
+                'avg_weekly' => $fc['avg_weekly'],
                 'forecast_qty' => $fc['forecast_qty'],
-                'recommend_qty'=> $fc['recommend_qty'],
-                'pattern'      => $fc['trend'],
+                'recommend_qty' => $fc['recommend_qty'],
+                'pattern' => $fc['trend'],
             ]);
             $count++;
         }

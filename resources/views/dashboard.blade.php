@@ -37,7 +37,6 @@
 </header>
 
 {{-- ═══ SUMMARY CONTAINERS ═══════════════════════════════ --}}
-@php $hasHealth = $user->canManageInventory() || $isWarehouse; @endphp
 <div class="hv-sumrow mb-4">
 
     {{-- LEFT — operations --}}
@@ -45,19 +44,24 @@
         <div class="hv-sum-top">
             {{-- Red tile: Commissary Sales (authorized roles) or Active Orders --}}
             @if($salesAuthorized ?? false)
-            <div class="hv-m is-primary hv-m--sales">
+            <a href="{{ route('reports', ['tab' => 'sales']) }}" class="hv-m is-primary hv-m--sales">
                 <span class="hv-m-head">
-                    <span class="hv-m-label">Commissary Sales</span>
+                    <span class="hv-m-label">{{ ($demoPreview ?? false) ? 'Simulated Sales' : 'Commissary Sales' }}</span>
                 </span>
                 @if($salesAvailable ?? false)
                 <span class="hv-m-value hv-m--money">&#8369;{{ number_format($salesAmount, 2) }}</span>
                 <span class="hv-m-sub">This month &middot; {{ $salesRangeLabel }}</span>
+                @if($demoPreview ?? false)
+                <span class="hv-m-note">Closed demo orders &middot; not verified payments</span>
+                @else
+                <span class="hv-m-note">Released order value &middot; includes completed orders</span>
+                @endif
                 @else
                 <span class="hv-m-value hv-m--money">&mdash;</span>
                 <span class="hv-m-sub">This month &middot; {{ $salesRangeLabel }}</span>
                 <span class="hv-m-note">Verified payment data unavailable</span>
                 @endif
-            </div>
+            </a>
             @else
             <a href="{{ route('orders') }}" class="hv-m is-primary">
                 <span class="hv-m-head">
@@ -68,7 +72,8 @@
             </a>
             @endif
 
-            {{-- In Transit --}}
+            {{-- In Transit — Commissary dashboard shows the Sales tile only --}}
+            @unless($user->isCommissaryManager())
             <a href="{{ route('delivery') }}" class="hv-m">
                 <span class="hv-m-head">
                     <span class="hv-m-ico"><i class="ph ph-truck"></i></span>
@@ -76,23 +81,15 @@
                 </span>
                 <span class="hv-m-value">{{ $stats['delivering'] }}</span>
             </a>
+            @endunless
 
-            {{-- Preparing (warehouse roles) --}}
-            @if($isWarehouse || $isOwner)
-            <a href="{{ route('delivery') }}" class="hv-m">
-                <span class="hv-m-head">
-                    <span class="hv-m-ico"><i class="ph ph-package"></i></span>
-                    <span class="hv-m-label">Preparing</span>
-                </span>
-                <span class="hv-m-value">{{ $stats['preparing'] }}</span>
-            </a>
-            @endif
         </div>
 
-        @unless($isWS)
+        @unless($isWS || $user->isCommissaryManager())
         <div class="hv-sum-divider"></div>
         <div class="hv-sum-bottom">
-            {{-- Branches / My Branch --}}
+            {{-- Branches / My Branch — not shown for the Commissary (production source) --}}
+            @unless($user->isCommissaryManager())
             <a href="{{ $isOwner ? route('branches') : '#' }}" class="hv-m">
                 @if($isBranchScoped && !$isWarehouse)
                 <span class="hv-m-head">
@@ -108,6 +105,7 @@
                 <span class="hv-m-value">{{ $stats['branches'] }}</span>
                 @endif
             </a>
+            @endunless
 
             {{-- Active Orders (moved here for roles whose red tile shows Sales) --}}
             @if($salesAuthorized ?? false)
@@ -123,39 +121,8 @@
         @endunless
     </section>
 
-    {{-- RIGHT — inventory health --}}
-    @if($hasHealth)
-    <section class="hv-sum hv-sum--health">
-        {{-- Low Stock --}}
-        <a href="{{ $isWarehouse ? route('warehouse') : route('reports') }}" class="hv-m" data-tone="warn">
-            <span class="hv-m-head">
-                <span class="hv-m-ico"><i class="ph ph-warning"></i></span>
-                <span class="hv-m-label">Low Stock</span>
-            </span>
-            <span class="hv-m-value">{{ $stats['low_stock'] }}</span>
-        </a>
-
-        {{-- Expired (warehouse/owner) --}}
-        @if(($isWarehouse || $isOwner) && isset($stats['expired']) && $stats['expired'] > 0)
-        <a href="{{ route('warehouse') }}" class="hv-m" data-tone="alert">
-            <span class="hv-m-head">
-                <span class="hv-m-ico"><i class="ph ph-calendar-x"></i></span>
-                <span class="hv-m-label">Expired</span>
-            </span>
-            <span class="hv-m-value">{{ $stats['expired'] }}</span>
-        </a>
-        @endif
-
-        {{-- Open Alerts --}}
-        <a href="{{ route('alerts') }}" class="hv-m" data-tone="brand">
-            <span class="hv-m-head">
-                <span class="hv-m-ico"><i class="ph ph-bell"></i></span>
-                <span class="hv-m-label">Open Alerts</span>
-            </span>
-            <span class="hv-m-value">{{ $stats['alerts'] }}</span>
-        </a>
-    </section>
-    @endif
+    {{-- RIGHT health panel removed — Low Stock / Expired / Open Alerts are
+         already surfaced by "Needs Your Attention" and the Active Alerts card. --}}
 </div>
 
 {{-- ═══ NEEDS YOUR ATTENTION ═════════════════════════════ --}}
@@ -165,9 +132,9 @@
     if ($stats['pending'] > 0 && ($isOwner || $isWA))
         $attention[] = ['icon' => 'ph-hourglass', 'text' => $stats['pending'] . ' order' . ($stats['pending'] > 1 ? 's' : '') . ' waiting for approval', 'link' => route('orders'), 'color' => '#856404'];
     if (($stats['approved'] ?? 0) > 0 && ($isWarehouse || $isOwner))
-        $attention[] = ['icon' => 'ph-tray-arrow-down', 'text' => $stats['approved'] . ' approved order' . ($stats['approved'] > 1 ? 's' : '') . ' to prepare', 'link' => route('delivery'), 'color' => '#2E7D32'];
+        $attention[] = ['icon' => 'ph-tray-arrow-down', 'text' => $stats['approved'] . ' approved order' . ($stats['approved'] > 1 ? 's' : '') . ' to prepare', 'link' => route('orders', ['queue' => 'prepare']), 'color' => '#2E7D32'];
     if (($stats['preparing'] ?? 0) > 0 && ($isWarehouse || $isOwner))
-        $attention[] = ['icon' => 'ph-package', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('delivery'), 'color' => '#2C6E8F'];
+        $attention[] = ['icon' => 'ph-package', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('orders', ['queue' => 'all']), 'color' => '#2C6E8F'];
     if ($stats['delivering'] > 0)
         $attention[] = ['icon' => 'ph-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('delivery'), 'color' => '#2C6E8F'];
     if ($stats['low_stock'] > 0)
@@ -175,7 +142,7 @@
     if ($stats['alerts_critical'] > 0)
         $attention[] = ['icon' => 'ph-warning-circle', 'text' => $stats['alerts_critical'] . ' critical alert' . ($stats['alerts_critical'] > 1 ? 's' : ''), 'link' => route('alerts'), 'color' => 'var(--danger)'];
     if (isset($stats['expired']) && $stats['expired'] > 0)
-        $attention[] = ['icon' => 'ph-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse'), 'color' => 'var(--danger)'];
+        $attention[] = ['icon' => 'ph-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse', ['tab' => 'expired']), 'color' => 'var(--danger)'];
     if ($isOwner && isset($stats['inactive_branches']) && $stats['inactive_branches'] > 0)
         $attention[] = ['icon' => 'ph-buildings', 'text' => $stats['inactive_branches'] . ' inactive branch' . ($stats['inactive_branches'] > 1 ? 'es' : ''), 'link' => route('branches'), 'color' => 'var(--muted)'];
 @endphp
@@ -355,7 +322,7 @@
 /* Summary containers — two matte smoke-white panels, flat finish */
 .hv-dash .hv-sumrow{ display:flex; gap:20px; flex-wrap:wrap; align-items:stretch; }
 .hv-dash .hv-sum{ background:var(--d-smoke); border-radius:16px; padding:18px 10px; }
-.hv-dash .hv-sum--ops{ flex:1 1 55%; min-width:min(100%, 320px); display:flex; flex-direction:column; justify-content:center; }
+.hv-dash .hv-sum--ops{ flex:1 1 100%; min-width:min(100%, 320px); display:flex; flex-direction:column; justify-content:center; }
 .hv-dash .hv-sum--health{ flex:1 1 40%; min-width:min(100%, 300px); display:flex; align-items:stretch; }
 .hv-dash .hv-sum-top,.hv-dash .hv-sum-bottom{ display:flex; align-items:stretch; }
 .hv-dash .hv-sum-divider{ height:1px; background:var(--d-smoke-line); margin:16px 12px; }
@@ -377,8 +344,8 @@
   font-variant-numeric:tabular-nums; color:var(--d-ink); }
 .hv-dash .hv-m-value--text{ font-size:1.25rem; line-height:1.15; }
 
-/* Active Orders — the only red tile (solid matte fill, white content) */
-.hv-dash .hv-m.is-primary{ flex:0 0 42%; background:var(--maroon); border-radius:12px;
+/* Primary metric — solid matte fill, white content */
+.hv-dash .hv-m.is-primary{ flex:0 0 50%; background:var(--maroon); border-radius:12px;
   padding:18px 20px; color:#fff; }
 .hv-dash .hv-m.is-primary .hv-m-ico,
 .hv-dash .hv-m.is-primary .hv-m-label{ color:#fff; }
@@ -387,7 +354,7 @@
 
 /* Commissary Sales tile: currency sized to fit, period caption + unavailable note */
 .hv-dash .hv-m--sales{ gap:6px; }
-.hv-dash .hv-m--sales .hv-m--money{ font-size:clamp(1.7rem,1.1rem + 2vw,2.5rem);
+.hv-dash .hv-m.is-primary.hv-m--sales .hv-m--money{ font-size:clamp(1.7rem,1.1rem + 2vw,2.5rem);
   white-space:nowrap; letter-spacing:-.02em; }
 .hv-dash .hv-m--sales .hv-m-sub{ font-size:12px; font-weight:600; color:rgba(255,255,255,.82); }
 .hv-dash .hv-m--sales .hv-m-note{ font-size:11px; font-weight:600; color:rgba(255,255,255,.72);

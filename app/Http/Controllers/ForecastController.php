@@ -42,6 +42,10 @@ class ForecastController extends Controller
         // Build forecast
         $forecasts = $forecastService->buildForecast($selBranch ?: null);
 
+        // Effective settings + calculation metadata so the page describes exactly
+        // what the service computed (no re-derivation or per-row setting reads).
+        $forecastMeta = $forecastService->metadata();
+
         // Trend badge mapping
         $trendBadges = [
             'rising' => ['hv-badge-success',   'ph-trend-up',   'Rising'],
@@ -60,6 +64,7 @@ class ForecastController extends Controller
 
         return view('forecast.index', compact(
             'forecasts',
+            'forecastMeta',
             'branches',
             'selBranch',
             'trendBadges',

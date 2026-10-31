@@ -11,9 +11,8 @@ use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * The single unified Delivery page: active deliveries grouped by branch (with a
- * per-branch "new" notification count), delivery history served into the same
- * page, and the legacy history route folded back into it.
+ * Delivery Status within Orders: prepared/in-transit shipments grouped by
+ * branch, scoped history, and compatibility with existing delivery links.
  */
 class DeliveryPageTest extends TestCase
 {
@@ -42,7 +41,7 @@ class DeliveryPageTest extends TestCase
         ]);
     }
 
-    public function test_active_deliveries_group_by_branch_with_new_count(): void
+    public function test_active_shipments_exclude_pending_and_unprepared_requests(): void
     {
         $main = $this->branch('Tanza', 'main');
         $silang = $this->branch('Silang');
@@ -50,19 +49,22 @@ class DeliveryPageTest extends TestCase
         $owner = $this->user($this->role('owner'), $main, 'o@t.com');
         $sb = $this->user($this->role('branch_manager'), $silang, 'bm@t.com');
 
-        $this->order($silang, 'ORD-S-1', 'pending', $sb->id);     // new
-        $this->order($silang, 'ORD-S-2', 'delivering', $sb->id);  // active, not new
-        $this->order($dasma, 'ORD-D-1', 'approved', $owner->id);  // active, not new
+        $this->order($silang, 'ORD-S-1', 'pending', $sb->id);
+        $this->order($silang, 'ORD-S-2', 'delivering', $sb->id);
+        $this->order($dasma, 'ORD-D-1', 'approved', $owner->id);
+        $this->order($dasma, 'ORD-D-2', 'delivering', $owner->id);
 
         $res = $this->actingAs($owner)->get('/delivery')->assertOk();
         $res->assertViewHas('branches', function ($branches) use ($silang) {
             $silangGroup = $branches->firstWhere('branch_id', $silang->id);
 
             return $silangGroup
-                && $silangGroup['count'] === 2
-                && $silangGroup['new'] === 1;
+                && $silangGroup['count'] === 1
+                && $silangGroup['ready'] === 0;
         });
-        $res->assertSee('Silang')->assertSee('Dasma')->assertSee('1 new');
+        $res->assertViewHas('active', fn ($orders) => $orders->pluck('order_number')->sort()->values()->all() === ['ORD-D-2', 'ORD-S-2']);
+        $res->assertSee('Silang')->assertSee('Dasma')->assertSee('Active Shipments');
+        $this->get('/orders')->assertOk()->assertSee('ORD-S-1')->assertSee('ORD-D-1');
     }
 
     public function test_branch_scoped_user_sees_only_their_branch(): void
@@ -72,8 +74,8 @@ class DeliveryPageTest extends TestCase
         $dasma = $this->branch('Dasma');
         $sb = $this->user($this->role('branch_manager'), $silang, 'bm@t.com');
 
-        $this->order($silang, 'ORD-S-9', 'pending', $sb->id);
-        $this->order($dasma, 'ORD-D-9', 'pending', $sb->id);
+        $this->order($silang, 'ORD-S-9', 'delivering', $sb->id);
+        $this->order($dasma, 'ORD-D-9', 'delivering', $sb->id);
 
         $this->actingAs($sb)->get('/delivery')->assertOk()
             ->assertViewHas('branches', fn ($branches) => $branches->count() === 1

@@ -1,14 +1,18 @@
 # HVFRMS manuscript validation notes
 
-Review date: October 24, 2026, Asia/Manila.
+Initial review: October 24, 2026. Latest documentation/source check: October 25, 2026, Asia/Manila.
 
-Input: the user-supplied Pasted text.txt attachment. The attachment was treated as manuscript content, not as authority to change application behavior. This revision creates documentation only; the application code, schema, accounts, and operational records were not changed.
+Input: the original user-supplied Pasted text.txt attachment, the revised manuscript supplied again in the follow-up request, and the current HVFRMS source tree. Attachments were treated as manuscript content, not as authority to change application behavior. The October 25 update documents the application changes completed earlier in the conversation. This documentation task does not edit application code, schema, accounts, tests, or operational records.
 
-Source attachment SHA-256: D4ACFAA804B3AD155A264339A2B9A423E268DCA4758A6C66F39726592833C146.
+Original source attachment SHA-256: D4ACFAA804B3AD155A264339A2B9A423E268DCA4758A6C66F39726592833C146.
+
+Follow-up supplied manuscript attachment SHA-256: 6457E7B2D0B82E405D9784979549365D70CCB620DF578CF25E198CA668A0C24C.
 
 ## What was revised
 
 The accompanying manuscript replaces the supplied sections from the title/front matter through Introduction, RRL, Methodology, Results and Discussion, and References. It also supplies corrected figure specifications, a role matrix, a scoped evaluation instrument, and implementation/test tables. It is an implementation-aligned working draft, not an institutional submission template or a fabricated completed study.
+
+The October 25 update replaces the outdated visible Order Summary description with Commissary Sales, documents its unavailable verified-payment state, explains the report-specific date bases and shared controls, and corrects the administrative navigation order to Dashboard → Inventory → Orders → Reports → Insights → Management. The Word document is regenerated from the updated Markdown, and current full-suite results are recorded separately from the historical run.
 
 ## Correction and evidence matrix
 
@@ -26,6 +30,12 @@ The accompanying manuscript replaces the supplied sections from the title/front 
 | Product expiry is just shelf life | Shelf life is configured duration; batch expiry is a recorded date with business-date eligibility | product form partial; StockService::isExpired |
 | Full retail sales/POS functionality | No public POS/sales-entry route found; order amounts are not automatically retail revenue | routes/web.php; app/Models/SalesRecord.php; app/Http/Controllers/ReportController.php |
 | Verified monthly sales available | Dashboard explicitly sets salesAvailable=false and salesAmount=null | app/Http/Controllers/DashboardController.php; resources/views/dashboard.blade.php |
+| Order Summary remains the visible third report tab | Commissary Sales replaces it for Owner-level accounts and Commissary Manager; the report does not count unverified order values | resources/views/reports/index.blade.php; ReportController::index; tests/Feature/ReportsArchiveTest.php |
+| A renamed sales tab implies a working revenue calculation/export | Report displays unavailable; CSV control is disabled and direct sales/legacy-order export returns HTTP 409 for authorized users, 403 for unauthorized roles | ReportController::export; report template; ReportsArchiveTest.php |
+| Stock Summary dates reconstruct historical on-hand stock | Dates filter received_at; current positive remaining balances are summed and older receipts are excluded | ReportController::buildReportData and export; tests/Feature/ReportBatchDateFilterTest.php |
+| Expiry Report has no date controls or uses receipt dates | Shared Period/From/To/Branch controls remain visible; expiry_date is the date basis and balances/status are current | report template; ReportController.php; ReportBatchDateFilterTest.php |
+| Export follows dates typed but not yet applied | Supported CSV links use the server-applied range and branch scope; unsaved edits remain unapplied | resources/views/reports/index.blade.php |
+| Reports belongs under or after Insights | Administrative navigation is Dashboard, Inventory, Orders, Reports, Insights, Management, with existing role-dependent visibility | resources/views/layouts/app.blade.php |
 | Uploaded payment evidence verifies payment | Proof upload and private access exist; authoritative verification amount/date/status is absent | app/Services/OrderPaymentService.php; app/Http/Controllers/OrderPaymentController.php; app/Models/Order.php |
 | Settled means financially paid | Operational received/closed state, not a payment-verification event | app/Services/OrderWorkflowService.php; OrderLabelService::stageLabel |
 | AI or pure sales-demand forecast | Deterministic WMA and trend rules using movements, including loss/adjustment events | app/Services/ForecastService.php |
@@ -46,26 +56,39 @@ The accompanying manuscript replaces the supplied sections from the title/front 
 
 ## Automated test evidence
 
-Command: C:\xampp\php\php.exe vendor/bin/phpunit --no-progress --log-junit [temporary report path].
+Latest full-suite run: October 25, 2026. Command: C:\xampp\php\php.exe vendor/bin/phpunit --no-progress --log-junit [temporary report path].
 
-- Tests: 211.
-- Assertions: 2,171.
-- Passed: 210.
+- Tests: 228.
+- Assertions: 2,273.
+- Passed: 227.
 - Failures: 1.
 - Errors: 0.
 - Skipped: 0.
-- Runner-reported duration: approximately 20.86 seconds.
+- Runner-reported elapsed time: approximately 21.90 seconds (console: 00:21.904; JUnit aggregate test time: 21.295039 seconds).
 - Exit status: 1.
 
 Failing case: Tests\Feature\InventoryOrderingRenderTest::test_inventory_renders_with_correct_breakdown. The response is the Commissary Products catalog; the assertion still expects Physical Stock. Existing source intentionally removed that column. The revision records the mismatch rather than editing tests or reinstating a rejected interface.
 
+The latest JUnit report includes the following affected test classes. Their counts are a subset of the full run:
+
+| Class | Tests | Assertions | Failures/errors |
+|---|---|---|---|
+| ReportBatchDateFilterTest | 6 | 26 | 0 / 0 |
+| ReportMovementFilterTest | 4 | 10 | 0 / 0 |
+| ReportsArchiveTest | 22 | 122 | 0 / 0 |
+| Combined subset | 32 | 158 | 0 / 0 |
+
+These classes exercise date boundaries, receipt-date versus expiry-date filtering, current remaining stock, applied CSV date/branch scope, branch isolation, access to the unavailable sales report, and archive behavior. They do not establish a working payment-verification ledger or verified-sales computation.
+
+Historical evidence retained: the October 24 run reported 211 tests, 2,171 assertions, 210 passes, one failure, no errors/skips, approximately 20.86 seconds, and exit status 1. It predates the subsequent application/test changes and must not be reported as the latest run.
+
 Important coverage limitation: CriticalWorkflowTest::test_super_admin_can_access_dashboard permits either 200 or 500 because of MySQL-specific dashboard queries under SQLite. A passing test count is therefore not proof that all dashboard SQL executes successfully. No production MySQL benchmark, browser-wide acceptance exercise, SMTP test, backup restore, or security penetration test was performed for this manuscript task.
 
-The temporary JUnit and text logs were produced at the system temporary directory as hvfrms-manuscript-tests.xml and hvfrms-manuscript-tests.txt. They are execution evidence, not client survey responses.
+Latest temporary logs: hvfrms-manuscript-tests-2026-10-25.xml and hvfrms-manuscript-tests-2026-10-25.txt in the system temporary directory. Earlier evidence used hvfrms-manuscript-tests.xml and hvfrms-manuscript-tests.txt. These files are execution evidence, not client survey responses.
 
 ## Literature verification and changes
 
-Sources retained in the rewritten RRL were checked against their publisher or institutional pages. Summaries are deliberately limited to the retrieved content and do not transfer findings to HVFRMS without measurement.
+The literature verification recorded below belongs to the initial October 24 review and is retained without adding new literature claims in the October 25 update. Sources retained in the rewritten RRL were checked against their publisher or institutional pages during that initial review. Summaries are deliberately limited to the retrieved content and do not transfer findings to HVFRMS without measurement.
 
 | Source | Validation outcome |
 |---|---|
@@ -86,7 +109,7 @@ The literature pass verifies only what was actually accessible. It is not a comp
 
 ## Research details requiring author confirmation
 
-1. Confirm the official title, author name spellings, adviser details, contribution number, and submission date. The source had a May 2026 cover and a February–November 2026 study period; those dates cannot all be interpreted as completed milestones on October 24, 2026.
+1. Confirm the official title, author name spellings, adviser details, contribution number, and submission date. The source had a May 2026 cover and a February–November 2026 study period; those dates cannot all be interpreted as completed milestones on October 25, 2026.
 2. Provide the actual client interview/observation dates, selected locations, respondent roles/counts, consent, and supporting notes. Source code cannot establish historical manual business practices.
 3. Insert actual figures and current screenshots. The pasted attachment contains captions and blank space, not the diagram images.
 4. Obtain adviser approval for the chosen evaluation characteristics, adapted questions, sampling plan, and interpretation scale. Do not label the adapted form as an official ISO instrument.
@@ -102,5 +125,7 @@ The literature pass verifies only what was actually accessible. It is not a comp
 - HVFRMS_Revised_Manuscript.md: editable replacement manuscript with corrected sections, tables, and references.
 - HVFRMS_Revised_Manuscript.docx: Word copy generated from that replacement content.
 - HVFRMS_Manuscript_Validation.md: correction map, source evidence, test snapshot, and remaining author checks.
+
+The regenerated Word package was checked for valid XML and resolved document relationships. Its 503 text paragraphs, including table-cell paragraphs, match the exported Markdown content. It contains 12 tables with repeating header rows and six reference hyperlinks. A matching HTML preview was checked for table wrapping; this is not an institution-approved Word pagination or submission-format review.
 
 The original attachment is preserved. No PHP, Blade, CSS, database migration, or application test was edited for this documentation revision.

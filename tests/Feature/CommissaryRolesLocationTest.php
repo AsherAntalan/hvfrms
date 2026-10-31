@@ -53,6 +53,27 @@ class CommissaryRolesLocationTest extends TestCase
         return User::create(['full_name' => 'U', 'email' => $e, 'password_hash' => Hash::make('secret123'), 'role_id' => $this->role($role)->id, 'branch_id' => $b->id, 'status' => 'active']);
     }
 
+    public function test_commissary_staff_uses_the_manager_deliver_product_scanner(): void
+    {
+        $commissary = $this->branch('Commissary', 'commissary');
+        Setting::set('commissary_branch_id', (string) $commissary->id);
+        $staff = $this->user('commissary_staff', $commissary, 'cstaff@t.com');
+
+        // Lands on the Stock Management scanner, same as the Commissary Manager.
+        $this->post('/login', ['login' => 'cstaff@t.com', 'password' => 'secret123'])
+            ->assertRedirect(route('stock'));
+
+        $res = $this->actingAs($staff)->get('/stock')->assertOk();
+        // The commissary scanner is Deliver Product only (no Stock In / Stock Out toggle).
+        $res->assertViewHas('lockToMain', true)
+            ->assertSee('Deliver Product')
+            ->assertDontSee('id="btnIn"', false)
+            ->assertSee('id="manualCode"', false)   // manual product code input
+            ->assertSee('Look up')
+            ->assertSee('Start camera')
+            ->assertSee('Commissary');               // location fixed to the Commissary
+    }
+
     public function test_admin_has_owner_level_access(): void
     {
         $main = $this->branch('Tanza', 'main');

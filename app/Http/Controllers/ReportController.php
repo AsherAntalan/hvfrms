@@ -6,11 +6,14 @@ use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\ExpiredBatchArchive;
 use App\Models\StockBatch;
+use App\Services\CommissarySalesService;
+use App\Services\DemoSalesService;
 use App\Services\StockService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -40,7 +43,51 @@ class ReportController extends Controller
             ? 'All operating branches'
             : (optional($branches->firstWhere('id', $branchFilter))->branch_name ?? 'Selected branch');
 
+        $demoPreview = $salesAuthorized && app(DemoSalesService::class)->enabled();
+        $demoSales = null;
+        $demoSalesScopeText = 'All operating branches';
+        $salesSummary = null;
+        $salesScopeText = 'All branches';
+        $canSelectBranches = ! $user->isBranchScoped();
+        if ($salesAuthorized) {
+            $salesBranches = Branch::where('branch_type', '<>', 'commissary')->orderBy('branch_name')->get();
+            $salesBranch = $this->resolveSalesBranchFilter($request);
+            $salesScopeText = $salesBranch === 0 ? 'All branches' : $salesBranches->firstWhere('id', $salesBranch)->branch_name;
+            if ($demoPreview) {
+                $demoSales = app(DemoSalesService::class)->summary($dateFrom, $dateTo, $salesBranch);
+                $demoSalesScopeText = $salesScopeText;
+            } else {
+                $salesSummary = app(CommissarySalesService::class)->summary($dateFrom, $dateTo, $salesBranch);
+            }
+            if (in_array($request->input('tab'), ['sales', 'orders'], true)) {
+                $branches = $salesBranches;
+                $branchFilter = $salesBranch;
+                $canSelectBranches = true;
+            }
+        }
+
+        // The Commissary Manager's Product Summary / Product Movement tabs report
+        // the order-bound production workflow (requested → prepared → released),
+        // not branch batch stock.
+        $commissaryReports = $user->isCommissaryManager();
+        $commissaryProductSummary = collect();
+        $commissaryMovements = collect();
+        $commissaryBranches = collect();
+        $commissaryBranchFilter = 0;
+        if ($commissaryReports) {
+            // Scope by DESTINATION branch (a franchise), not the Commissary the
+            // manager is pinned to; default 0 = all destinations.
+            $commissaryBranchFilter = $this->resolveSalesBranchFilter($request);
+            $commissaryBranches = Branch::where('branch_type', '<>', 'commissary')->where('is_active', true)->orderBy('branch_name')->get();
+            [$commissaryProductSummary, $commissaryMovements] = $this->buildCommissaryReportData($commissaryBranchFilter, $dateFrom, $dateTo);
+        }
+
         return view('reports.index', array_merge($data, [
+            'commissaryReports' => $commissaryReports,
+            'commissaryProductSummary' => $commissaryProductSummary,
+            'commissaryMovements' => $commissaryMovements,
+            'commissaryBranches' => $commissaryBranches,
+            'commissaryBranchFilter' => $commissaryBranchFilter,
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'dateNotice' => $dateNotice,
@@ -50,9 +97,15 @@ class ReportController extends Controller
             'branchFilter' => $branchFilter,
             'branches' => $branches,
             'mainBranch' => $mainBranch,
-            'canArchive' => $user->canManageInventory(),
+            'canArchive' => $user->canHandleInventory(),
             'allowAllBranches' => ! $user->isBranchScoped(),
             'salesAuthorized' => $salesAuthorized,
+            'demoPreview' => $demoPreview,
+            'demoSales' => $demoSales,
+            'demoSalesScopeText' => $demoSalesScopeText,
+            'salesSummary' => $salesSummary,
+            'salesScopeText' => $salesScopeText,
+            'canSelectBranches' => $canSelectBranches,
         ]));
     }
 
@@ -132,6 +185,13 @@ class ReportController extends Controller
      * to the Commissary (which the branch reports exclude, yielding an empty
      * access-appropriate result) and never silently gains all-branch access.
      */
+    private function resolveSalesBranchFilter(Request $request): int
+    {
+        $branch = (int) $request->input('branch', 0);
+
+        return $branch > 0 && Branch::whereKey($branch)->where('branch_type', '<>', 'commissary')->exists() ? $branch : 0;
+    }
+
     protected function resolveBranchFilter(Request $request, $user): int
     {
         if ($user->isBranchScoped()) {
@@ -326,6 +386,91 @@ class ReportController extends Controller
     }
 
     /**
+     * Commissary production/dispatch reporting datasets.
+     *
+     * Product Summary: per product, the requested / prepared / released and
+     * remaining-for-release quantities from the order-bound production workflow,
+     * dated by preparation and optionally scoped to one destination branch.
+     *
+     * Product Movement: preparation/picking and release history rows, each with
+     * the destination branch and event date, within the selected period.
+     *
+     * Cancelled and declined orders are excluded. Quantities are in each product's
+     * own unit and are never combined across units.
+     *
+     * @return array{0:Collection,1:Collection}
+     */
+    protected function buildCommissaryReportData(int $branchFilter, string $dateFrom, string $dateTo): array
+    {
+        $summary = DB::table('order_productions as p')
+            ->join('orders as o', 'o.id', '=', 'p.order_id')
+            ->join('order_items as oi', 'oi.id', '=', 'p.order_item_id')
+            ->join('items as i', 'i.id', '=', 'p.item_id')
+            ->whereNotIn('o.status', ['cancelled', 'declined'])
+            ->whereNotNull('p.production_at')
+            ->whereBetween(DB::raw('DATE(p.production_at)'), [$dateFrom, $dateTo])
+            ->when($branchFilter > 0, fn ($q) => $q->where('p.destination_branch_id', $branchFilter))
+            ->groupBy('i.id', 'i.item_name', 'i.unit')
+            ->orderBy('i.item_name')
+            ->select(
+                'i.item_name',
+                'i.unit',
+                DB::raw('SUM(oi.quantity) as requested'),
+                DB::raw('SUM(p.produced_qty) as prepared'),
+                DB::raw('SUM(p.dispatched_qty) as released'),
+                DB::raw('SUM(p.produced_qty - p.dispatched_qty) as remaining')
+            )
+            ->get();
+
+        // Preparation / picking events (dated by production_at).
+        $preparation = DB::table('order_productions as p')
+            ->join('orders as o', 'o.id', '=', 'p.order_id')
+            ->join('items as i', 'i.id', '=', 'p.item_id')
+            ->join('branches as b', 'b.id', '=', 'p.destination_branch_id')
+            ->whereNotIn('o.status', ['cancelled', 'declined'])
+            ->whereNotNull('p.production_at')
+            ->whereBetween(DB::raw('DATE(p.production_at)'), [$dateFrom, $dateTo])
+            ->when($branchFilter > 0, fn ($q) => $q->where('p.destination_branch_id', $branchFilter))
+            ->select(
+                DB::raw('p.production_at as moved_at'),
+                DB::raw("CASE WHEN p.source_type = 'picked' THEN 'Picked' ELSE 'Prepared' END as action"),
+                'o.order_number',
+                'i.item_name',
+                'i.unit',
+                'b.branch_name as destination',
+                DB::raw('p.produced_qty as quantity')
+            );
+
+        // Release events (dated by each unit's dispatch, grouped per day/product/destination).
+        $release = DB::table('order_production_units as u')
+            ->join('order_productions as p', 'p.id', '=', 'u.production_id')
+            ->join('orders as o', 'o.id', '=', 'p.order_id')
+            ->join('items as i', 'i.id', '=', 'p.item_id')
+            ->join('branches as b', 'b.id', '=', 'p.destination_branch_id')
+            ->whereNotIn('o.status', ['cancelled', 'declined'])
+            ->whereNotNull('u.dispatched_at')
+            ->whereBetween(DB::raw('DATE(u.dispatched_at)'), [$dateFrom, $dateTo])
+            ->when($branchFilter > 0, fn ($q) => $q->where('p.destination_branch_id', $branchFilter))
+            ->groupBy(DB::raw('DATE(u.dispatched_at)'), 'o.order_number', 'i.item_name', 'i.unit', 'b.branch_name')
+            ->select(
+                DB::raw('MAX(u.dispatched_at) as moved_at'),
+                DB::raw("'Released' as action"),
+                'o.order_number',
+                'i.item_name',
+                'i.unit',
+                'b.branch_name as destination',
+                DB::raw('COUNT(*) as quantity')
+            );
+
+        $movements = $preparation->get()
+            ->concat($release->get())
+            ->sortByDesc(fn ($row) => $row->moved_at)
+            ->values();
+
+        return [$summary, $movements];
+    }
+
+    /**
      * Visible archive entries scoped to a branch (0 = all authorized). The
      * Commissary is excluded to match the branch inventory reports it sits beside.
      */
@@ -354,8 +499,8 @@ class ReportController extends Controller
     public function archive(Request $request): JsonResponse
     {
         $user = Auth::user();
-        if (! $user->canManageInventory()) {
-            return response()->json(['ok' => false, 'error' => 'You are not authorized to archive batches.'], 403);
+        if (! $user->canHandleInventory()) {
+            return response()->json(['ok' => false, 'error' => 'Inventory monitoring only. Inventory archive actions require an authorized inventory handler.'], 403);
         }
 
         $batchId = (int) $request->input('batch_id', 0);
@@ -509,8 +654,8 @@ class ReportController extends Controller
     public function archiveRemove(Request $request): JsonResponse
     {
         $user = Auth::user();
-        if (! $user->canManageInventory()) {
-            return response()->json(['ok' => false, 'error' => 'You are not authorized.'], 403);
+        if (! $user->canHandleInventory()) {
+            return response()->json(['ok' => false, 'error' => 'Inventory monitoring only. Inventory archive actions require an authorized inventory handler.'], 403);
         }
 
         $id = (int) $request->input('id', 0);
@@ -536,6 +681,11 @@ class ReportController extends Controller
         return response()->json(['ok' => true, 'message' => 'Archive entry removed.']);
     }
 
+    private function salesCsvText(string $value): string
+    {
+        return preg_match('/^\s*[=+\-@]/u', $value) === 1 ? "'".$value : $value;
+    }
+
     /**
      * Export the selected report tab as a CSV download.
      */
@@ -545,8 +695,20 @@ class ReportController extends Controller
         $type = $request->input('type', 'stock');
         if (in_array($type, ['sales', 'orders'], true)) {
             abort_unless($user->isOwner() || $user->isCommissaryManager(), 403);
+            if (app(DemoSalesService::class)->enabled()) {
+                return response('Simulated Sales are a demo preview and cannot be exported as actual Commissary Sales.', 409);
+            }
+            [$dateFrom, $dateTo] = $this->dateRange($request);
+            $summary = app(CommissarySalesService::class)->summary($dateFrom, $dateTo, $this->resolveSalesBranchFilter($request));
 
-            return response('Commissary Sales unavailable: verified payment data is not available. Order values and submitted payment proofs are not verified sales.', 409);
+            return response()->streamDownload(function () use ($summary): void {
+                $handle = fopen('php://output', 'w');
+                fputcsv($handle, ['Date', 'Order #', 'Branch', 'Product', 'Released / Completed Quantity', 'Unit', 'Unit Price', 'Amount', 'Record Basis']);
+                foreach ($summary['rows'] as $row) {
+                    fputcsv($handle, [$row->released_on, $this->salesCsvText($row->order_number), $this->salesCsvText($row->branch_name), $this->salesCsvText($row->item_name), $row->released_quantity, $this->salesCsvText($row->unit), number_format($row->unit_price, 2, '.', ''), number_format($row->amount, 2, '.', ''), $row->record_basis]);
+                }
+                fclose($handle);
+            }, "report_sales_{$dateFrom}_to_{$dateTo}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
         }
 
         [$dateFrom, $dateTo] = $this->dateRange($request);

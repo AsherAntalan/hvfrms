@@ -992,6 +992,15 @@ class OrderController extends Controller
                 ->where('delivery_discrepancies.order_id', $orderId)
                 ->get();
 
+            $productions = OrderProduction::where('order_id', $order->id)->get();
+            $hasPreparedOutput = $productions->contains(fn (OrderProduction $production): bool => $production->stock_batch_id !== null)
+                || DB::table('order_production_units')->whereIn('production_id', $productions->pluck('id'))->exists();
+            $releasedQuantity = (int) $productions->sum('dispatched_qty');
+            $canPrepare = $user->isOwner() || $user->isCommissaryManager();
+            $canRelease = $user->isOwner() || $user->isCommissaryRole();
+            $canCancel = $canPrepare || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id);
+            $isActiveOrder = $order->archived_at === null;
+
             return response()->json([
                 'ok' => true,
                 'order' => [
@@ -1004,6 +1013,14 @@ class OrderController extends Controller
                     'payment_screenshot_url' => ! $user->isCommissaryStaff() && $order->payment_screenshot_path ? route('orders.payment-screenshot', $order) : null,
                     'payment_submitted_at' => $user->isCommissaryStaff() ? null : $fmt($order->payment_submitted_at),
                     'status' => $order->status,
+                    'actions' => [
+                        'can_prepare' => $isActiveOrder && $canPrepare && in_array($order->status, ['approved', 'preparing'], true) && ! $hasPreparedOutput,
+                        'can_release' => $isActiveOrder && $canRelease && in_array($order->status, ['approved', 'preparing', 'delivering'], true) && $hasPreparedOutput && (int) $productions->sum('produced_qty') > $releasedQuantity,
+                        'can_receive' => $isActiveOrder && $order->status === 'delivering' && (! $hasPreparedOutput || ((int) $productions->sum('produced_qty') > 0 && $releasedQuantity >= (int) $productions->sum('produced_qty'))) && ($user->isOwner() || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id)),
+                        'can_cancel' => $isActiveOrder && $canCancel && in_array($order->status, ['pending', 'approved', 'preparing', 'delivering'], true) && $releasedQuantity === 0,
+                        'labels_url' => $canPrepare && $productions->isNotEmpty() && ! in_array($order->status, ['cancelled', 'declined'], true) ? route('orders.labels', $order) : null,
+                        'scan_out_url' => $canRelease ? route('stock', ['mode' => 'out']) : null,
+                    ],
                     'shipment_qr' => $order->status === 'delivering' ? OrderWorkflowService::shipmentQr($order) : null,
                     'ordered_by_name' => $order->ordered_by_name,
                     'approved_by_name' => $order->approved_by_name,
@@ -1044,7 +1061,7 @@ class OrderController extends Controller
                     ])->toArray(),
                     'cancel_reason' => $order->cancel_reason,
                     'branch_confirmed_at' => $fmt($order->branch_confirmed_at),
-                    'productions' => OrderProduction::where('order_id', $order->id)->get()->map(fn ($p) => [
+                    'productions' => $productions->map(fn ($p) => [
                         'order_item_id' => (int) $p->order_item_id,
                         'produced_qty' => (int) $p->produced_qty,
                         'dispatched_qty' => (int) $p->dispatched_qty,

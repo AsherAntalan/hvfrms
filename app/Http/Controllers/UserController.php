@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\Branch;
+use App\Models\RememberToken;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -59,18 +60,18 @@ class UserController extends Controller
      */
     protected function saveUser(Request $request): JsonResponse
     {
-        $id       = (int) $request->input('id', 0);
+        $id = (int) $request->input('id', 0);
         $fullName = trim($request->input('full_name', ''));
-        $email    = trim($request->input('email', ''));
+        $email = trim($request->input('email', ''));
         $password = $request->input('password', '');
-        $roleId   = (int) $request->input('role_id', 0);
+        $roleId = (int) $request->input('role_id', 0);
         $branchId = (int) $request->input('branch_id', 0);
 
         // Validation
         if ($fullName === '') {
             return response()->json(['ok' => false, 'error' => 'Full name is required.'], 422);
         }
-        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return response()->json(['ok' => false, 'error' => 'A valid email is required.'], 422);
         }
         if ($roleId <= 0) {
@@ -99,18 +100,18 @@ class UserController extends Controller
 
         // Verify role exists
         $role = Role::find($roleId);
-        if (!$role) {
+        if (! $role) {
             return response()->json(['ok' => false, 'error' => 'Invalid role selected.'], 422);
         }
 
         // Verify branch exists and is active
         $branch = Branch::where('id', $branchId)->where('is_active', 1)->first();
-        if (!$branch) {
+        if (! $branch) {
             return response()->json(['ok' => false, 'error' => 'Invalid or inactive branch selected.'], 422);
         }
 
         // Only super_admin can create another super_admin
-        if ($role->role_name === 'super_admin' && !Auth::user()->isSuperAdmin()) {
+        if ($role->role_name === 'super_admin' && ! Auth::user()->isSuperAdmin()) {
             return response()->json(['ok' => false, 'error' => 'Only super admins can assign the super admin role.'], 422);
         }
 
@@ -119,8 +120,8 @@ class UserController extends Controller
             $user = User::findOrFail($id);
             $data = [
                 'full_name' => $fullName,
-                'email'     => $email,
-                'role_id'   => $roleId,
+                'email' => $email,
+                'role_id' => $roleId,
                 'branch_id' => $branchId,
             ];
 
@@ -131,11 +132,11 @@ class UserController extends Controller
             $user->update($data);
 
             AuditLog::create([
-                'user_id'    => Auth::id(),
-                'action'     => 'updated user',
+                'user_id' => Auth::id(),
+                'action' => 'updated user',
                 'table_name' => 'users',
-                'record_id'  => $id,
-                'details'    => "Name: {$fullName}, Role: {$role->role_name}",
+                'record_id' => $id,
+                'details' => "Name: {$fullName}, Role: {$role->role_name}",
                 'ip_address' => $request->ip(),
             ]);
 
@@ -143,20 +144,20 @@ class UserController extends Controller
         } else {
             // Create new user
             $user = User::create([
-                'full_name'     => $fullName,
-                'email'         => $email,
+                'full_name' => $fullName,
+                'email' => $email,
                 'password_hash' => Hash::make($password),
-                'role_id'       => $roleId,
-                'branch_id'     => $branchId,
-                'status'        => 'active',
+                'role_id' => $roleId,
+                'branch_id' => $branchId,
+                'status' => 'active',
             ]);
 
             AuditLog::create([
-                'user_id'    => Auth::id(),
-                'action'     => 'created user',
+                'user_id' => Auth::id(),
+                'action' => 'created user',
                 'table_name' => 'users',
-                'record_id'  => $user->id,
-                'details'    => "Name: {$fullName}, Role: {$role->role_name}",
+                'record_id' => $user->id,
+                'details' => "Name: {$fullName}, Role: {$role->role_name}",
                 'ip_address' => $request->ip(),
             ]);
 
@@ -169,13 +170,13 @@ class UserController extends Controller
      */
     protected function toggleUser(Request $request): JsonResponse
     {
-        $id     = (int) $request->input('id', 0);
+        $id = (int) $request->input('id', 0);
         $status = $request->input('status', '');
 
         if ($id <= 0) {
             return response()->json(['ok' => false, 'error' => 'Invalid user ID.'], 422);
         }
-        if (!in_array($status, ['active', 'disabled'], true)) {
+        if (! in_array($status, ['active', 'disabled'], true)) {
             return response()->json(['ok' => false, 'error' => 'Invalid status.'], 422);
         }
 
@@ -185,16 +186,16 @@ class UserController extends Controller
         }
 
         User::where('id', $id)->update([
-            'status'          => $status,
+            'status' => $status,
             'failed_attempts' => 0,
-            'locked_until'    => null,
+            'locked_until' => null,
         ]);
 
         AuditLog::create([
-            'user_id'    => Auth::id(),
-            'action'     => "{$status} user",
+            'user_id' => Auth::id(),
+            'action' => "{$status} user",
             'table_name' => 'users',
-            'record_id'  => $id,
+            'record_id' => $id,
             'ip_address' => $request->ip(),
         ]);
 
@@ -206,7 +207,7 @@ class UserController extends Controller
      */
     protected function resetPassword(Request $request): JsonResponse
     {
-        $id          = (int) $request->input('id', 0);
+        $id = (int) $request->input('id', 0);
         $newPassword = $request->input('new_password', '');
 
         if ($id <= 0) {
@@ -217,16 +218,22 @@ class UserController extends Controller
         }
 
         User::where('id', $id)->update([
-            'password_hash'   => Hash::make($newPassword),
+            'password_hash' => Hash::make($newPassword),
             'failed_attempts' => 0,
-            'locked_until'    => null,
+            'locked_until' => null,
+            // An admin reset also invalidates any outstanding self-service reset link.
+            'reset_token' => null,
+            'reset_token_expires' => null,
         ]);
 
+        // Revoke persistent authentication for the account.
+        RememberToken::where('user_id', $id)->delete();
+
         AuditLog::create([
-            'user_id'    => Auth::id(),
-            'action'     => 'reset password',
+            'user_id' => Auth::id(),
+            'action' => 'reset password',
             'table_name' => 'users',
-            'record_id'  => $id,
+            'record_id' => $id,
             'ip_address' => $request->ip(),
         ]);
 

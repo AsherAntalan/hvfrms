@@ -1,8 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Alerts')
+@section('title', auth()->user()->isCommissaryManager() ? 'Orders Notification' : 'Alerts')
 
 @section('content')
+
+@if(auth()->user()->isCommissaryManager())
+<p class="small text-muted mb-3">Branch requests, preparation, and dispatch follow-ups. Expiry warnings apply only to remaining order-linked goods awaiting dispatch.</p>
+@endif
 
 <div class="hv-page-header">
     <div>
@@ -54,11 +58,9 @@
         <div class="col-md-3">
             <select class="form-select form-select-sm" name="type">
                 <option value="">All Types</option>
-                <option value="low_stock" {{ $filterType === 'low_stock' ? 'selected' : '' }}>Low Stock</option>
-                <option value="expiring_soon" {{ $filterType === 'expiring_soon' ? 'selected' : '' }}>Expiring Soon</option>
-                <option value="expired" {{ $filterType === 'expired' ? 'selected' : '' }}>Expired</option>
-                <option value="unusual_sales" {{ $filterType === 'unusual_sales' ? 'selected' : '' }}>Unusual Sales</option>
-                <option value="operational" {{ $filterType === 'operational' ? 'selected' : '' }}>Operational</option>
+                @foreach($typeBadges as $type => $badge)
+                <option value="{{ $type }}" {{ $filterType === $type ? 'selected' : '' }}>{{ $badge[2] }}</option>
+                @endforeach
             </select>
         </div>
         <div class="col-md-3">
@@ -78,6 +80,35 @@
         </div>
     </form>
 </div>
+
+@if($operationalOrderCount > 0)
+<section class="hv-card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <h6 class="mb-0">Orders needing follow-up <span class="text-muted">({{ $operationalOrderCount }})</span></h6>
+        <a href="{{ route('orders') }}" class="btn btn-sm btn-outline-secondary">All Orders</a>
+    </div>
+    <p class="small text-muted">These follow-ups update with the order status. Use the order workflow to complete them.</p>
+    @foreach($operationalOrders as $order)
+    <div class="d-flex justify-content-between align-items-center gap-3 border-top py-2">
+        <div>
+            <strong>{{ $order->order_number }}</strong>
+            <span class="small text-muted ms-2">{{ $order->branch?->branch_name }}</span>
+            <div class="small">{{ match ($order->status) {
+                'pending' => 'Request awaiting review',
+                'approved' => 'Approved request; review preparation and dispatch',
+                'preparing' => 'Preparation in progress',
+                'delivering' => 'Dispatched; awaiting destination receipt',
+                default => 'Review order',
+            } }}</div>
+        </div>
+        <a href="{{ route('orders', ['order' => $order->id]) }}" class="btn btn-sm btn-outline-secondary text-nowrap">Open Order</a>
+    </div>
+    @endforeach
+    @if($operationalOrderCount > $operationalOrders->count())
+    <p class="small text-muted mt-2 mb-0">Showing {{ $operationalOrders->count() }} of {{ $operationalOrderCount }} orders. Open All Orders to review the rest.</p>
+    @endif
+</section>
+@endif
 
 <!-- Alerts List -->
 @if($alerts->isEmpty())

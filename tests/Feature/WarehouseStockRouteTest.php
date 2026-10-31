@@ -122,22 +122,22 @@ class WarehouseStockRouteTest extends TestCase
     }
 
     /** Even a tampered (non-expired-looking) request can't issue an expired batch — server re-validates authoritative expiry. */
-    public function test_expired_batch_disposal_is_allowed(): void
+    public function test_commissary_manager_expired_disposal_is_blocked(): void
     {
+        // The Commissary Manager monitors inventory but may NOT dispose it; the
+        // adjustment/disposal path is refused before any stock movement.
         [$user, $main] = $this->warehouseUserAtMain();
         $item = $this->item('Soy Sauce');
         $expired = $this->batch($item->id, $main->id, 8, now()->subDay()->toDateString());
 
-        // Disposal goes through the adjustment action (as the stock screen maps
-        // expired/damaged/spoiled/lost reasons), which is allowed on expired stock.
         $res = $this->postStock($user, [
             'action' => 'adjustment', 'item_id' => $item->id, 'batch_id' => $expired->id,
             'quantity' => 8, 'reason' => 'Expired',
         ]);
 
-        $res->assertOk();
-        $this->assertEquals(0, $expired->fresh()->quantity_left);
-        $this->assertEquals('expired', StockTransaction::where('item_id', $item->id)->value('type'));
+        $res->assertStatus(403);
+        $this->assertEquals(8, $expired->fresh()->quantity_left);
+        $this->assertSame(0, StockTransaction::where('item_id', $item->id)->count());
     }
 
     /** Damaged scanned batch: normal stock out blocked, no movement. */

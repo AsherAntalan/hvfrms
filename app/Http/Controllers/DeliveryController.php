@@ -3,17 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
 
 class DeliveryController extends Controller
 {
     /**
-     * One unified Delivery page. Active deliveries grouped by branch (each branch
-     * is one expandable row carrying a real active/new count), with Delivery
-     * History served into the same page as a second tab. Branch-scoped users see
-     * only their own branch; Main Branch / Owner see every branch with orders.
+     * Delivery Status within Orders, with prepared/in-transit shipments grouped
+     * by branch. Requests awaiting review or preparation remain in All Orders.
      */
-    public function index()
+    public function index(): View
     {
         $user = Auth::user();
         $user->load('role', 'branch');
@@ -29,7 +30,23 @@ class DeliveryController extends Controller
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
             ->leftJoin('users as u', 'u.id', '=', 'orders.ordered_by')
             ->leftJoin('users as u_prep', 'u_prep.id', '=', 'orders.prepared_by')
-            ->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering'])
+            ->whereIn('orders.status', ['approved', 'preparing', 'delivering'])
+            ->where(function (Builder $query): void {
+                $query->where('orders.status', 'delivering')
+                    ->orWhereExists(function (QueryBuilder $productionQuery): void {
+                        $productionQuery->selectRaw('1')
+                            ->from('order_productions as prepared')
+                            ->whereColumn('prepared.order_id', 'orders.id')
+                            ->where('prepared.produced_qty', '>', 0)
+                            ->where(function (QueryBuilder $sourceQuery): void {
+                                $sourceQuery->whereNotNull('prepared.stock_batch_id')
+                                    ->orWhereExists(function (QueryBuilder $unitQuery): void {
+                                        $unitQuery->selectRaw('1')->from('order_production_units as units')
+                                            ->whereColumn('units.production_id', 'prepared.id');
+                                    });
+                            });
+                    });
+            })
             ->whereNull('orders.archived_at');
 
         if ($isBranchScoped && ! $isWarehouse) {
@@ -41,17 +58,15 @@ class DeliveryController extends Controller
             ->orderByDesc('orders.updated_at')
             ->get();
 
-        // Group active orders by destination branch. Each group carries its own
-        // total active count and a "new" (pending) count for the notification pill.
         $branches = $active->groupBy('branch_id')->map(function ($orders) {
             return [
                 'branch_id' => $orders->first()->branch_id,
                 'branch_name' => $orders->first()->branch_name,
                 'orders' => $orders->values(),
                 'count' => $orders->count(),
-                'new' => $orders->where('status', 'pending')->count(),
+                'ready' => $orders->filter(fn (Order $order): bool => (int) $order->prepared_units > (int) $order->released_units)->count(),
             ];
-        })->sortByDesc('new')->values();
+        })->sortByDesc('ready')->values();
 
         // Delivery history in the same page (completed / closed records).
         $historyQuery = Order::select('orders.*', 'branches.branch_name', 'u.full_name as ordered_by_name')

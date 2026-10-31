@@ -8,9 +8,10 @@
 {{-- Info banner --}}
 <div class="alert alert-info py-2 small mb-3">
     <i class="ph ph-info me-1"></i>
-    <strong>Weighted Moving Average</strong> &mdash; Analyzes the last 8 weeks of consumption data.
-    Recent weeks are weighted heavier (4&times;, 3&times;, 2&times;, 1&times;) to reflect current demand trends.
-    The recommended order quantity accounts for your current stock on hand.
+    <strong>Weighted Moving Average</strong> &mdash; Analyzes the last {{ $forecastMeta['weeks'] }} completed weeks of stock movements
+    (out, expiry, damage and adjustments &mdash; not verified sales).
+    The most recent {{ $forecastMeta['wma_weeks'] }} weeks are weighted {{ implode('&times;, ', $forecastMeta['wma_weights']) }}&times; (oldest to newest) to reflect current demand trends.
+    The suggested order quantity accounts for a safety factor of {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}&times; and your current recorded stock on hand.
 </div>
 
 {{-- Success flash --}}
@@ -76,7 +77,7 @@
                 <tr>
                     <th class="ps-3">Product</th>
                     <th>Category</th>
-                    <th class="text-center">8-Wk Avg</th>
+                    <th class="text-center">Avg/Active Wk</th>
                     <th class="text-center">WMA</th>
                     <th class="text-center">Trend</th>
                     <th class="text-center">Forecast</th>
@@ -131,39 +132,51 @@
                         <div class="row small">
                             <div class="col-md-6">
                                 <h6 class="mb-2" style="color:var(--maroon);"><i class="ph ph-lightbulb me-1"></i>Why this recommendation?</h6>
-                                <p class="mb-1"><strong>Historical period (8 weeks):</strong></p>
+                                <p class="mb-1"><strong>Historical period: {{ $forecastMeta['weeks'] }} weeks</strong>
+                                    <span class="text-muted">({{ \Carbon\Carbon::parse($forecastMeta['historical_start'])->format('M j, Y') }} &ndash; {{ \Carbon\Carbon::parse($forecastMeta['historical_end'])->format('M j, Y') }})</span></p>
                                 <ul class="mb-2 ps-3">
                                     @foreach($fc['weekly'] as $wi => $wv)
                                         <li>Week {{ $wi + 1 }}: <strong>{{ is_array($wv) ? ($wv['total'] ?? 0) : $wv }}</strong> {{ $item->unit }}</li>
                                     @endforeach
                                 </ul>
-                                <p class="mb-1"><strong>Simple average demand:</strong> {{ $fc['avg_weekly'] }} {{ $item->unit }}/week</p>
-                                <p class="mb-1"><strong>Weighted moving average (WMA):</strong> {{ $fc['wma'] }} {{ $item->unit }}/week</p>
-                                <p class="mb-2 text-muted" style="font-size:0.8em;">WMA weights: most recent 4 weeks at 4x, 3x, 2x, 1x; older weeks at 1x.</p>
+                                <p class="mb-1"><strong>Average per active week:</strong> {{ $fc['avg_weekly'] }} {{ $item->unit }}/week
+                                    <span class="text-muted">({{ $fc['active_weeks'] }} active week{{ $fc['active_weeks'] == 1 ? '' : 's' }} within the {{ $forecastMeta['weeks'] }}-week historical period)</span></p>
+                                <p class="mb-1"><strong>Weighted moving average (WMA):</strong> {{ $fc['wma'] }} {{ $item->unit }}/week
+                                    @if($fc['wma_fallback'])
+                                        <span class="text-muted">(WMA was 0 for the recent weeks; the active-week average is used as the base instead)</span>
+                                    @endif
+                                </p>
+                                <p class="mb-2 text-muted" style="font-size:0.8em;">WMA uses only the most recent {{ $forecastMeta['wma_weeks'] }} completed weeks, weighted {{ implode('&times;, ', $forecastMeta['wma_weights']) }}&times; (oldest to newest). Earlier weeks do not contribute to the WMA.</p>
                             </div>
                             <div class="col-md-6">
                                 <p class="mb-1"><strong>Trend:</strong>
                                     <span class="hv-badge {{ $tb[0] }}">{{ $tb[2] }}</span>
-                                    @if($fc['trend'] === 'up')
-                                        &mdash; Demand is increasing (last 4 weeks &gt; first 4 weeks).
-                                    @elseif($fc['trend'] === 'down')
-                                        &mdash; Demand is decreasing (last 4 weeks &lt; first 4 weeks).
+                                    @php $g1 = $forecastMeta['trend_first_group']; $g2 = $forecastMeta['trend_second_group']; @endphp
+                                    @if($fc['trend'] === 'rising')
+                                        &mdash; Demand is increasing (last {{ $g2 }} weeks &gt; first {{ $g1 }} weeks).
+                                    @elseif($fc['trend'] === 'falling')
+                                        &mdash; Demand is decreasing (last {{ $g2 }} weeks &lt; first {{ $g1 }} weeks).
                                     @elseif($fc['trend'] === 'stable')
-                                        &mdash; Demand is steady across the 8-week window.
+                                        &mdash; Demand is steady (first {{ $g1 }} weeks vs last {{ $g2 }} weeks within 15%).
+                                    @elseif($fc['trend'] === 'flat')
+                                        &mdash; No recorded movement in the period.
                                     @else
-                                        &mdash; Not enough data to determine a trend.
+                                        &mdash; Not enough data to determine a trend (fewer than 2 active weeks).
                                     @endif
                                 </p>
-                                <p class="mb-1"><strong>Safety factor:</strong> 1.5&times; (applied to WMA to buffer against demand spikes)</p>
+                                <p class="mb-1"><strong>Safety factor:</strong> {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}&times;
+                                    <span class="text-muted">(Target stock = rounded-up forecast &times; safety factor)</span></p>
                                 <p class="mb-1"><strong>Forecast demand (next week):</strong> {{ $fc['forecast_qty'] }} {{ $item->unit }}</p>
-                                <p class="mb-1"><strong>Current usable stock on hand:</strong> {{ $fc['stock_on_hand'] }} {{ $item->unit }}</p>
+                                <p class="mb-1"><strong>Target stock:</strong> ceil({{ $fc['forecast_qty'] }} &times; {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}) = {{ $fc['target_stock'] }} {{ $item->unit }}</p>
+                                <p class="mb-1"><strong>Current recorded stock on hand:</strong> {{ $fc['stock_on_hand'] }} {{ $item->unit }}
+                                    <span class="text-muted d-block" style="font-size:0.8em;">Recorded remaining quantity; this figure is not filtered for expired or damaged batches.</span></p>
                                 <hr class="my-2">
-                                <p class="mb-0"><strong>Recommended restock:</strong>
+                                <p class="mb-0"><strong>Suggested order:</strong>
                                     @if($fc['recommend_qty'] > 0)
                                         <span class="text-danger fw-bold">{{ $fc['recommend_qty'] }} {{ $item->unit }}</span><br>
-                                        <span class="text-muted">= Forecast ({{ $fc['forecast_qty'] }}) &minus; On Hand ({{ $fc['stock_on_hand'] }})</span>
+                                        <span class="text-muted">= max(0, Target ({{ $fc['target_stock'] }}) &minus; On Hand ({{ $fc['stock_on_hand'] }}))</span>
                                     @else
-                                        <span class="text-success">None needed</span> &mdash; stock on hand covers forecasted demand.
+                                        <span class="text-success">None needed</span> &mdash; recorded stock on hand covers the target.
                                     @endif
                                 </p>
                             </div>
@@ -189,14 +202,14 @@
     <h6 class="mb-2" style="color:var(--maroon);">How to Read This Report</h6>
     <div class="row small">
         <div class="col-md-6">
-            <p class="mb-1"><strong>8-Wk Avg:</strong> Simple average of weekly consumption over the last 8 weeks.</p>
-            <p class="mb-1"><strong>WMA:</strong> Weighted Moving Average &mdash; recent weeks count more.</p>
-            <p class="mb-1"><strong>Forecast:</strong> Predicted consumption for next week (WMA adjusted by trend).</p>
+            <p class="mb-1"><strong>Avg/Active Wk:</strong> Total movement divided by the number of weeks with movement (active weeks), within the {{ $forecastMeta['weeks'] }}-week period.</p>
+            <p class="mb-1"><strong>WMA:</strong> Weighted Moving Average over the most recent {{ $forecastMeta['wma_weeks'] }} weeks ({{ implode('&times;, ', $forecastMeta['wma_weights']) }}&times;, oldest to newest). Falls back to Avg/Active Wk when 0.</p>
+            <p class="mb-1"><strong>Forecast:</strong> Predicted movement for next week (WMA adjusted by trend).</p>
         </div>
         <div class="col-md-6">
-            <p class="mb-1"><strong>On Hand:</strong> Current stock available across all batches.</p>
-            <p class="mb-1"><strong>Recommend Order:</strong> Forecast minus On Hand. If positive, you need to order this much.</p>
-            <p class="mb-1"><strong>Trend:</strong> Compares first 4 weeks vs last 4 weeks of consumption.</p>
+            <p class="mb-1"><strong>On Hand:</strong> Recorded remaining quantity across all batches (not filtered for expired/damaged).</p>
+            <p class="mb-1"><strong>Suggested Order:</strong> max(0, Target &minus; On Hand), where Target = ceil(Forecast &times; {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}).</p>
+            <p class="mb-1"><strong>Trend:</strong> Compares first {{ $forecastMeta['trend_first_group'] }} weeks vs last {{ $forecastMeta['trend_second_group'] }} weeks of movement.</p>
         </div>
     </div>
 </div>

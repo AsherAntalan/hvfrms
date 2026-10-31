@@ -112,6 +112,7 @@
     const CSRF      = document.querySelector('meta[name="csrf-token"]').content;
 
     let mode      = 'in';
+    let modeSelected = false;
     let current   = null;
     let currentGroup = null;
     let scanner   = null;
@@ -153,18 +154,22 @@
     }
 
     // -- Mode Toggle --
-    function setMode(m) {
+    function setMode(m, selected = false) {
         mode = m;
+        if (selected) modeSelected = true;
         $('btnIn').classList.toggle('active', m === 'in');
         $('btnOut').classList.toggle('active', m === 'out');
         if (currentGroup) window.renderCommissaryGroup(currentGroup, $('scanResult'), postData, QR_API, beep, {mode, branchId: branchVal()});
         else if (current) renderItem(current);
     }
-    $('btnIn').addEventListener('click', () => setMode('in'));
-    $('btnOut').addEventListener('click', () => setMode('out'));
+    $('btnIn').addEventListener('click', () => setMode('in', true));
+    $('btnOut').addEventListener('click', () => setMode('out', true));
     $('branchSelect')?.addEventListener('change', () => {
         if (currentGroup) lookup(currentGroup.qr_code);
     });
+
+    const requestedMode = new URLSearchParams(location.search).get('mode');
+    if (requestedMode === 'in' || requestedMode === 'out') setMode(requestedMode, true);
 
     // -- Lookup --
     async function lookup(code) {
@@ -187,9 +192,9 @@
             if (r.production_group) {
                 current = null;
                 currentGroup = r.production_group;
-                // Dispatcher at source releases (Stock Out); the destination branch
-                // receives (Stock In). can_dispatch is false for branch users.
-                setMode(currentGroup.can_dispatch ? 'out' : 'in');
+                // Default source goods to release, while preserving an explicit
+                // selection and the current mode when looking up received goods.
+                setMode(!modeSelected && currentGroup.can_dispatch ? 'out' : mode);
                 return;
             }
             if (r.production_unit) {

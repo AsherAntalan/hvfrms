@@ -12,6 +12,7 @@ use App\Models\StockTransaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class BranchInventoryOverviewTest extends TestCase
@@ -77,6 +78,67 @@ class BranchInventoryOverviewTest extends TestCase
         }
     }
 
+    #[TestWith(['owner', '/warehouse'])]
+    #[TestWith(['owner', '/inventory'])]
+    #[TestWith(['commissary_manager', '/warehouse'])]
+    #[TestWith(['commissary_staff', '/warehouse'])]
+    public function test_expired_shortcut_opens_only_the_expired_stock_tab(string $role, string $path): void
+    {
+        $w = $this->world();
+
+        $response = $this->actingAs($w['users'][$role])->get($path.'?tab=expired')->assertOk();
+
+        $document = new \DOMDocument;
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML($response->getContent());
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $xpath = new \DOMXPath($document);
+        $this->assertSame(1, $xpath->query('//div[@id="tabExpired" and contains(@class,"show active")]')->length);
+        $this->assertSame(0, $xpath->query('//div[@id="tabActive" and contains(@class,"active")]')->length);
+        $this->assertSame(1, $xpath->query('//button[@data-bs-target="#tabExpired" and contains(@class,"active")]')->length);
+    }
+
+    #[TestWith([''])]
+    #[TestWith(['?tab=unknown'])]
+    public function test_inventory_defaults_to_active_stock_without_an_expired_shortcut(string $query): void
+    {
+        $w = $this->world();
+
+        $this->actingAs($w['users']['owner'])->get('/warehouse'.$query)->assertOk()
+            ->assertSee('class="tab-pane fade show active" id="tabActive"', false)
+            ->assertDontSee('class="tab-pane fade show active" id="tabExpired"', false);
+    }
+
+    public function test_dashboard_removes_preparing_metric_and_links_expired_stock_to_its_tab(): void
+    {
+        $w = $this->world();
+        $this->actingAs($w['users']['owner']);
+        $html = view('dashboard', [
+            'user' => $w['users']['owner'], 'branchName' => 'Tanza',
+            'isOwner' => true, 'isBranchScoped' => false, 'isWarehouse' => false, 'isWA' => false, 'isWS' => false,
+            'salesAuthorized' => true, 'salesAvailable' => false, 'salesRangeLabel' => 'Oct 1–31, 2026',
+            'stats' => ['pending_orders' => 6, 'delivering' => 5, 'preparing' => 1, 'branches' => 16,
+                'expired' => 3, 'low_stock' => 38, 'alerts' => 129, 'pending' => 0, 'approved' => 0, 'alerts_critical' => 0],
+            'recentOrders' => collect(), 'lowStock' => [], 'activeAlerts' => [],
+        ])->render();
+
+        $document = new \DOMDocument;
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML($html);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $xpath = new \DOMXPath($document);
+        $this->assertSame(0, $xpath->query('//span[contains(@class,"hv-m-label") and normalize-space(.)="Preparing"]')->length);
+        // The redundant Low Stock / Expired / Open Alerts health panel was removed;
+        // those are surfaced only by "Needs Your Attention" and the Active Alerts card.
+        $this->assertSame(0, $xpath->query('//section[contains(@class,"hv-sum--health")]')->length);
+        // Expired stock is reached through the "Needs Your Attention" reminder.
+        $reminder = $xpath->query('//a[contains(@class,"hv-attn-item") and contains(.,"expired batches for disposal")]')->item(0);
+        $this->assertNotNull($reminder);
+        $this->assertSame(route('warehouse', ['tab' => 'expired']), $reminder->getAttribute('href'));
+    }
+
     public function test_products_stay_global_while_branch_details_do_not_mix_stock_or_actions(): void
     {
         $w = $this->world();
@@ -98,7 +160,8 @@ class BranchInventoryOverviewTest extends TestCase
         // Owner/Admin may dispose or archive expired stock at any branch from the
         // monitor (expired cleanup), while batch edit/void stays main-branch only.
         $this->assertGreaterThanOrEqual(1, $xpath->query('.//button[contains(@onclick,"disposeBatch")]', $expired)->length);
-        $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'adjust_batch', 'batch_id' => StockBatch::where('branch_id', $w['silang']->id)->first()->id, 'quantity_left' => 20])->assertStatus(422);
+        // The Commissary Manager monitors inventory only: batch edit/adjust is refused (403).
+        $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'adjust_batch', 'batch_id' => StockBatch::where('branch_id', $w['silang']->id)->first()->id, 'quantity_left' => 20])->assertStatus(403);
     }
 
     public function test_franchise_manager_keeps_their_own_inventory_and_main_staff_does_not_gain_global_branch_monitoring(): void

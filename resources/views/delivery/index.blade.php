@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Delivery')
+@section('title', 'Orders')
 
 @section('content')
 
@@ -29,21 +29,23 @@
     $canArchive = $isOwner || $isMBM || $isBM;
 @endphp
 
-<div class="hv-page-header">
+@include('partials.orders-navigation')
+
+<div class="hv-page-header flex-wrap gap-3">
     <div>
-        <h1 class="h5 mb-1" style="color:var(--maroon);font-weight:700;">Delivery</h1>
+        <h1 class="h5 mb-1" style="color:var(--maroon);font-weight:700;">Delivery Status</h1>
         <span class="text-muted small">
             @if($isWarehouse)
-                Prepare, dispatch, and track shipments to every branch.
+                Release prepared shipments and track deliveries to every branch.
             @else
                 Confirm, track, and receive your branch's shipments.
             @endif
         </span>
     </div>
-    <div class="btn-group" role="group" aria-label="Delivery view">
+    <div class="d-flex flex-wrap gap-2" role="group" aria-label="Delivery view">
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'active' ? 'active' : '' }}"
                 id="tabBtnActive" onclick="showDeliveryTab('active')">
-            <i class="ph ph-truck me-1"></i> Active Deliveries
+            <i class="ph ph-truck me-1"></i> Active Shipments
             @if($active->count() > 0)<span class="hv-tab-count">{{ $active->count() }}</span>@endif
         </button>
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'history' ? 'active' : '' }}"
@@ -59,8 +61,8 @@
 </div>
 
 <div class="hv-card p-3 mb-3 small">
-    <strong>Commissary order flow:</strong> Branch requests &rarr; Main Branch reviews &rarr; Prepare / Pick &rarr; Print labels &rarr; Scan out for delivery &rarr; Branch receives.
-    <div class="text-muted mt-1">Preparing records actual quantities. Release changes Main Branch inventory; receiving adds accepted goods to the destination. Printing alone does not release goods.</div>
+    <strong>Shipment flow:</strong> Ready for release &rarr; Partially released / In transit &rarr; Branch receives.
+    <div class="text-muted mt-1">Requests awaiting review or preparation are in <a href="{{ route('orders') }}">All Orders</a>. Printing labels alone does not release goods.</div>
 </div>
 
 {{-- ═══ ACTIVE DELIVERIES — grouped by branch ═══════════════ --}}
@@ -68,7 +70,7 @@
 @if($branches->isEmpty())
     <div class="hv-card p-5 text-center">
         <i class="ph ph-check-circle d-block mb-2" style="font-size:2.25rem;color:var(--success);"></i>
-        <p class="mb-0 text-muted">No active deliveries right now.</p>
+        <p class="mb-0 text-muted">No active shipments right now. Orders appear here when goods are prepared for release or in transit.</p>
     </div>
 @else
     <div class="hv-branch-list">
@@ -77,7 +79,7 @@
             $collapseId = 'branch'.$b['branch_id'];
             // Branch managers see only their own branch — show it expanded, no dropdown.
             $collapsible = ! $isBM;
-            $openByDefault = $b['new'] > 0 || ! $collapsible;
+            $openByDefault = $b['ready'] > 0 || ! $collapsible;
         @endphp
         <div class="hv-card p-0 mb-2 overflow-hidden">
             @if($collapsible)
@@ -88,8 +90,8 @@
                     <i class="ph ph-storefront me-2" style="color:var(--maroon);"></i>{{ $b['branch_name'] }}
                 </span>
                 <span class="hv-branch-meta">
-                    @if($b['new'] > 0)
-                        <span class="hv-notif" title="{{ $b['new'] }} new order{{ $b['new'] !== 1 ? 's' : '' }} awaiting approval">{{ $b['new'] }} new</span>
+                    @if($b['ready'] > 0)
+                        <span class="hv-notif" title="{{ $b['ready'] }} shipment(s) with goods ready for release">{{ $b['ready'] }} ready</span>
                     @endif
                     <span class="hv-branch-count">{{ $b['count'] }} active</span>
                     <i class="ph ph-caret-down hv-branch-chevron"></i>
@@ -101,8 +103,8 @@
                     <i class="ph ph-storefront me-2" style="color:var(--maroon);"></i>{{ $b['branch_name'] }}
                 </span>
                 <span class="hv-branch-meta">
-                    @if($b['new'] > 0)
-                        <span class="hv-notif" title="{{ $b['new'] }} new order{{ $b['new'] !== 1 ? 's' : '' }} awaiting approval">{{ $b['new'] }} new</span>
+                    @if($b['ready'] > 0)
+                        <span class="hv-notif" title="{{ $b['ready'] }} shipment(s) with goods ready for release">{{ $b['ready'] }} ready</span>
                     @endif
                     <span class="hv-branch-count">{{ $b['count'] }} active</span>
                 </span>
@@ -134,16 +136,14 @@
                                 <td class="text-muted">{{ \Carbon\Carbon::parse($o->updated_at)->format('M j, g:i A') }}</td>
                                 <td>
                                     <div class="hv-del-actions">
-                                    @if($o->piece_outputs && ($isOwner || $isMBM) && in_array($o->status, ['approved','preparing','delivering']) && $o->released_units < $o->prepared_units)
-                                        <button class="btn btn-sm btn-maroon" title="Release this shipment" onclick="openManualDeliver({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}')"><i class="ph ph-thumbs-up"></i> Manual Release</button>
-                                    @endif
-                                    @if($o->status === 'delivering' && (!$o->piece_outputs || ($o->prepared_units > 0 && $o->released_units >= $o->prepared_units)) && ($isOwner || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
-                                        <button class="btn btn-sm btn-success" onclick="openConfirmModal({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-tray-arrow-down"></i> Receive / Confirm</button>
-                                    @endif
-                                        <button class="btn btn-sm btn-ghost-icon" title="Shipment / production details" aria-label="View details"
+                                    @if($o->piece_outputs && $canDispatch && in_array($o->status, ['approved','preparing','delivering']) && $o->released_units < $o->prepared_units)
+                                        <button type="button" class="btn btn-sm btn-maroon" data-order-workspace="release" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="openPieceRelease(this)"><i class="ph ph-truck" aria-hidden="true"></i> Release</button>
+                                    @else
+                                        <button type="button" class="btn btn-sm btn-outline-maroon" title="Shipment / production details"
                                                 onclick="viewOrder({{ $o->id }})">
-                                            <i class="ph ph-eye"></i>
+                                            <i class="ph ph-eye" aria-hidden="true"></i> View Details
                                         </button>
+                                    @endif
                                     </div>
                                 </td>
                             </tr>
@@ -157,7 +157,7 @@
     </div>
     <p class="text-muted small mt-2">
         <i class="ph ph-info me-1"></i>
-        {{ $active->count() }} active deliver{{ $active->count() !== 1 ? 'ies' : 'y' }} across {{ $branches->count() }} branch{{ $branches->count() !== 1 ? 'es' : '' }}.
+        {{ $active->count() }} active shipment{{ $active->count() !== 1 ? 's' : '' }} across {{ $branches->count() }} branch{{ $branches->count() !== 1 ? 'es' : '' }}.
     </p>
 @endif
 </div>
@@ -319,6 +319,9 @@
             </div>
             <div class="modal-body" id="vmBody">
                 <div class="text-center py-4 text-muted">Loading…</div>
+            </div>
+            <div class="modal-footer" id="vmFooter">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -557,7 +560,15 @@ function showDeliveryTab(tab) {
     document.getElementById('tabBtnHistory').classList.toggle('active', tab === 'history');
     var ab = document.getElementById('tabBtnArchived');
     if (ab) ab.classList.toggle('active', tab === 'archived');
-    try { history.replaceState(null, '', '?tab=' + tab); } catch (e) {}
+    ['active', 'history', 'archived'].forEach(function (name) {
+        var button = document.getElementById('tabBtn' + name.charAt(0).toUpperCase() + name.slice(1));
+        if (button) button.setAttribute('aria-pressed', name === tab ? 'true' : 'false');
+    });
+    try {
+        var url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        history.replaceState(null, '', url);
+    } catch (e) {}
 }
 
 // ── Archive / Restore / Delete ──
@@ -798,6 +809,7 @@ async function submitDecline() {
 // ── View order ──
 async function viewOrder(orderId) {
     document.getElementById('vmBody').innerHTML = '<div class="text-center py-4 text-muted">Loading…</div>';
+    document.getElementById('vmFooter').innerHTML = '<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>';
     viewModal.show();
     try {
         var r = await postAPI({ action: 'view', id: orderId });
@@ -855,6 +867,28 @@ async function viewOrder(orderId) {
                 + '<div class="small fw-semibold mt-1">' + escHtml(o.shipment_qr) + '</div></div>';
         }
         document.getElementById('vmBody').innerHTML = html;
+        const footer = document.getElementById('vmFooter');
+        if (o.proforma_url) {
+            const proforma = document.createElement('a');
+            proforma.className = 'btn btn-outline-secondary'; proforma.textContent = 'Print Proforma';
+            proforma.href = o.proforma_url; proforma.target = '_blank'; proforma.rel = 'noopener';
+            footer.appendChild(proforma);
+        }
+        if (o.actions?.labels_url) {
+            const labels = document.createElement('button');
+            labels.type = 'button'; labels.className = 'btn btn-outline-secondary'; labels.textContent = 'Print Labels';
+            labels.onclick = () => hvPrintLabelsUrl(o.actions.labels_url);
+            footer.appendChild(labels);
+        }
+        if (o.actions?.can_receive) {
+            const receive = document.createElement('button');
+            receive.type = 'button'; receive.className = 'btn btn-success'; receive.textContent = 'Receive / Confirm';
+            receive.onclick = () => {
+                document.getElementById('viewModal').addEventListener('hidden.bs.modal', () => openConfirmModal(o.id, o.order_number), {once:true});
+                viewModal.hide();
+            };
+            footer.appendChild(receive);
+        }
         if (o.shipment_qr) renderShipQr(o.shipment_qr);
     } catch (e) { document.getElementById('vmBody').innerHTML = '<div class="text-danger">Network error.</div>'; }
 }

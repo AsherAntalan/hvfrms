@@ -7,12 +7,23 @@
 @php
     $requestedReport = request('tab') === 'orders' ? 'sales' : request('tab');
     $activeReport = in_array($requestedReport, ['stock', 'movements', 'sales', 'expiry'], true) ? $requestedReport : 'stock';
+    // The Commissary Manager has no Expiry Report tab; fall back to Product Summary.
+    if ($activeReport === 'expiry' && auth()->user()->isCommissaryManager()) {
+        $activeReport = 'stock';
+    }
     $dateFilterDescriptions = [
         'stock' => 'Filter by batch received date. Quantities are the current remaining stock of those batches; older batches are excluded.',
         'movements' => 'Filter by stock movement date. Only transactions within the selected dates are included.',
-        'sales' => 'Selected sales period. Only verified payments qualify as Commissary Sales; verified payment data is currently unavailable.',
+        'sales' => 'Filter by item release date. Legacy outputs use their recorded release date; older completed lines without production records use their completion date.',
         'expiry' => 'Filter by batch expiry date. Remaining quantities and expiry status are current.',
     ];
+    if ($demoPreview) {
+        $dateFilterDescriptions['sales'] = 'Demo preview: amounts from closed DEMO-HVFRMS orders, filtered by closure date. These are simulated figures, not verified payments.';
+    }
+    if ($commissaryReports ?? false) {
+        $dateFilterDescriptions['stock'] = 'Product Summary: requested, prepared, released and remaining-for-release per product, filtered by preparation date.';
+        $dateFilterDescriptions['movements'] = 'Product Movement: preparation/picking and release events with destination branch, filtered by event date.';
+    }
 @endphp
 
 @if(!empty($dateNotice))
@@ -42,7 +53,15 @@
         </div>
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Branch</label>
-            @if(auth()->user()->isBranchScoped())
+            @if($commissaryReports ?? false)
+                {{-- Commissary reports scope by DESTINATION branch; default All Branches --}}
+                <select class="form-select form-select-sm" name="branch">
+                    <option value="0" {{ (int) $commissaryBranchFilter === 0 ? 'selected' : '' }}>All Branches</option>
+                    @foreach($commissaryBranches as $br)
+                        <option value="{{ $br->id }}" {{ (int) $commissaryBranchFilter === $br->id ? 'selected' : '' }}>{{ $br->branch_name }}</option>
+                    @endforeach
+                </select>
+            @elseif(!$canSelectBranches)
                 {{-- Branch Managers are pinned to their own branch (enforced server-side) --}}
                 <div class="form-control form-control-sm bg-light" style="pointer-events:none;">
                     {{ $branches->firstWhere('id', $branchFilter)->branch_name ?? ($branches->first()->branch_name ?? 'Your branch') }}
@@ -84,6 +103,23 @@
 </div>
 
 <!-- Report Tabs -->
+@if($salesAuthorized)
+@php
+    // The Commissary Manager works a product-centric view: Product Summary /
+    // Product Movement / Commissary Sales, without the branch Expiry Report.
+    $reportTabs = auth()->user()->isCommissaryManager()
+        ? ['stock' => 'Product Summary', 'movements' => 'Product Movement', 'sales' => 'Commissary Sales']
+        : ['stock' => 'Stock Summary', 'movements' => 'Stock Movements', 'sales' => 'Commissary Sales', 'expiry' => 'Expiry Report'];
+@endphp
+<ul class="nav nav-tabs mb-3">
+    @foreach($reportTabs as $type => $label)
+    <li class="nav-item">
+        <a class="nav-link {{ $activeReport === $type ? 'active' : '' }}"
+           href="{{ route('reports', ['tab' => $type, 'from' => $dateFrom, 'to' => $dateTo, 'branch' => $branchFilter]) }}">{{ $label }}</a>
+    </li>
+    @endforeach
+</ul>
+@else
 <ul class="nav nav-tabs mb-3" role="tablist">
     <li class="nav-item">
         <button class="nav-link {{ $activeReport === 'stock' ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabStock">
@@ -111,11 +147,47 @@
         </button>
     </li>
 </ul>
+@endif
 
 <div class="tab-content">
 
-<!-- Tab 1: Stock Summary -->
+<!-- Tab 1: Stock Summary / Product Summary -->
 <div class="tab-pane fade {{ $activeReport === 'stock' ? 'show active' : '' }}" id="tabStock">
+    @if($commissaryReports ?? false)
+    {{-- Commissary Product Summary: requested → prepared → released → remaining for release. --}}
+    <div class="small text-muted mb-2">
+        <strong>{{ $scopeText }}</strong> &middot; Prepared: {{ $periodText }} &middot; Quantities in each product's own unit
+    </div>
+    <div class="hv-card p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Product</th>
+                        <th class="text-center">Requested</th>
+                        <th class="text-center">Prepared</th>
+                        <th class="text-center">Released</th>
+                        <th class="text-center">Remaining for Release</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @forelse($commissaryProductSummary as $cp)
+                    <tr>
+                        <td class="ps-3 fw-semibold">{{ $cp->item_name }} <span class="text-muted small">({{ $cp->unit }})</span></td>
+                        <td class="text-center">{{ (int) $cp->requested }}</td>
+                        <td class="text-center">{{ (int) $cp->prepared }}</td>
+                        <td class="text-center">{{ (int) $cp->released }}</td>
+                        <td class="text-center fw-semibold {{ (int) $cp->remaining > 0 ? 'text-danger' : 'text-muted' }}">{{ (int) $cp->remaining }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="text-center text-muted py-4">No prepared products in this period.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="text-muted small mt-2">{{ $commissaryProductSummary->count() }} product(s). Remaining for Release = Prepared − Released.</div>
+    @else
     <div class="small text-muted mb-2" id="stockScopeLabel">
         <strong>{{ $scopeText }}</strong> &middot; Batches received: {{ $periodText }} &middot; Remaining stock as of {{ now('Asia/Manila')->format('M j, Y g:i A') }}
     </div>
@@ -174,10 +246,50 @@
         </div>
     </div>
     <div class="text-muted small mt-2">{{ count($stockRows) }} row(s) with remaining stock from batches received in this period.</div>
+    @endif
 </div>
 
-<!-- Tab 2: Stock Movements -->
+<!-- Tab 2: Stock Movements / Product Movement -->
 <div class="tab-pane fade {{ $activeReport === 'movements' ? 'show active' : '' }}" id="tabMovement">
+    @if($commissaryReports ?? false)
+    {{-- Commissary Product Movement: preparation/picking and release history. --}}
+    <div class="text-muted small mb-2">
+        <strong>{{ $scopeText }}</strong> &middot; {{ $periodText }} &middot; Preparation and release events
+    </div>
+    <div class="hv-card p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">Date</th>
+                        <th>Action</th>
+                        <th>Product</th>
+                        <th>Order</th>
+                        <th>Destination Branch</th>
+                        <th class="text-center">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @forelse($commissaryMovements as $cm)
+                    <tr>
+                        <td class="ps-3 small">{{ \Carbon\Carbon::parse($cm->moved_at)->format('M j, Y g:i A') }}</td>
+                        <td>
+                            <span class="hv-badge {{ $cm->action === 'Released' ? 'hv-badge-info' : 'hv-badge-warning' }}">{{ $cm->action }}</span>
+                        </td>
+                        <td class="fw-semibold">{{ $cm->item_name }} <span class="text-muted small">({{ $cm->unit }})</span></td>
+                        <td class="small">{{ $cm->order_number }}</td>
+                        <td class="small">{{ $cm->destination }}</td>
+                        <td class="text-center fw-semibold">{{ (int) $cm->quantity }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6" class="text-center text-muted py-4">No preparation or release activity in this period.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="text-muted small mt-2">{{ $commissaryMovements->count() }} event(s). Prepared/Picked = produced for an order line; Released = scanned out for delivery.</div>
+    @else
     <div class="text-muted small mb-2">
         <strong>{{ $scopeText }}</strong> &middot; {{ $periodText }}
     </div>
@@ -215,7 +327,7 @@
                             <td class="text-center text-success fw-semibold">+{{ (int)$mr->total_in }}</td>
                             <td class="text-center text-danger fw-semibold">{{ (int)$mr->total_out ? '-'.(int)$mr->total_out : 0 }}</td>
                             <td class="text-center fw-bold {{ $net >= 0 ? 'text-success' : 'text-danger' }}">
-                                {{ $net >= 0 ? '+' : '' }}{{ $net }}
+                                {{ $net }}
                             </td>
                         </tr>
                     @endforeach
@@ -224,7 +336,7 @@
                         <td class="ps-3" colspan="3">GRAND TOTAL</td>
                         <td class="text-center text-success">+{{ $grandIn }}</td>
                         <td class="text-center text-danger">{{ $grandOut ? '-'.$grandOut : 0 }}</td>
-                        <td class="text-center">{{ ($gn >= 0 ? '+' : '') . $gn }}</td>
+                        <td class="text-center">{{ $gn }}</td>
                     </tr>
                 @endif
                 </tbody>
@@ -238,24 +350,82 @@
         A <span class="text-danger">negative Net</span> means stock decreased over the period;
         a <span class="text-success">positive Net</span> means it grew.
     </div>
+    @endif
 </div>
 
 <!-- Tab 3: Commissary Sales -->
 @if($salesAuthorized)
 <div class="tab-pane fade {{ $activeReport === 'sales' ? 'show active' : '' }}" id="tabSales">
     <div class="text-muted small mb-2">
-        <strong>{{ $scopeText }}</strong> &middot; {{ $periodText }}
+        <strong>{{ $demoPreview ? $demoSalesScopeText : $salesScopeText }}</strong> &middot; {{ $periodText }}
     </div>
 
+    @if($demoPreview)
+    <div class="hv-card p-4">
+        <h6 class="mb-2">Simulated Sales</h6>
+        <p class="small text-muted mb-3">Closed demo order values for this period. This preview does not represent verified payments or actual business revenue.</p>
+        <div class="d-flex gap-5 flex-wrap mb-4">
+            <div>
+                <div class="hv-summary-label mb-2">Simulated amount</div>
+                <div class="hv-summary-value text-maroon">&#8369;{{ number_format($demoSales['amount'], 2) }}</div>
+            </div>
+            <div>
+                <div class="hv-summary-label mb-2">Closed demo orders</div>
+                <div class="hv-summary-value">{{ $demoSales['orders'] }}</div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Branch</th><th class="text-center">Closed demo orders</th><th class="text-end">Simulated amount</th></tr></thead>
+                <tbody>
+                    @forelse($demoSales['rows'] as $row)
+                    <tr><td>{{ $row->branch_name }}</td><td class="text-center">{{ $row->closed_orders }}</td><td class="text-end">&#8369;{{ number_format($row->amount, 2) }}</td></tr>
+                    @empty
+                    <tr><td colspan="3" class="text-center text-muted py-3">No closed demo orders in this period.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @else
     <div class="hv-card p-4">
         <h6 class="mb-2">Commissary Sales</h6>
-        <p class="text-muted small mb-3">Verified payments received from branch orders for the selected period.</p>
-        <div class="hv-summary-metric p-0 mb-3">
-            <div class="hv-summary-label">Verified Sales</div>
-            <div class="hv-summary-value" style="color:var(--maroon);">Unavailable</div>
+        <p class="text-muted small mb-3">Value of released goods, including received/closed orders. Requested and unreleased quantities are excluded. This report does not verify payments or represent branch retail sales.</p>
+        <div class="d-flex gap-5 flex-wrap mb-4">
+            <div>
+                <div class="hv-summary-label mb-2">Commissary Sales</div>
+                <div class="hv-summary-value text-maroon">&#8369;{{ number_format($salesSummary['amount'], 2) }}</div>
+            </div>
+            <div>
+                <div class="hv-summary-label mb-2">Orders included</div>
+                <div class="hv-summary-value">{{ $salesSummary['orders'] }}</div>
+            </div>
         </div>
-        <p class="small mb-0" role="status">Verified payment data is not available yet. Submitted payment proofs and received/closed orders are excluded until payment verification is recorded. Sales totals and CSV export will be available once that data is available.</p>
+        @if($salesSummary['legacy_rows'] > 0)
+        <p class="small text-muted">Legacy rows use recorded output quantities and release dates, or completed quantities and completion dates when production records are absent. They are identified below.</p>
+        @endif
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Date</th><th>Order #</th><th>Branch</th><th>Product</th><th class="text-end">Released / Completed</th><th class="text-end">Unit Price</th><th class="text-end">Amount</th><th>Record Basis</th></tr></thead>
+                <tbody>
+                @forelse($salesSummary['rows'] as $row)
+                <tr>
+                    <td class="text-nowrap">{{ $row->released_on }}</td>
+                    <td><a href="{{ route('orders', array_filter(['order' => $row->order_id, 'queue' => 'all', 'archived' => $row->archived_at ? 1 : null])) }}">{{ $row->order_number }}</a></td>
+                    <td>{{ $row->branch_name }}</td><td>{{ $row->item_name }}</td>
+                    <td class="text-end text-nowrap">{{ $row->released_quantity }} {{ $row->unit }}</td>
+                    <td class="text-end">&#8369;{{ number_format($row->unit_price, 2) }}</td>
+                    <td class="text-end fw-semibold">&#8369;{{ number_format($row->amount, 2) }}</td>
+                    <td class="small text-muted">{{ ['unit_release' => 'Released items', 'legacy_release' => 'Legacy release', 'legacy_completion' => 'Legacy completion'][$row->record_basis] }}</td>
+                </tr>
+                @empty
+                <tr><td colspan="8" class="text-center text-muted py-4">No released or completed order items in this period.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
+    @endif
 </div>
 @endif
 
@@ -477,13 +647,13 @@ document.addEventListener('DOMContentLoaded', function() {
         var activePane = document.querySelector('.tab-content > .tab-pane.active');
         var type = activePane ? (typeMap[activePane.id] || 'stock') : 'stock';
         var exportButton = $('csvExportBtn');
-        var salesUnavailable = type === 'sales';
+        var salesUnavailable = type === 'sales' && @json($demoPreview);
         exportButton.classList.toggle('disabled', salesUnavailable);
         exportButton.setAttribute('aria-disabled', String(salesUnavailable));
         if (salesUnavailable) {
             exportButton.removeAttribute('href');
             exportButton.setAttribute('tabindex', '-1');
-            exportButton.title = 'Verified payment data is not available yet.';
+            exportButton.title = 'Simulated sales are a demo preview.';
             return;
         }
         exportButton.removeAttribute('tabindex');

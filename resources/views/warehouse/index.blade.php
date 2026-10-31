@@ -4,12 +4,21 @@
 
 @section('content')
 
+@php $showExpired = request('tab') === 'expired'; @endphp
+
 @include('partials.production-shipments')
 
 <div class="hv-page-header">
 <div><strong>{{ $scopeLabel }}</strong><div class="small text-muted">Branch stock, open commissary orders, and disposal history.</div></div>
     <div class="d-flex align-items-center gap-2"></div>
 </div>
+
+@if($inventoryReadOnly ?? false)
+<div class="alert alert-light border small py-2 mb-3" role="note">
+    <i class="ph ph-info me-1" style="color:var(--maroon);"></i>
+    Inventory monitoring only. Disposal and inventory archive actions require an authorized inventory handler.
+</div>
+@endif
 
 <style>.inventory-branch-toggle[aria-expanded="true"] .ph-caret-right {display:inline-block;transform:rotate(90deg);}</style>
 <!-- Statistics Cards -->
@@ -43,13 +52,13 @@
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-0" role="tablist">
     <li class="nav-item">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabActive" type="button">
+        <button class="nav-link {{ $showExpired ? '' : 'active' }}" data-bs-toggle="tab" data-bs-target="#tabActive" type="button">
             <i class="ph ph-check-circle me-1"></i> Active Stock
             <span class="badge bg-success ms-1">{{ count($activeBatches) }}</span>
         </button>
     </li>
     <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabExpired" type="button">
+        <button class="nav-link {{ $showExpired ? 'active' : '' }}" data-bs-toggle="tab" data-bs-target="#tabExpired" type="button">
             <i class="ph ph-archive-box me-1"></i> Expired Stock
             <span class="badge bg-danger ms-1">{{ count($expiredBatches) }}</span>
         </button>
@@ -74,7 +83,7 @@
 <div class="tab-content">
 
     {{-- ═══ ACTIVE STOCK ═══════════════════════════════════ --}}
-    <div class="tab-pane fade show active" id="tabActive">
+    <div class="tab-pane fade {{ $showExpired ? '' : 'show active' }}" id="tabActive">
         <div class="hv-card p-0 hv-panel" style="border-top-left-radius:0;">
             @unless($monitorAllBranches)
             <div class="p-3 border-bottom">
@@ -94,7 +103,7 @@
     </div>
 
     {{-- ═══ EXPIRED STOCK ═══════════════════════════════════ --}}
-    <div class="tab-pane fade" id="tabExpired">
+    <div class="tab-pane fade {{ $showExpired ? 'show active' : '' }}" id="tabExpired">
         <div class="hv-card p-0 hv-panel" style="border-top-left-radius:0;">
             @unless($monitorAllBranches)
             <div class="p-3 border-bottom">

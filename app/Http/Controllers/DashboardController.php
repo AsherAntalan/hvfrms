@@ -7,6 +7,8 @@ use App\Models\Branch;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\CommissarySalesService;
+use App\Services\DemoSalesService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -55,7 +57,7 @@ class DashboardController extends Controller
         $stats['delivered_today'] = $deliveredTodayQuery->count();
 
         // Alert counts by severity
-        $alertCountsQuery = Alert::select('severity', DB::raw('COUNT(*) as cnt'))
+        $alertCountsQuery = Alert::visibleTo($user)->select('severity', DB::raw('COUNT(*) as cnt'))
             ->where('is_resolved', false);
         if ($isBranchScoped && ! $isWarehouse) {
             $alertCountsQuery->where('branch_id', $branchId);
@@ -72,20 +74,19 @@ class DashboardController extends Controller
             $stats['users_disabled'] = User::where('status', 'disabled')->count();
         }
 
-        // Monthly Commissary Sales (verified payments only). This application
-        // records payment *submission* artifacts (reference, screenshot,
-        // payment_submitted_at) and an operational order status, but no payment
-        // *verification* record — there is no verified flag/amount/timestamp and
-        // no payments table. Without an authoritative verified-payment source the
-        // amount is reported as unavailable rather than fabricated or shown as
-        // ₱0.00. Visible to Owner/Admin and Commissary Admin only.
         $salesAuthorized = $isOwner || $isWA;
-        $salesAvailable = false;
+        $salesAvailable = $salesAuthorized;
         $salesAmount = null;
         $salesMonthStart = now('Asia/Manila')->startOfMonth();
         $salesMonthEnd = now('Asia/Manila')->endOfMonth();
         $salesPeriodLabel = $salesMonthStart->format('F Y');
         $salesRangeLabel = $salesMonthStart->format('M j').'–'.$salesMonthEnd->format('j, Y');
+        $demoPreview = $salesAuthorized && app(DemoSalesService::class)->enabled();
+        if ($demoPreview) {
+            $salesAmount = app(DemoSalesService::class)->summary($salesMonthStart->toDateString(), now('Asia/Manila')->toDateString())['amount'];
+        } elseif ($salesAuthorized) {
+            $salesAmount = app(CommissarySalesService::class)->summary($salesMonthStart->toDateString(), now('Asia/Manila')->toDateString())['amount'];
+        }
 
         $branchName = $user->branch ? $user->branch->branch_name : 'N/A';
 
@@ -144,7 +145,7 @@ class DashboardController extends Controller
         // Active alerts
         $activeAlerts = [];
         if ($user->canManageInventory() || $isWarehouse) {
-            $alertQuery = Alert::select('alerts.*', 'items.item_name', 'branches.branch_name')
+            $alertQuery = Alert::visibleTo($user)->select('alerts.*', 'items.item_name', 'branches.branch_name')
                 ->leftJoin('items', 'items.id', '=', 'alerts.item_id')
                 ->leftJoin('branches', 'branches.id', '=', 'alerts.branch_id')
                 ->where('alerts.is_resolved', false);
@@ -154,7 +155,7 @@ class DashboardController extends Controller
             }
 
             $activeAlerts = $alertQuery
-                ->orderByRaw("FIELD(alerts.severity, 'critical', 'warning', 'info')")
+                ->orderByRaw("CASE alerts.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END")
                 ->orderByDesc('alerts.created_at')
                 ->limit(8)
                 ->get();
@@ -199,6 +200,7 @@ class DashboardController extends Controller
             'salesAmount',
             'salesPeriodLabel',
             'salesRangeLabel',
+            'demoPreview',
         ));
     }
 }

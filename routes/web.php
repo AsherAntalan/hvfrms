@@ -69,11 +69,14 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     // Root redirect — role-aware landing page
     Route::get('/', function () {
         $user = auth()->user();
-        if ($user?->isBranchStaff()) {
-            return redirect('/qr');
+        if ($user && $user->isBranchStaff()) {
+            return redirect()->route('qr');
+        }
+        if ($user && $user->isCommissaryStaff()) {
+            return redirect()->route('stock');
         }
 
-        return redirect('/dashboard');
+        return redirect()->route('dashboard');
     });
 
     // ---------------------------------------------------------------

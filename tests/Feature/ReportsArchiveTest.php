@@ -124,7 +124,7 @@ class ReportsArchiveTest extends TestCase
     #[TestWith(['admin', 'sales'])]
     #[TestWith(['commissary_manager', 'sales'])]
     #[TestWith(['owner', 'orders'])]
-    public function test_sales_report_keeps_the_selected_period_without_counting_unverified_closed_orders(string $roleName, string $tab): void
+    public function test_sales_report_keeps_the_selected_period_without_counting_header_only_orders(string $roleName, string $tab): void
     {
         $this->freezeTime();
         $branch = $this->branch('Tanza', 'main');
@@ -140,20 +140,20 @@ class ReportsArchiveTest extends TestCase
 
         $response->assertOk()->assertViewHas('salesAuthorized', true)
             ->assertViewHas('dateFrom', '2026-10-01')->assertViewHas('dateTo', '2026-10-25')
-            ->assertSee('Commissary Sales')->assertSee('Unavailable')
+            ->assertSee('Commissary Sales')->assertViewHas('salesSummary', fn (array $summary): bool => $summary['amount'] === 0.0)
             ->assertSee('class="tab-pane fade show active" id="tabSales"', false)
-            ->assertSee('Verified payment data is not available yet.')
+            ->assertSee('No released or completed order items in this period.')
             ->assertDontSee('Order Summary')->assertDontSee('9,876.54')->assertDontSee('9876.54');
     }
 
     #[TestWith(['sales'])]
     #[TestWith(['orders'])]
-    public function test_sales_export_reports_unavailable_instead_of_exporting_order_values(string $type): void
+    public function test_sales_export_has_headers_and_no_unreleased_order_values(string $type): void
     {
         [$owner] = $this->owner();
 
-        $this->actingAs($owner)->get('/reports/export?type='.$type)
-            ->assertStatus(409)->assertSee('verified payment data is not available');
+        $response = $this->actingAs($owner)->get('/reports/export?type='.$type)->assertOk()->assertDownload();
+        $this->assertStringContainsString('Record Basis', $response->streamedContent());
     }
 
     public function test_branch_manager_cannot_open_or_export_commissary_sales(): void

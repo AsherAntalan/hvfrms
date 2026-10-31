@@ -152,6 +152,16 @@ class StockController extends Controller
         }
 
         $user = Auth::user();
+
+        // The Commissary Manager monitors inventory but may not dispose it; the
+        // adjustment/disposal path is refused before any stock movement.
+        if ($user->isCommissaryManager() && $action === 'adjustment') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Inventory monitoring only. Disposal requires an authorized inventory handler.',
+            ], 403);
+        }
+
         $qr = trim((string) $request->input('qr', ''));
         if (str_starts_with($qr, 'HV-PROD-') && str_contains($qr, '-U')) {
             if ($action !== 'stock_out') {
@@ -181,7 +191,9 @@ class StockController extends Controller
                 return response()->json($service->dispatch($qr, $user, $request->input('quantity'), $key));
             }
             if ($action === 'stock_in') {
-                return response()->json($service->receive($qr, $user, $request->input('quantity'), $request->input('reason'), $key, $request->boolean('finalize')));
+                $request->validate(['receipt_status' => ['nullable', 'string', 'in:good,issue']]);
+
+                return response()->json($service->receive($qr, $user, $request->input('quantity'), $request->input('reason'), $key, $request->boolean('finalize'), $request->input('receipt_status')));
             }
 
             return response()->json(['ok' => false, 'error' => 'Use delivery release or delivery receipt for this QR.'], 422);

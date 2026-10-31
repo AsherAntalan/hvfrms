@@ -10,6 +10,7 @@ use App\Models\StockBatch;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class ProductsPageTest extends TestCase
@@ -59,12 +60,13 @@ class ProductsPageTest extends TestCase
             libxml_use_internal_errors(false);
             $xpath = new \DOMXPath($document);
             $this->assertSame(1, $xpath->query('//nav//a[contains(@href,"/products") and contains(@class,"active")]')->length);
-            $this->assertSame(1, $xpath->query('//nav//a[contains(@href,"/products")]/ancestor::div[contains(@class,"hv-nav-submenu") and contains(@class,"open")]')->length);
             if ($role === 'commissary_manager') {
-                $response->assertDontSee('id="productModal"', false)->assertDontSee('onclick="openProductModal()', false);
+                // Flattened nav: Commissary Products is a top-level entry, not inside a submenu.
+                $this->assertSame(0, $xpath->query('//nav//a[contains(@href,"/products")]/ancestor::div[contains(@class,"hv-nav-submenu")]')->length);
             } else {
-                $response->assertSee('id="productModal"', false)->assertSee('onclick="openProductModal()', false);
+                $this->assertSame(1, $xpath->query('//nav//a[contains(@href,"/products")]/ancestor::div[contains(@class,"hv-nav-submenu") and contains(@class,"open")]')->length);
             }
+            $response->assertSee('id="productModal"', false)->assertSee('onclick="openProductModal()', false);
             $inventory = $this->get('/inventory')->assertOk()->assertDontSee('data-bs-target="#tabProducts"', false)
                 ->assertDontSee('id="searchProducts"', false)->assertDontSee('id="productModal"', false)->assertDontSee('onclick="openProductModal()', false)
                 ->assertSee('data-bs-target="#tabActive"', false)->assertSee('data-bs-target="#tabDisposal"', false);
@@ -91,10 +93,35 @@ class ProductsPageTest extends TestCase
     public function test_product_actions_keep_existing_permissions_and_do_not_change_stock(): void
     {
         $w = $this->world();
-        $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'save_product', 'id' => $w['item']->id])->assertForbidden();
+        $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'save_product', 'id' => $w['item']->id])->assertStatus(422);
         $this->postJson('/warehouse/api', ['action' => 'toggle_product', 'id' => $w['item']->id, 'is_active' => 0])->assertOk()->assertJson(['ok' => true]);
         $this->get('/products')->assertOk()->assertViewHas('allItems', fn ($items) => ! $items->firstWhere('item_name', 'Buns')->is_active);
         $this->actingAs($w['users']['owner'])->postJson('/warehouse/api', ['action' => 'toggle_product', 'id' => $w['item']->id, 'is_active' => 1])->assertOk();
         $this->assertEquals(14, StockBatch::sum('quantity_left'));
+    }
+
+    #[TestWith(['/warehouse/api', 'save_product'])]
+    #[TestWith(['/inventory/api', 'save'])]
+    public function test_commissary_manager_can_create_and_edit_catalog_without_changing_stock(string $endpoint, string $action): void
+    {
+        $w = $this->world();
+        $manager = $w['users']['commissary_manager'];
+        $payload = ['action' => $action, 'item_name' => 'Rice Noodles', 'category_id' => $w['item']->category_id,
+            'unit' => 'pack', 'price' => 45, 'reorder_level' => 12, 'shelf_life_days' => 30];
+
+        $this->actingAs($manager)->postJson($endpoint, $payload)->assertOk()->assertJson(['ok' => true]);
+
+        $item = Item::where('item_name', 'Rice Noodles')->firstOrFail();
+        $this->assertDatabaseHas('audit_log', ['user_id' => $manager->id, 'action' => 'created product', 'record_id' => $item->id]);
+        $this->postJson($endpoint, array_replace($payload, ['id' => $item->id, 'item_name' => 'Rice Noodles Large', 'price' => 55,
+            'reorder_level' => 15, 'shelf_life_days' => 45]))->assertOk()->assertJson(['ok' => true]);
+        $this->assertDatabaseHas('items', ['id' => $item->id, 'item_name' => 'Rice Noodles Large', 'price' => 55,
+            'reorder_level' => 15, 'shelf_life_days' => 45]);
+        $this->assertDatabaseHas('audit_log', ['user_id' => $manager->id, 'action' => 'updated product', 'record_id' => $item->id]);
+        $this->assertEquals(14, StockBatch::sum('quantity_left'));
+        $this->assertDatabaseCount('stock_transactions', 0);
+        $this->postJson($endpoint, array_replace($payload, ['price' => -1]))->assertStatus(422);
+        $this->get('/users')->assertForbidden();
+        $this->get('/settings')->assertForbidden();
     }
 }

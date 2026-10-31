@@ -1,118 +1,106 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Forgot Password — {{ config('app.name') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css" rel="stylesheet">
-    <link href="{{ asset('assets/css/theme.css') }}" rel="stylesheet">
-    <style>
-    .hv-auth-box {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, var(--maroon-dark), var(--maroon));
-        padding: 2rem 1rem;
-    }
-    .hv-reset-card {
-        background: #fff;
-        border-radius: 20px;
-        padding: 2.5rem 2rem;
-        width: 100%;
-        max-width: 440px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-    }
-    .hv-reset-card h3 {
-        color: var(--maroon);
-        font-weight: 800;
-    }
-    .hv-reset-link {
-        background: var(--gold-soft);
-        border: 1px solid var(--gold);
-        border-radius: 10px;
-        padding: 12px 14px;
-        font-size: 13px;
-        word-break: break-all;
-        margin-top: 1rem;
-    }
-    .hv-reset-link a { color: var(--maroon); font-weight: 600; }
-    .hv-reset-link .copy-btn {
-        font-size: 12px;
-        margin-top: 8px;
-    }
-    </style>
-</head>
-<body>
-<div class="hv-auth-box">
-    <div class="hv-reset-card">
-        <div class="text-center mb-4">
-            <img src="{{ asset('assets/img/logo.jpg') }}" style="width:70px;height:70px;border-radius:50%;border:3px solid var(--gold);object-fit:cover;"
-                 alt="Hidden Vietnam logo"
-                 onerror="this.src='https://placehold.co/70x70/5C1010/D4A94A?text=HV'">
-            <h3 class="mt-3 mb-1">Forgot Password</h3>
-            <p class="text-muted small mb-0">Enter your email to receive a reset link</p>
-        </div>
+@extends('layouts.guest')
 
-        @if($errors->any())
-            <div class="alert alert-danger py-2 small">{{ $errors->first() }}</div>
-        @endif
+@section('title', 'Forgot Password')
 
-        @if(session('success'))
-            <div class="alert alert-success py-2 small">{{ session('success') }}</div>
+@push('styles')
+<style>
+:root{ --hv-red:#7A1717; --hv-red-dark:#5C1010; --hv-gold:#D4A94A; --hv-gold-soft:#F3E7CC; --hv-cream:#FBF7F0; --hv-ink:#2B2B2B; --hv-muted:#6E635C; }
+.hv-recover{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:var(--hv-red); padding:28px 16px; }
+.hv-recover-card{ width:100%; max-width:430px; background:#fff; border-radius:22px; padding:34px 30px 28px;
+  box-shadow:0 22px 60px -20px rgba(0,0,0,.45), 0 4px 14px -8px rgba(0,0,0,.25); text-align:center; }
+.hv-recover-logo{ width:92px; height:92px; border-radius:50%; object-fit:cover; display:block; margin:0 auto 14px;
+  border:3px solid var(--hv-gold); box-shadow:0 8px 22px rgba(92,16,16,.22); }
+.hv-recover-brand{ color:var(--hv-red); font-weight:800; font-size:14px; letter-spacing:.16em; }
+.hv-recover-sub{ color:var(--hv-muted); font-size:12.5px; margin:0 0 18px; }
+.hv-recover-rule{ height:1px; background:linear-gradient(90deg,transparent,var(--hv-gold-soft),transparent); margin:0 0 20px; }
+.hv-recover h1{ color:var(--hv-ink); font-size:22px; font-weight:800; letter-spacing:-.02em; margin:0 0 8px; }
+.hv-recover-desc{ color:var(--hv-muted); font-size:14px; line-height:1.55; margin:0 auto 22px; max-width:320px; }
+.hv-recover-field{ text-align:left; margin-bottom:18px; }
+.hv-recover-field label{ display:block; font-size:12.5px; font-weight:700; color:var(--hv-ink); margin:0 0 6px; }
+.hv-recover-input{ position:relative; }
+.hv-recover-input .ph{ position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--hv-muted); font-size:18px; }
+.hv-recover-input input{ width:100%; height:48px; border:1.5px solid #E3DED4; border-radius:12px;
+  padding:0 14px 0 42px; font-size:15px; color:var(--hv-ink); background:#fff; transition:border-color .15s, box-shadow .15s; }
+.hv-recover-input input::placeholder{ color:#B6ADA0; }
+.hv-recover-input input:hover{ border-color:#D4C9B4; }
+.hv-recover-input input:focus{ outline:none; border-color:var(--hv-red); box-shadow:0 0 0 3px rgba(122,23,23,.14); }
+.hv-recover-input input:focus + .ph{ color:var(--hv-red); }
+.hv-recover-error{ color:#C0392B; font-size:12.5px; margin:7px 2px 0; text-align:left; }
+.hv-recover-btn{ width:100%; height:48px; border:none; border-radius:12px; background:var(--hv-red); color:#fff;
+  font-weight:700; font-size:15px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  transition:background .15s; }
+.hv-recover-btn:hover{ background:var(--hv-red-dark); }
+.hv-recover-btn:focus-visible{ outline:3px solid var(--hv-gold); outline-offset:2px; }
+.hv-recover-back{ display:inline-block; margin-top:18px; color:var(--hv-red); font-weight:700; font-size:14px; text-decoration:none; }
+.hv-recover-back:hover{ text-decoration:underline; }
+.hv-recover-back:focus-visible{ outline:2px solid var(--hv-gold); outline-offset:3px; border-radius:4px; }
+.hv-recover-help{ margin:18px 0 0; font-size:12.5px; color:var(--hv-muted); }
+.hv-recover-foot{ margin-top:20px; color:rgba(255,255,255,.72); font-size:11.5px; letter-spacing:.04em; }
+/* confirmation state */
+.hv-recover-mail{ width:84px; height:84px; margin:0 auto 18px; position:relative; display:flex; align-items:center; justify-content:center;
+  background:var(--hv-gold-soft); border-radius:50%; }
+.hv-recover-mail .ph-envelope-simple{ font-size:38px; color:var(--hv-red); }
+.hv-recover-mail .hv-recover-check{ position:absolute; right:-2px; bottom:-2px; width:30px; height:30px; border-radius:50%;
+  background:#3E7C4A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; border:3px solid #fff; }
+.hv-recover-notice{ background:var(--hv-gold-soft); border:1px solid #E7D7AE; border-radius:12px; padding:11px 14px;
+  font-size:13px; color:var(--hv-red-dark); font-weight:600; margin:6px 0 16px; }
+.hv-recover-spam{ color:var(--hv-muted); font-size:13px; margin:0 0 20px; }
+@media (max-width:480px){ .hv-recover-card{ padding:28px 20px 24px; border-radius:18px; } .hv-recover h1{ font-size:20px; } }
+</style>
+@endpush
 
-            @if(session('reset_link') && config('app.debug'))
-            <div class="hv-reset-link">
-                <div class="text-muted" style="font-size:11px;margin-bottom:4px;">
-                    <i class="ph ph-info"></i> <strong>Dev only:</strong> Copy this link and open it in your browser:
-                </div>
-                <a href="{{ session('reset_link') }}" id="resetLink">{{ session('reset_link') }}</a>
-                <div class="copy-btn">
-                    <button type="button" class="btn btn-sm btn-outline-maroon" onclick="copyLink()">
-                        <i class="ph ph-clipboard"></i> Copy Link
-                    </button>
-                </div>
+@section('content')
+<main class="hv-recover">
+    <div class="hv-recover-card" role="region" aria-label="Password recovery">
+        <img src="{{ asset('assets/img/logo.jpg') }}" alt="Hidden Vietnam logo" class="hv-recover-logo">
+        <div class="hv-recover-brand">HIDDEN VIETNAM</div>
+        <p class="hv-recover-sub">Franchise Management System</p>
+        <div class="hv-recover-rule"></div>
+
+        @if(session('reset_requested'))
+            {{-- ── Confirmation state ── --}}
+            <div class="hv-recover-mail" aria-hidden="true">
+                <i class="ph ph-envelope-simple"></i>
+                <span class="hv-recover-check"><i class="ph-bold ph-check"></i></span>
             </div>
-            <div class="alert alert-warning py-2 small mt-3">
-                <i class="ph ph-clock"></i> This link expires in <strong>1 hour</strong>.
-            </div>
-            @endif
-        @endif
-
-        @if(!session('reset_link'))
-        <form method="POST" action="{{ route('password.email') }}">
-            @csrf
-            <div class="hv-input-icon mb-3">
-                <i class="ph ph-envelope"></i>
-                <input type="email" name="email" class="form-control py-2" placeholder="Email address" required autofocus>
-            </div>
-            <button type="submit" class="btn btn-maroon w-100 py-2 fw-bold">
-                <i class="ph ph-paper-plane-tilt me-1"></i> Send Reset Link
-            </button>
-        </form>
-        @endif
-
-        <div class="text-center mt-3">
-            <a href="{{ route('login') }}" class="text-muted small text-decoration-none">
-                <i class="ph ph-arrow-left"></i> Back to Login
+            <h1>Check your email</h1>
+            <p class="hv-recover-desc">If this email is registered, you&rsquo;ll receive a password reset link shortly.</p>
+            <div class="hv-recover-notice">The reset link expires in 1 hour.</div>
+            <p class="hv-recover-spam">Can&rsquo;t find the email? Check your spam folder.</p>
+            <a href="{{ route('password.request') }}" class="hv-recover-btn" style="text-decoration:none;">
+                <i class="ph ph-arrow-counter-clockwise"></i> Try another email
             </a>
-        </div>
-    </div>
-</div>
+            <div><a href="{{ route('login') }}" class="hv-recover-back">Back to sign in</a></div>
+        @else
+            {{-- ── Request-link form state ── --}}
+            <h1>Forgot your password?</h1>
+            <p class="hv-recover-desc">Enter your registered email and we&rsquo;ll send you a reset link.</p>
 
-<script>
-function copyLink() {
-    const link = document.getElementById('resetLink').textContent;
-    navigator.clipboard.writeText(link).then(function() {
-        const btn = document.querySelector('.copy-btn button');
-        btn.innerHTML = '<i class="ph ph-check"></i> Copied!';
-        setTimeout(function() {
-            btn.innerHTML = '<i class="ph ph-clipboard"></i> Copy Link';
-        }, 2000);
-    });
-}
-</script>
-</body>
-</html>
+            <form method="POST" action="{{ route('password.email') }}" novalidate>
+                @csrf
+                <div class="hv-recover-field">
+                    <label for="recoverEmail">Email address</label>
+                    <div class="hv-recover-input">
+                        <input type="email" id="recoverEmail" name="email" value="{{ old('email') }}"
+                               placeholder="you@example.com" autocomplete="email" required autofocus
+                               aria-describedby="{{ $errors->has('email') ? 'recoverEmailError' : '' }}"
+                               @error('email') aria-invalid="true" @enderror>
+                        <i class="ph ph-envelope-simple" aria-hidden="true"></i>
+                    </div>
+                    @error('email')
+                        <p class="hv-recover-error" id="recoverEmailError" role="alert">{{ $message }}</p>
+                    @enderror
+                </div>
+                <button type="submit" class="hv-recover-btn">
+                    <i class="ph ph-paper-plane-tilt"></i> Send reset link
+                </button>
+            </form>
+
+            <a href="{{ route('login') }}" class="hv-recover-back">Back to sign in</a>
+            <p class="hv-recover-help">Need help? Contact your administrator.</p>
+        @endif
+    </div>
+    <p class="hv-recover-foot">HVFRMS &bull; Secure account recovery</p>
+</main>
+@endsection

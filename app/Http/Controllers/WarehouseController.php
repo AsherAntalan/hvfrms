@@ -153,14 +153,17 @@ class WarehouseController extends Controller
         $isWarehouseAdmin = $user->isMainBranchManager();
         $canManageProducts = $user->canManageCatalog();
         $canManageAvailability = $user->canManageProductAvailability();
-        $canEditBatches = ! $isWarehouseStaff;
+        // Inventory handling (edit/void/dispose/archive) excludes the Commissary
+        // Manager, whose All Branches Inventory access is monitoring-only.
+        $canEditBatches = ! $isWarehouseStaff && $user->canHandleInventory();
         $canFulfillOrders = $user->isOwner() || $user->isMainBranchManager();
-        $canDisposeBatches = true;
-        $canArchiveBatches = $user->canManageInventory();
+        $canDisposeBatches = $user->canHandleInventory();
+        $canArchiveBatches = $user->canHandleInventory();
+        $inventoryReadOnly = $user->isCommissaryManager();
 
         return compact('products', 'categories', 'allItems', 'items', 'activeBatches', 'expiredBatches', 'pendingOrders', 'orderItems', 'disposalRecords',
             'totalStock', 'productCount', 'lowStockCount', 'mainBid', 'isWarehouseStaff', 'isWarehouseAdmin', 'canManageProducts', 'canManageAvailability', 'canEditBatches',
-            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'monitorAllBranches', 'branchSummaries', 'scopeLabel');
+            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'inventoryReadOnly', 'monitorAllBranches', 'branchSummaries', 'scopeLabel');
     }
 
     public function products(): View
@@ -224,6 +227,16 @@ class WarehouseController extends Controller
             }
         }
 
+        // The Commissary Manager monitors inventory but may not handle it:
+        // disposal and batch edit/void/delete are refused before any write.
+        if ($user->isCommissaryManager()
+            && in_array($action, ['dispose_batch', 'adjust_batch', 'edit_batch', 'void_batch', 'delete_batch'], true)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Inventory monitoring only. Disposal and inventory changes require an authorized inventory handler.',
+            ], 403);
+        }
+
         if ($action === 'create_stock') {
             return $this->createStock($request, $mainBid, $user);
         }
@@ -252,8 +265,8 @@ class WarehouseController extends Controller
         }
 
         if ($action === 'save_product') {
-            if (! $user->isOwner()) {
-                return response()->json(['ok' => false, 'error' => 'Only owners can manage products.'], 403);
+            if (! $user->canManageCatalog()) {
+                return response()->json(['ok' => false, 'error' => 'Only the Owner or Commissary Manager can add or edit products.'], 403);
             }
 
             return $this->saveProduct($request, $user);

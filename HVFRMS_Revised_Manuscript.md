@@ -18,7 +18,7 @@ Prepared under the supervision of Ms. Yvana Jardine R. Nocon and Mr. Aaron S. Ti
 
 Contribution No.: to be assigned by the institution.
 
-Revision basis: the HVFRMS source tree reviewed on October 24, 2026. This working draft describes implemented behavior and explicitly identifies proposed activities and missing research evidence. It is not a declaration of completed deployment, adviser approval, ISO certification, or successful user evaluation.
+Revision basis: the HVFRMS source tree reviewed on October 24, 2026, with report, navigation, and test-evidence updates checked on October 25, 2026, Asia/Manila. This working draft describes implemented behavior and explicitly identifies proposed activities and missing research evidence. It is not a declaration of completed deployment, adviser approval, ISO certification, or successful user evaluation.
 
 # INTRODUCTION
 
@@ -63,11 +63,11 @@ HVFRMS provides authorized personnel with a shared record of franchise supply op
 
 The application records the distinction between requested, fulfilled, dispatched, and received quantities. It supports GCash payment-proof submission and controlled access to supporting files and proforma documents. These features document submitted evidence; they do not automatically establish that payment has been verified.
 
-The current dashboard includes a monthly Commissary Sales presentation for authorized management accounts, but the controller marks verified-payment data as unavailable. It must not be described as a functioning verified-sales calculation. The existing order-value report also includes orders that are not cancelled or declined and therefore is not equivalent to paid revenue.
+The current dashboard includes a monthly Commissary Sales presentation for authorized management accounts, but verified-payment data remains unavailable. In Reports, Commissary Sales replaces the former Order Summary tab and displays an unavailable state instead of treating order amounts as collected revenue. Submitted payment evidence and operational order closure do not establish payment verification. The sales calculation and sales CSV export are unavailable until an authoritative verified-payment source exists.
 
 ## Time and Place of the Study
 
-The original manuscript identifies Hidden Vietnam Food Restaurant in Tanza, Cavite, and selected franchise branches as the intended study setting, with a period from February to November 2026. As of this source review on October 24, 2026, November activities remain scheduled rather than completed. The researchers must confirm the actual start, completion, evaluation, and deployment dates. The original May 2026 cover date should be reconciled with that study period before submission.
+The original manuscript identifies Hidden Vietnam Food Restaurant in Tanza, Cavite, and selected franchise branches as the intended study setting, with a period from February to November 2026. As of the latest documentation review on October 25, 2026, November activities remain scheduled rather than completed. The researchers must confirm the actual start, completion, evaluation, and deployment dates. The original May 2026 cover date should be reconciled with that study period before submission.
 
 ## Scope and Limitations
 
@@ -78,7 +78,7 @@ The active role identifiers are Super Admin, Owner, Admin, Branch Manager, Branc
 The following limitations apply:
 
 1. HVFRMS does not implement public customer ordering, table reservations, payroll, employee scheduling, or a restaurant POS checkout workflow.
-2. A payment reference and proof image are submitted evidence. No authoritative verification amount, verification timestamp, or verified-payment ledger was identified. Verified monthly sales reporting is unavailable in the reviewed snapshot.
+2. A payment reference and proof image are submitted evidence. No authoritative verification amount, verification timestamp, or verified-payment ledger was identified. The monthly dashboard tile and the Commissary Sales report do not calculate verified sales. The report displays an unavailable state and does not offer a sales CSV download.
 3. Forecasts use historical stock movement, including expiry, damage, and adjustments, as an operational proxy. They are not machine-learning predictions or a clean measure of customer purchases. Recommendations require managerial review.
 4. The forecast stock-on-hand query sums positive batch balances without applying all of the expiry and damage exclusions used by stock-issue services. This can affect the recommendation and must be stated as an implementation limitation.
 5. Notifications use asynchronous requests and periodic polling. The application does not establish a universal continuous push or WebSocket-based monitoring service. Some screens still require refresh or navigation to obtain new data.
@@ -87,6 +87,7 @@ The following limitations apply:
 8. The application requires network access to its server. Camera scanning generally requires compatible browser permissions and an appropriate secure context. An offline synchronization mode and a native mobile application are not implemented.
 9. Public registration and a mandatory first-login password-change workflow were not identified. Administrators provision accounts. The development password-reset implementation requires security review before public deployment because a generated reset link can be returned to the requesting session.
 10. Performance improvement, forecast accuracy, user satisfaction, and production reliability cannot be claimed from source inspection alone. They require measurements and evaluation records.
+11. Stock Summary date filters select batches by received date and display their current remaining quantities. They do not reconstruct inventory as it stood on a past date and exclude older receipts outside the selected period even when those batches still have stock. Expiry Report filters by expiry date and evaluates current balances and expiry status.
 
 ## Conceptual Framework
 
@@ -208,6 +209,8 @@ The operational requirements are derived from the researchers' reported business
 
 The architecture follows a web presentation layer, Laravel application layer, and relational data layer. The presentation layer consists of Blade templates, CSS, Bootstrap components, and JavaScript. The application layer contains controllers, middleware, services, scheduled commands, validation, and authorization. The data layer stores catalog, organizational, stock, order, archive, notification, and audit information. Submitted payment images are kept in protected file storage rather than being treated as publicly accessible proof URLs.
 
+The administrative sidebar orders its principal entries as Dashboard, Inventory, Orders, Reports, Insights, and Management. Reports is a standalone navigation entry before Insights. System Setting and My Profile remain separate existing entries. Navigation visibility and submenu contents depend on the account's role; the sequence does not grant every role access to every module.
+
 Principal relationships include roles to users, branches to users and transactions, products to categories and batches, orders to order lines, preparation records to orders, and movements to products, branches, batches, and responsible users. This structure makes an order request distinct from the stock movements generated during release and receipt.
 
 ### Functional Modules
@@ -228,7 +231,20 @@ Principal relationships include roles to users, branches to users and transactio
 
 **Disposal and Archives.** Authorized disposal records remove eligible quantities and preserve the movement and actor. Expired-batch archiving affects reporting visibility, not physical quantity. Its current visible retention window is thirty days, with scheduled pruning. Order archiving is a different retained-history function and can support restore; the expired-batch retention rule must not be assigned to order archives.
 
-**Reports.** Reports provide Stock Summary, Stock Movements, Order Summary, and Expiry Report views, with permitted date and branch filters, CSV export, and printing. Stock snapshots and date-ranged movements have different meanings. Order Summary Total Value is not paid sales, because its calculation includes non-cancelled and non-declined orders regardless of verified payment.
+**Reports.** Reports provide Stock Summary, Stock Movements, Commissary Sales, and Expiry Report views. Commissary Sales replaces Order Summary and is restricted to Owner-level accounts, including Admin and Super Admin, and the Commissary Manager. Branch Managers retain their authorized branch reports without access to the sales tab. Selecting Commissary Sales opens its report content and preserves the selected period when filters are applied; it does not calculate revenue from unverified order amounts.
+
+The shared filter panel contains Period presets (Today, Last 7 Days, This Month, and Custom Range), Date From, Date To, Branch, and Apply Filters. Valid ranges include both endpoint dates and default to the current month through the current Asia/Manila business date. Reversed dates are swapped with a notice. Branch-limited accounts remain pinned to their assigned branch; broader authorized branch options exclude the Commissary production source.
+
+Each report explains which date its filter uses:
+
+| Report | Date basis | Meaning of displayed results |
+|---|---|---|
+| Stock Summary | Batch received date | Current remaining quantities of positive-balance batches received within the selected period; not a historical inventory reconstruction |
+| Stock Movements | Movement creation date | Recorded stock-in, stock-out, and net changes within the selected period |
+| Commissary Sales | Selected reporting period; verified-payment date source not yet implemented | Unavailable verified sales; submitted proofs and received/closed orders are not counted as verified payment |
+| Expiry Report | Batch expiry date | Current remaining batches with expiry dates within the selected period, classified using current expiry status |
+
+CSV exports for Stock Summary, Stock Movements, and Expiry Report use the applied date range and branch scope. Unsaved edits to the filter inputs do not change the export's applied scope. Printable views retain the selected report's result and period label. Commissary Sales shows an explicit unavailable message, disables its CSV control, and rejects direct sales-export requests while verified payment data is absent. Neither an unavailable sales state nor an empty filtered result should be interpreted as measured zero revenue.
 
 **Forecast and Decision Support.** Historical movement records are organized into completed weeks. The default window is eight weeks, with a minimum of four. The most recent four weeks receive weights of one, two, three, and four. Trend classification compares the two halves of the window; the forecast is adjusted by the implemented rising/falling rules. A safety factor then determines a target against which stock is compared. Insufficient history yields an insufficient-data result, not a validated prediction.
 
@@ -262,7 +278,7 @@ The supplied attachment contained captions but not the actual diagram or screens
 | Figure | Corrected subject and required content |
 |---|---|
 | 1 | IPO framework: accounts, catalog, orders, batches, movement processing, and operational outputs |
-| 2 | HIPO: Dashboard; Inventory/catalog/stock; Orders/preparation/delivery; Insights; Management; System; Profile/QR according to role |
+| 2 | HIPO: Dashboard; Inventory/catalog/stock; Orders/preparation/delivery; Reports; Insights; Management; System Setting; My Profile/QR according to role; Reports is a standalone entry before Insights |
 | 3 | Use-case diagram with the seven actual actors and permission boundaries |
 | 4 | Login: supported username/email, password, visibility control, remember option where present, and recovery guidance; no self-registration request |
 | 5 | Authorized administrator dashboard with actual summaries and honest sales availability |
@@ -271,15 +287,15 @@ The supplied attachment contained captions but not the actual diagram or screens
 | 8 | Own-branch inventory for a Branch Manager, not unrestricted Branch Staff access |
 | 9 | Stock receiving interface with branch, quantity, eligibility, and QR context |
 | 10 | Stock issue interface showing FEFO and sufficient-stock validation |
-| 11 | Cross-branch reports for authorized oversight roles |
-| 12 | Branch-scoped reporting for a Branch Manager |
+| 11 | Authorized oversight reports with shared Period, Date From, Date To, and Branch controls; Commissary Sales shows verified-payment data unavailable |
+| 12 | Branch-scoped reporting for a Branch Manager, showing receipt-date and expiry-date meanings without granting Commissary Sales access |
 | 13 | Alerts and notification interface; no account-approval function |
 | 14 | My Profile and supported password/photo actions; system settings shown separately if included |
 | 15 | Login and role-aware landing flow: Branch Staff to QR, permitted management roles to Dashboard |
 | 16 | Authorized account creation flow: validation, role/branch assignment, account save, and audit |
 | 17 | Dashboard request flow: authorization, scoped queries, and rendered operational summaries |
 | 18 | Inventory flow: select authorized scope, inspect batches, validate movement, update ledger, and refresh view |
-| 19 | Reports flow: validate filters, apply scope, aggregate records, view or export |
+| 19 | Reports flow: authorize report, validate dates and branch scope, apply the selected report's date basis, render results, and permit supported export/print actions; sales remains unavailable without verified payment data |
 | 20 | Alerts flow: generate supported conditions, persist alerts, retrieve notifications, and resolve where authorized |
 | 21 | User management flow with permission checks, account validation, and activation/reset actions |
 | 22 | System administration flow for settings, audit access, and backup initiation |
@@ -391,7 +407,7 @@ Table 5. Proposed deployment activities; durations are to be agreed rather than 
 
 ## Basis of the Reported Results
 
-This chapter distinguishes implemented functions from measured study outcomes. A source review and an automated test run were conducted against the available HVFRMS working tree on October 24, 2026. No application source was changed for this manuscript revision. Interview transcripts, completed quality questionnaires, before/after timing measurements, production mail logs, and signed deployment acceptance were not supplied.
+This chapter distinguishes implemented functions from measured study outcomes. The initial source review and test snapshot are dated October 24, 2026. A follow-up review and full automated test run were conducted on October 25, 2026, after the report-filter, Commissary Sales, and sidebar-order changes. Those application changes preceded this documentation update; no application source or test was edited during this documentation task. Interview transcripts, completed quality questionnaires, before/after timing measurements, production mail logs, and signed deployment acceptance were not supplied.
 
 ## System Design and Development Findings
 
@@ -399,29 +415,35 @@ The repository implements a Laravel application with role-aware navigation, a Co
 
 The product catalog is a configuration screen rather than a combined-stock table. Order handling supports actual fulfillment and shortages; request totals are not always the final fulfilled value. Normal stock issue uses FEFO and recorded eligibility checks. Disposal and archive are separate operations with different effects. These are implementation findings rather than measured reductions in waste or processing time.
 
-The reviewed dashboard includes a monthly-sales presentation for authorized management but explicitly identifies the absence of verified-payment data. This limitation prevents a valid claim of completed verified-sales reporting. An uploaded GCash proof image is retained evidence, not an independently confirmed financial transaction.
+The reviewed dashboard includes a monthly-sales presentation for authorized management but explicitly identifies the absence of verified-payment data. Reports now uses Commissary Sales in place of Order Summary, with an unavailable verified-sales state and disabled sales CSV export. This limitation prevents a valid claim of completed verified-sales reporting. An uploaded GCash proof image is retained evidence, not an independently confirmed financial transaction.
+
+Stock Summary and Expiry Report both retain the common period and branch controls. Their meanings differ: Stock Summary selects batches by received date and reports current remaining stock; Expiry Report selects batches by expiry date and reports current balances and expiry status. The administrative navigation places Reports between Orders and Insights. These are interface and filtering findings, not evidence of increased revenue or improved user performance.
 
 Selected inventory/catalog workflows use asynchronous updates and loading indicators. The notification interface polls at thirty-second intervals. This supports timely retrieval but does not establish continuous real-time synchronization across every screen. Email alerts depend on the hourly command and its mail configuration.
 
 ## Automated Test Results
 
-The existing PHPUnit suite was executed without adding or changing tests for the documentation review. It reported 211 tests, 2,171 assertions, no errors, and one failure, in approximately 20.86 seconds. Therefore, 210 tests passed. These figures describe that dated run only and are not a claim of complete requirements coverage or operational readiness.
+The current PHPUnit suite was executed on October 25, 2026, without adding or changing tests for this documentation update. It reported 228 tests, 2,273 assertions, no errors, and one failure, with a runner-reported elapsed time of approximately 21.90 seconds. Therefore, 227 tests passed. These figures describe that dated working-tree run only and are not a claim of complete requirements coverage or operational readiness.
 
 Table 6. Technical validation snapshot of the reviewed working tree.
 
 | Measure | Observed result |
 |---|---|
-| Review date | October 24, 2026 |
+| Review date | October 25, 2026 |
 | Test runner | PHPUnit 11.5.56 |
 | Test database configuration | In-memory SQLite |
-| Tests executed | 211 |
-| Passing tests | 210 |
+| Tests executed | 228 |
+| Passing tests | 227 |
 | Failed tests | 1 |
 | Errors / skipped tests | 0 / 0 |
-| Assertions | 2,171 |
-| Reported execution time | Approximately 20.86 seconds |
+| Assertions | 2,273 |
+| Reported execution time | Approximately 21.90 seconds |
 
-The failing case was InventoryOrderingRenderTest::test_inventory_renders_with_correct_breakdown. Its assertion expects Physical Stock in the product-catalog response. The current Commissary Products screen intentionally excludes physical and usable stock columns. This is an inconsistent expectation requiring review; it does not by itself demonstrate incorrect stock arithmetic. The test was not edited to manufacture a passing result.
+For comparison, the retained October 24 snapshot reported 211 tests, 2,171 assertions, 210 passes, and one failure in approximately 20.86 seconds. The suite changed between those dates during application work. The older figures are historical evidence, not the latest totals.
+
+The October 25 run includes 32 passing tests and 158 assertions across ReportBatchDateFilterTest, ReportMovementFilterTest, and ReportsArchiveTest. These classes cover inclusive date boundaries, report-specific date bases, current remaining balances, CSV scope, branch restrictions, sales availability/access, and report/archive behavior. The 32 are a subset of the 228 tests, not an additional suite total.
+
+The remaining failing case is InventoryOrderingRenderTest::test_inventory_renders_with_correct_breakdown. Its assertion expects Physical Stock in the product-catalog response. The current Commissary Products screen intentionally excludes physical and usable stock columns. This is an inconsistent expectation requiring review; it does not by itself demonstrate incorrect stock arithmetic. The test was not edited to manufacture a passing result.
 
 Some existing dashboard coverage accepts a server error as a possible SQLite limitation because the dashboard contains MySQL-specific SQL. Consequently, a large passing-test count must not be presented as proof that every dashboard query renders successfully. Actual-database integration tests and browser checks remain necessary.
 
@@ -437,7 +459,7 @@ Table 7. Implemented behavior and evidence that should accompany the final funct
 | Preparation/delivery | Actual quantities, shortage reasons, label handling, release, and receipt records | Observed multi-user and repeated-scan scenarios |
 | Stock | Batch eligibility, FEFO, movements, and history | Physical-versus-recorded reconciliation and actual-engine tests |
 | Disposal/archives | Recorded disposal and separate archive visibility/retention behavior | Browser persistence checks, permissions, and dated retention cases |
-| Reports | Scoped aggregations, filters, CSV, and printing | Reconciliation against known records and output review |
+| Reports | Receipt-date Stock Summary, date-ranged movements, expiry-date report, applied-scope CSV/printing, and unavailable verified-sales state | Actual-database reconciliation, production output review, and authoritative payment verification before sales calculation |
 | Forecast | Deterministic weighted-average and trend calculations | Known-input tests, held-out validation, and assessment of non-sales/expiry input limitations |
 | Notifications | Persisted alerts, polling, scheduled generation, and conditional email | Scheduler and SMTP execution evidence |
 | Administration | Branch/user settings, profile actions, audit records, and backup command | Production configuration review and a tested restoration procedure |

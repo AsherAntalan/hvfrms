@@ -464,8 +464,11 @@ body.hv-app {
 /* ── Notification Toast ───────────────────────────────── */
 .hv-toast-container {
     position: fixed;
-    top: 16px;
+    top: calc(var(--topbar-height, 60px) + 16px);
     right: 16px;
+    width: min(360px, calc(100vw - 32px));
+    max-height: calc(100dvh - var(--topbar-height, 60px) - 32px);
+    overflow-y: auto;
     z-index: 1090;
     display: flex;
     flex-direction: column;
@@ -481,7 +484,8 @@ body.hv-app {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    max-width: 340px;
+    width: 100%;
+    flex-shrink: 0;
     animation: hvToastIn 0.3s ease;
     border: 1px solid var(--border);
     border-left: 1px solid var(--gold);
@@ -493,10 +497,14 @@ body.hv-app {
 .hv-toast .hv-toast-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
 .hv-toast .hv-toast-body { flex: 1; min-width: 0; }
 .hv-toast .hv-toast-title { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
-.hv-toast .hv-toast-msg { color: var(--ink); line-height: 1.35; }
-.hv-toast .hv-toast-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
-.hv-toast .hv-toast-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
+.hv-toast .hv-toast-msg { color: var(--ink); line-height: 1.35; overflow-wrap: anywhere; }
+.hv-toast .hv-toast-meta { font-size: 11px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.hv-toast .hv-toast-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; padding: 0; line-height: 1; min-width: 24px; min-height: 24px; }
+.hv-toast .hv-toast-action { display: inline-flex; margin-top: 8px; color: var(--maroon); font-weight: 600; text-decoration: none; }
+.hv-toast .hv-toast-action:hover { text-decoration: underline; }
+.hv-toast :is(.hv-toast-close, .hv-toast-action):focus-visible { outline: 2px solid var(--maroon); outline-offset: 2px; border-radius: 3px; }
 .hv-toast.fade-out { animation: hvToastOut 0.3s ease forwards; }
+@media (prefers-reduced-motion: reduce) { .hv-toast, .hv-toast.fade-out { animation: none; } }
 @keyframes hvToastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes hvToastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
 
@@ -751,6 +759,34 @@ a.hv-stat-link:hover {
 }
 
 /* ── Page Header ────────────────────────────────────────── */
+.hv-orders-navigation {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border, #E7E0D4);
+    overflow-x: auto;
+}
+.hv-orders-navigation-link {
+    flex-shrink: 0;
+    padding: .65rem .1rem .8rem;
+    border-bottom: 3px solid transparent;
+    color: var(--text-muted, #6E635C);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.hv-orders-navigation-link:hover,
+.hv-orders-navigation-link.active {
+    color: var(--maroon);
+}
+.hv-orders-navigation-link.active {
+    border-bottom-color: var(--maroon);
+}
+.hv-orders-navigation-link:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: -2px;
+}
+
 .hv-page-header {
     display: flex;
     align-items: center;
@@ -1114,19 +1150,21 @@ body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
 .hv-topbar-user{ background: transparent; border-color: transparent; color: #fff; }
 .hv-topbar-user:hover{ background: rgba(255,255,255,.12); border-color: transparent; }
 
-/* Cream workspace: flush right + bottom, one rounded top-left corner, grows */
+/* Cream workspace: flush bottom, rounded top-left AND top-right (the red
+   shell field shows behind both corners), grows */
 .hv-main{
   margin: 0;
   background: var(--paper);
   border: 0;
   border-top-left-radius: var(--shell-radius);
+  border-top-right-radius: var(--shell-radius);
   box-shadow: none;
   flex: 1 1 auto;
   min-height: 0;
   padding: 1.7rem 1.9rem 3rem;
 }
 @media (max-width: 991.98px){
-  .hv-main{ border-top-left-radius: 18px; padding: 1.4rem 1.1rem 2.5rem; }
+  .hv-main{ border-top-left-radius: 18px; border-top-right-radius: 18px; padding: 1.4rem 1.1rem 2.5rem; }
 }
 
 /* ── Active sidebar tab → cream connector into the workspace ──────────

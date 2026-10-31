@@ -170,9 +170,22 @@ class User extends Authenticatable
         return $this->isOwner() || $this->isBranchManager() || $this->isCommissaryManager();
     }
 
+    /**
+     * Authorized inventory handler: may dispose goods and archive/restore/remove
+     * inventory and expired-batch archive records. The Commissary Manager is a
+     * supply-planning MONITOR only (production role), so inventory handling is
+     * limited to the Owner and the Branch Manager (for their own branch). This is
+     * deliberately narrower than canManageInventory(), which still grants the
+     * Commissary Manager read/monitor access and Commissary operations.
+     */
+    public function canHandleInventory(): bool
+    {
+        return $this->canManageInventory() && ! $this->isCommissaryManager();
+    }
+
     public function canManageCatalog(): bool
     {
-        return $this->isOwner();
+        return $this->isOwner() || $this->isCommissaryManager();
     }
 
     public function canManageProductAvailability(): bool

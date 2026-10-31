@@ -29,6 +29,8 @@
 
 @section('content')
 
+@include('partials.orders-navigation')
+
 <div class="hv-page-header">
     <div class="d-flex align-items-start gap-3">
         @if($showArchivedOrders)
@@ -192,11 +194,29 @@
                     <td class="small text-muted">{{ $o->ordered_by_name ?? '—' }}</td>
                     <td class="small text-muted">{{ \Carbon\Carbon::parse($o->created_at)->format('M j, g:i A') }}</td>
                     <td class="pe-3">
+                        @php
+                            $pendingReview = $o->status === 'pending' && ($user->isOwner() || $user->isMainBranchManager());
+                            $prepareAction = !$showArchivedOrders && ($user->isOwner() || $user->isMainBranchManager()) && in_array($o->status, ['approved', 'preparing']) && !$o->piece_outputs;
+                            $releaseAction = !$showArchivedOrders && ($user->isOwner() || $user->isMainBranchRole()) && $o->piece_outputs && in_array($o->status, ['approved', 'preparing', 'delivering']) && $o->released_units < $o->prepared_units;
+                            $inTransit = !$showArchivedOrders && $o->status === 'delivering' && (!$o->piece_outputs || ($o->prepared_units > 0 && $o->released_units >= $o->prepared_units));
+                        @endphp
                         <div class="hv-row-actions {{ $organizeCommissaryOrders ? 'commissary-order-actions' : '' }}">
+                            @if($inTransit)
+                            <button type="button" class="btn btn-sm btn-outline-maroon" onclick="viewOrder({{ $o->id }})"><i class="ph ph-eye" aria-hidden="true"></i> View Details</button>
+                            @elseif($prepareAction || $releaseAction)
+                            <button type="button" class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}"
+                                    data-order-workspace="{{ $prepareAction ? 'prepare' : 'release' }}" onclick="{{ $prepareAction ? 'openPiecePrepare(this)' : 'openPieceRelease(this)' }}">
+                                <i class="ph {{ $prepareAction ? 'ph-package' : 'ph-truck' }}" aria-hidden="true"></i> {{ $prepareAction ? 'Prepare / Pick' : 'Release' }}
+                            </button>
+                            @else
+                            {{-- A pending request a reviewer can act on exposes ONLY Review Order; the
+                                 eye and cancel are hidden since review is the single intended action. --}}
+                            @unless($pendingReview)
                             <button class="btn btn-sm btn-ghost-icon" title="View details" aria-label="View details"
                                     onclick="viewOrder({{ $o->id }})">
                                 <i class="ph ph-eye"></i>
                             </button>
+                            @endunless
 
                             @if(!$user->isCommissaryStaff() && $o->isProformaAvailable())
                             <a class="btn btn-sm btn-ghost-icon" href="{{ route('orders.proforma', $o) }}" target="_blank" rel="noopener" title="Proforma invoice" aria-label="Proforma invoice"><i class="ph ph-file-text"></i></a>
@@ -204,25 +224,14 @@
                             @unless($showArchivedOrders)
                             @if($user->isOwner() || $user->isMainBranchManager())
                                 @if($o->status === 'pending')
-                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" onclick="reviewCommissaryOrder(this)"><i class="ph ph-check-circle"></i> Approve Request</button>
+                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" onclick="viewOrder({{ $o->id }})"><i class="ph ph-clipboard-text"></i> Review Order</button>
                                 @endif
-                                @if(in_array($o->status, ['approved','preparing']) && !$o->piece_outputs)
-                                <button class="btn btn-sm btn-maroon" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="openPiecePrepare(this)"><i class="ph ph-package"></i> Prepare / Pick</button>
-                                @endif
-                            @endif
-                            @if(($user->isOwner() || $user->isMainBranchRole()) && $o->piece_outputs && in_array($o->status, ['approved','preparing','delivering']) && $o->released_units < $o->prepared_units)
-                            <a class="btn btn-sm btn-maroon" href="{{ route('stock', ['mode' => 'out']) }}"><i class="ph ph-barcode"></i> Release / Scan Out</a>
-                            @endif
-                            @if($o->status === 'delivering' && (!$o->piece_outputs || ($o->prepared_units > 0 && $o->released_units >= $o->prepared_units)) && ($user->isOwner() || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
-                            <a class="btn btn-sm btn-success" href="{{ route('delivery') }}"><i class="ph ph-tray-arrow-down"></i> Receive / Confirm</a>
                             @endif
                             @if(($user->isOwner() || $user->isMainBranchManager()) && $o->piece_outputs && !in_array($o->status, ['cancelled','declined']))
                             <button type="button" class="btn btn-sm btn-outline-maroon" onclick="hvPrintLabelsUrl('{{ route('orders.labels', $o->id) }}')"><i class="ph ph-printer"></i> Print Labels</button>
                             @endif
-                            @if($o->status === 'pending' && ($user->isOwner() || $user->isMainBranchManager()))
-                            <button class="btn btn-sm btn-outline-danger" onclick="openDeclineModal({{ $o->id }}, '{{ e($o->order_number) }}', '{{ e($o->branch_name) }}', '{{ number_format($o->fulfilled_amount ?? $o->total_amount, 2) }}')"><i class="ph ph-x-circle"></i> Decline</button>
-                            @endif
-                            @if(in_array($o->status, ['pending','approved','preparing']) && ($user->isOwner() || $user->isMainBranchManager() || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
+                            {{-- Approve/Decline are now inside the Review Order interface, not direct row actions. --}}
+                            @if(!$pendingReview && in_array($o->status, ['pending','approved','preparing']) && ($user->isOwner() || $user->isMainBranchManager() || ($isBM && (int)$o->branch_id === (int)$user->branch_id)))
                             <button class="btn btn-sm btn-ghost-icon btn-ghost-danger" data-order-id="{{ $o->id }}" title="Cancel order" aria-label="Cancel order" onclick="cancelPieceOrder(this)"><i class="ph ph-prohibit"></i></button>
                             @endif
                             @endunless
@@ -230,6 +239,7 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-order-archive="{{ $showArchivedOrders ? 'restore' : 'archive' }}" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="setOrderArchive(this)">
                                 <i class="ph {{ $showArchivedOrders ? 'ph-arrow-counter-clockwise' : 'ph-archive-box' }}"></i> {{ $showArchivedOrders ? 'Restore' : 'Archive' }}
                             </button>
+                            @endif
                             @endif
                         </div>
                     </td>
@@ -337,7 +347,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
-                <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
+                <h5 class="modal-title" id="viewModalTitle" style="color:var(--maroon);font-weight:700;">
                     <i class="ph ph-receipt me-1"></i> Order Details
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -345,7 +355,7 @@
             <div class="modal-body" id="viewModalBody">
                 <div class="text-center py-4 text-muted">Loading...</div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" id="viewModalFooter">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -392,11 +402,15 @@
 <script>
 const API  = '{{ route("orders.api") }}';
 const CSRF = '{{ csrf_token() }}';
+// Only Owner/Admin and the Commissary Manager may approve or decline a request.
+const CAN_REVIEW = @json($user->isOwner() || $user->isMainBranchManager());
 
 const products = @json($productsJson);
 
 let orderModal, viewModal, declineModal;
 let lineCounter = 0;
+// The pending order currently open in the review interface (for its footer controls).
+let currentReviewOrder = null;
 
 document.addEventListener('DOMContentLoaded', function () {
     orderModal = new bootstrap.Modal(document.getElementById('orderModal'));
@@ -438,8 +452,25 @@ async function submitDecline() {
     try {
         var res = await fetch(API, { method: 'POST', body: data, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         var json = await res.json();
-        if (json.ok) { declineModal.hide(); location.reload(); }
-        else { err.textContent = json.error || 'Could not decline.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
+        if (json.ok) {
+            declineModal.hide();
+            if (viewModal) { viewModal.hide(); }
+            hvOrderToast('Order declined. The reason was recorded.', 'danger');
+            await refreshOrdersTable();
+        } else {
+            // Already-processed / stale state: tell the user and refresh the list.
+            if (res.status === 409) {
+                err.textContent = json.error || 'This order is no longer pending.';
+                err.style.display = 'block';
+                declineModal.hide();
+                if (viewModal) { viewModal.hide(); }
+                await refreshOrdersTable();
+            } else {
+                err.textContent = json.error || 'Could not decline.';
+                err.style.display = 'block';
+            }
+            btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order';
+        }
     } catch (e) { err.textContent = 'Network error.'; err.style.display = 'block'; btn.disabled = false; btn.innerHTML = '<i class="ph ph-x-circle me-1"></i> Decline Order'; }
 }
 
@@ -589,6 +620,7 @@ async function updateStatus(orderId, newStatus) {
 
 async function viewOrder(orderId) {
     const body = document.getElementById('viewModalBody');
+    renderReviewFooter(null);
     body.innerHTML = '<div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Loading...</div>';
     viewModal.show();
 
@@ -663,10 +695,157 @@ async function viewOrder(orderId) {
             }
 
             body.innerHTML = html;
+            renderReviewFooter(o);
+            void refreshOrdersTable();
         } else {
             body.innerHTML = '<div class="text-danger py-3">' + (json.error || 'Failed to load.') + '</div>';
+            renderReviewFooter(null);
         }
-    } catch (err) { body.innerHTML = '<div class="text-danger py-3">Network error.</div>'; }
+    } catch (err) { body.innerHTML = '<div class="text-danger py-3">Network error.</div>'; renderReviewFooter(null); }
+}
+
+// Build the review footer: a pending order an authorized user can act on gets
+// Approve Request / Decline Request; everything else just gets Close. Opening
+// the review NEVER changes status — the decision is an explicit footer action.
+function renderReviewFooter(o) {
+    const footer = document.getElementById('viewModalFooter');
+    const title = document.getElementById('viewModalTitle');
+    const reviewable = o && o.status === 'pending' && CAN_REVIEW;
+    currentReviewOrder = reviewable ? o : null;
+    if (title) {
+        title.innerHTML = reviewable
+            ? '<i class="ph ph-clipboard-text me-1"></i> Review Order — ' + escapeHtml(o.order_number)
+            : '<i class="ph ph-receipt me-1"></i> Order Details';
+    }
+    let html = '<button type="button" class="btn btn-light" data-bs-dismiss="modal">' + (reviewable ? 'Back' : 'Close') + '</button>';
+    if (reviewable) {
+        html += '<button type="button" class="btn btn-outline-danger" id="btnReviewDecline" onclick="declineReviewOrder()"><i class="ph ph-x-circle me-1"></i> Decline Request</button>';
+        html += '<button type="button" class="btn btn-maroon" id="btnReviewApprove" onclick="approveReviewOrder()"><i class="ph ph-check-circle me-1"></i> Approve Request</button>';
+    }
+    if (o && o.status === 'delivering' && o.actions) {
+        if (o.actions.labels_url) {
+            html += '<button type="button" class="btn btn-outline-secondary" id="detailsPrintLabels">Print Labels</button>';
+        }
+        if (o.actions.can_receive) {
+            html += '<a class="btn btn-success" href="{{ route('delivery') }}">Receive / Confirm</a>';
+        }
+    }
+    footer.innerHTML = html;
+    const labelsButton = document.getElementById('detailsPrintLabels');
+    if (labelsButton) labelsButton.onclick = () => hvPrintLabelsUrl(o.actions.labels_url);
+}
+
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+// Approve the pending order under review. Reuses the existing review_order
+// transition (which locks + revalidates pending server-side). Does not prepare,
+// dispatch, receive, close, or verify payment.
+async function approveReviewOrder() {
+    if (!currentReviewOrder) { return; }
+    const approveBtn = document.getElementById('btnReviewApprove');
+    const declineBtn = document.getElementById('btnReviewDecline');
+    const original = approveBtn.innerHTML;
+    approveBtn.disabled = true; if (declineBtn) { declineBtn.disabled = true; }
+    approveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Approving...';
+    const data = new FormData();
+    data.append('action', 'review_order');
+    data.append('id', currentReviewOrder.id);
+    data.append('_token', CSRF);
+    try {
+        const res = await fetch(API, { method: 'POST', body: data, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const json = await res.json();
+        if (json.ok) {
+            viewModal.hide();
+            hvOrderToast(json.message || 'Request approved.', 'success');
+            await refreshOrdersTable();
+        } else {
+            const msg = json.error || (json.errors ? Object.values(json.errors).flat().join(' ') : 'Could not approve this request.');
+            hvReviewError(msg);
+            if (res.status === 409) { viewModal.hide(); await refreshOrdersTable(); return; }
+            approveBtn.disabled = false; approveBtn.innerHTML = original;
+            if (declineBtn) { declineBtn.disabled = false; }
+        }
+    } catch (e) {
+        hvReviewError('Network error. Please try again.');
+        approveBtn.disabled = false; approveBtn.innerHTML = original;
+        if (declineBtn) { declineBtn.disabled = false; }
+    }
+}
+
+// Decline the pending order under review — reuses the existing decline modal so
+// a nonblank reason is captured and validated by the existing flow.
+function declineReviewOrder() {
+    if (!currentReviewOrder) { return; }
+    const o = currentReviewOrder;
+    openDeclineModal(o.id, o.order_number, o.branch_name, parseFloat(o.fulfilled_amount ?? o.total_amount).toFixed(2));
+}
+
+// Inline error banner inside the open review interface (keeps it open on failure).
+function hvReviewError(message) {
+    const body = document.getElementById('viewModalBody');
+    let banner = document.getElementById('reviewErrorBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'reviewErrorBanner';
+        banner.className = 'alert alert-danger py-2 small mb-3';
+        body.prepend(banner);
+    }
+    banner.textContent = message;
+    banner.scrollIntoView({ block: 'nearest' });
+}
+
+// Reload only the orders table (no full browser reload) and re-apply the active
+// queue, search, filters and sort so the user's view is preserved.
+let ordersRefreshInFlight = null;
+async function refreshOrdersTable() {
+    if (ordersRefreshInFlight) { return ordersRefreshInFlight; }
+    ordersRefreshInFlight = (async function () {
+        try {
+            const res = await fetch(window.location.href, { cache: 'no-store', headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!res.ok || res.redirected) { return false; }
+            const text = await res.text();
+            const fresh = new DOMParser().parseFromString(text, 'text/html').getElementById('ordersTableBody');
+            const current = document.getElementById('ordersTableBody');
+            if (!fresh || !current) { return false; }
+            current.replaceWith(fresh);
+            filterOrders();
+            return true;
+        } catch (e) {
+            return false;
+        }
+    })();
+    try { return await ordersRefreshInFlight; }
+    finally { ordersRefreshInFlight = null; }
+}
+
+function refreshVisibleOrders() {
+    if (!document.hidden) { void refreshOrdersTable(); }
+}
+window.addEventListener('focus', refreshVisibleOrders);
+document.addEventListener('visibilitychange', refreshVisibleOrders);
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted) { refreshVisibleOrders(); }
+});
+
+// Lightweight success/error toast reusing the shared toast container + styles.
+function hvOrderToast(message, severity) {
+    const box = document.getElementById('toastContainer');
+    if (!box) { return; }
+    const sev = severity === 'danger' ? 'danger' : 'success';
+    const color = sev === 'danger' ? 'var(--danger)' : '#1a7f37';
+    const icon = sev === 'danger' ? 'ph-x-circle' : 'ph-check-circle';
+    const toast = document.createElement('div');
+    toast.className = 'hv-toast severity-' + sev;
+    toast.setAttribute('role', 'status');
+    toast.innerHTML = '<i class="ph ' + icon + ' hv-toast-icon" style="color:' + color + ';"></i>'
+        + '<div class="hv-toast-body"><div class="hv-toast-title" style="color:' + color + ';">'
+        + (sev === 'danger' ? 'Order Declined' : 'Success') + '</div>'
+        + '<div class="hv-toast-msg">' + escapeHtml(message) + '</div></div>'
+        + '<button class="hv-toast-close" type="button" aria-label="Dismiss">&times;</button>';
+    box.appendChild(toast);
+    const remove = function () { toast.classList.add('fade-out'); setTimeout(function () { toast.remove(); }, 300); };
+    toast.querySelector('.hv-toast-close').onclick = remove;
+    setTimeout(remove, 4000);
 }
 
 let activeOrderQueue = @json($organizeCommissaryOrders ? $defaultOrderQueue : null);

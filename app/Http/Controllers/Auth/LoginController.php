@@ -117,6 +117,10 @@ class LoginController extends Controller
             'ip_address' => $request->ip(),
         ]);
 
+        if ($user->isBranchStaff() || $user->isCommissaryStaff()) {
+            $request->session()->forget('url.intended');
+        }
+
         return redirect()->intended($this->redirectPath($user));
     }
 
@@ -138,10 +142,17 @@ class LoginController extends Controller
      */
     protected function redirectPath(User $user): string
     {
+        // Branch Staff scan their branch stock from the QR scanner.
         if ($user->isBranchStaff()) {
-            return '/qr';
+            return route('qr');
         }
 
-        return '/dashboard';
+        // Commissary Staff release prepared goods from the Stock Management
+        // scanner (the same Deliver Product page as the Commissary Manager).
+        if ($user->isCommissaryStaff()) {
+            return route('stock');
+        }
+
+        return route('dashboard');
     }
 }

@@ -67,32 +67,12 @@
         {{-- ══════════════════════════════════════════════ --}}
         @if($isWS)
 
-        {{-- Dashboard --}}
-        <a href="{{ route('dashboard') }}"
-           class="hv-nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="hv-dashboard-icon" aria-hidden="true"></i> <span>Dashboard</span>
-        </a>
-
-        {{-- Warehouse ▾ --}}
-        @php $whActive = request()->routeIs('warehouse*','qr*'); @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="ph ph-buildings hv-nav-icon"></i>
-                <span>Commissary</span>
-                <i class="ph {{ $whActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
-                <a href="{{ route('qr') }}"
-                   class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}">
-                    <span>QR Scanner</span>
-                </a>
-            </div>
-        </div>
-
-        {{-- Delivery — single page (Active + History tabs inside) --}}
-        <a href="{{ route('delivery') }}"
-           class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-            <i class="ph ph-truck"></i> <span>Delivery Status</span>
+        {{-- Commissary Staff: scanner only (release prepared goods for delivery).
+             Uses the same Stock Management scanner as the Commissary Manager.
+             My Profile is available in the sidebar footer. --}}
+        <a href="{{ route('stock') }}"
+           class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
+            <i class="ph ph-qr-code"></i> <span>QR Scanner</span>
         </a>
 
         <hr class="hv-sidebar-divider">
@@ -109,57 +89,38 @@
             <i class="hv-dashboard-icon" aria-hidden="true"></i> <span>Dashboard</span>
         </a>
 
-        {{-- Warehouse ▾ --}}
-        @php $whActive = request()->routeIs('warehouse*','inventory*','stock*','products*'); @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $whActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="ph ph-buildings hv-nav-icon"></i>
-                <span>All Branches Inventory</span>
-                <i class="ph {{ $whActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $whActive ? 'open' : '' }}">
-                <a href="{{ route('inventory') }}"
-                   class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
-                    <span>Stock / Inventory</span>
-                </a>
-                <a href="{{ route('products') }}"
-                   class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
-                    <span>Commissary Products</span>
-                </a>
-                <a href="{{ route('stock') }}"
-                   class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
-                    <span>Stock Management</span>
-                </a>
-            </div>
-        </div>
+        {{-- Separate top-level items (no collapsible group) --}}
+        <a href="{{ route('orders') }}"
+           class="hv-nav-link {{ request()->routeIs('orders*','delivery*') ? 'active' : '' }}" data-sidebar-orders>
+            <i class="ph ph-shopping-cart hv-nav-icon"></i> <span>Orders</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+        </a>
+        <a href="{{ route('products') }}"
+           class="hv-nav-link {{ request()->routeIs('products*') ? 'active' : '' }}">
+            <i class="ph ph-package hv-nav-icon"></i> <span>Commissary Products</span>
+        </a>
+        <a href="{{ route('stock') }}"
+           class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
+            <i class="ph ph-barcode hv-nav-icon"></i> <span>Product Management</span>
+        </a>
 
-        {{-- Orders ▾ — order list + delivery --}}
-        @php $odActive = request()->routeIs('orders*','delivery*'); @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="ph ph-shopping-cart hv-nav-icon"></i>
-                <span>Orders</span>
-                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-                <i class="ph {{ $odActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $odActive ? 'open' : '' }}">
-                <a href="{{ route('orders') }}"
-                   class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
-                    <span>All Orders</span>
-                </a>
-                <a href="{{ route('delivery') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-                    <span>Delivery Status</span>
-                </a>
-            </div>
-        </div>
+        <a href="{{ route('inventory') }}"
+           class="hv-nav-link {{ request()->routeIs('inventory*') ? 'active' : '' }}">
+            <i class="ph ph-buildings hv-nav-icon"></i> <span>All Branches Inventory</span>
+        </a>
+
+        {{-- Reports — includes the Commissary Sales report for the Commissary Manager --}}
+        <a href="{{ route('reports') }}"
+           class="hv-nav-link {{ request()->routeIs('reports*') ? 'active' : '' }}">
+            <i class="ph ph-chart-bar"></i> <span>Reports</span>
+        </a>
 
         <hr class="hv-sidebar-divider">
 
         {{-- Alerts --}}
         <a href="{{ route('alerts') }}"
            class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
-            <i class="ph ph-bell"></i> <span>Alerts</span>
+            <i class="ph ph-bell"></i> <span>Orders Notification</span>
             <span class="hv-sidebar-badge" id="sidebarBadgeAlerts" style="display:none;">0</span>
         </a>
 
@@ -195,6 +156,13 @@
         @php
             $invActive = request()->routeIs('inventory*','stock*','warehouse*','products*');
         @endphp
+        @if($u->isBranchManager())
+        {{-- Branch Manager has a single inventory view — a direct link, no dropdown --}}
+        <a href="{{ route('inventory') }}"
+           class="hv-nav-link {{ request()->routeIs('inventory*','warehouse*') ? 'active' : '' }}">
+            <i class="ph ph-package hv-nav-icon"></i> <span>Inventory</span>
+        </a>
+        @else
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $invActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="ph ph-package hv-nav-icon"></i>
@@ -212,42 +180,17 @@
                     <span>Commissary Products</span>
                 </a>
                 @endif
-                <a href="{{ route('stock') }}"
-                   class="hv-nav-link {{ request()->routeIs('stock*') ? 'active' : '' }}">
-                    <span>Stock Management</span>
-                </a>
             </div>
         </div>
         @endif
+        @endif
 
         {{-- ── Orders ▾ (All Orders + Delivery, and Order Supplies for branch managers) ── --}}
-        @php
-            $odActive = request()->routeIs('orders*','ordering*','delivery*');
-        @endphp
-        <div class="hv-nav-group">
-            <button class="hv-nav-group-toggle {{ $odActive ? 'active' : '' }}" onclick="toggleNav(this)">
-                <i class="ph ph-shopping-cart hv-nav-icon"></i>
-                <span>Orders</span>
-                <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
-                <i class="ph {{ $odActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
-            </button>
-            <div class="hv-nav-submenu {{ $odActive ? 'open' : '' }}">
-                <a href="{{ route('orders') }}"
-                   class="hv-nav-link {{ request()->routeIs('orders*') ? 'active' : '' }}">
-                    <span>All Orders</span>
-                </a>
-                @if($isBM)
-                <a href="{{ route('ordering') }}"
-                   class="hv-nav-link {{ request()->routeIs('ordering*') ? 'active' : '' }}">
-                    <span>Order Supplies</span>
-                </a>
-                @endif
-                <a href="{{ route('delivery') }}"
-                   class="hv-nav-link {{ request()->routeIs('delivery*') ? 'active' : '' }}">
-                    <span>Delivery Status</span>
-                </a>
-            </div>
-        </div>
+        <a href="{{ route('orders') }}"
+           class="hv-nav-link {{ request()->routeIs('orders*','ordering*','delivery*') ? 'active' : '' }}" data-sidebar-orders>
+            <i class="ph ph-shopping-cart hv-nav-icon"></i> <span>Orders</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
+        </a>
 
         <hr class="hv-sidebar-divider">
 
@@ -339,7 +282,7 @@
         {{-- Single system item → direct link, no dropdown --}}
         <a href="{{ route('settings') }}"
            class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
-            <i class="ph ph-gear"></i> <span>System Setting</span>
+            <i class="ph ph-gear"></i> <span>System Settings</span>
         </a>
         @endif
         @endif
@@ -408,8 +351,8 @@
                         <div class="text-center text-muted small py-4">Loading...</div>
                     </div>
                     <div class="px-3 py-2 border-top text-center">
-                        <a href="{{ route('alerts') }}" class="text-decoration-none small" style="color:var(--maroon);">
-                            View All Alerts <i class="ph ph-arrow-right"></i>
+                        <a href="{{ Auth::user()->isCommissaryStaff() ? route('delivery') : route('alerts') }}" class="text-decoration-none small" style="color:var(--maroon);">
+                            {{ Auth::user()->isCommissaryStaff() ? 'View Delivery Follow-ups' : (Auth::user()->isCommissaryManager() ? 'View Orders Notification' : 'View All Alerts') }} <i class="ph ph-arrow-right"></i>
                         </a>
                     </div>
                 </div>
@@ -440,9 +383,6 @@
                         </div>
                     </li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="{{ route('profile') }}">
-                        <i class="ph ph-user-gear me-1"></i> My Profile
-                    </a></li>
                     <li><a class="dropdown-item" href="{{ route('profile') }}#security">
                         <i class="ph ph-shield-check me-1"></i> Account Security
                     </a></li>
@@ -462,6 +402,9 @@
 
     <!-- ═══ CREAM WORKSPACE PANEL ════════════════════════ -->
     <main class="hv-main" id="mainContent">
+    @if(app(\App\Services\DemoSalesService::class)->enabled())
+    <div class="alert alert-warning small py-2 mb-3" role="status">Demo preview &middot; Simulated data for exploring the system.</div>
+    @endif
 
     <!-- Flash messages (success/error after redirect) -->
     @if(session('success'))
@@ -579,7 +522,7 @@ function toggleNav(btn) {
 </script>
 {{-- Notification toast container --}}
 @unless(Auth::user()->isBranchStaff())
-<div class="hv-toast-container" id="toastContainer"></div>
+<div class="hv-toast-container" id="toastContainer" aria-live="polite" aria-relevant="additions"></div>
 <script>
 (function() {
     var NOTIF_URL = '{{ route("notifications") }}';
@@ -590,7 +533,42 @@ function toggleNav(btn) {
     var toastBox = document.getElementById('toastContainer');
     var seenNotificationIds = null;
     var notificationFetchPending = false;
+    var startupStorageKey = 'hv-notification-startup';
+    var currentUser = @json((string) Auth::id());
+    var showStartupNotifications = false;
+    try {
+        showStartupNotifications = sessionStorage.getItem(startupStorageKey) !== currentUser
+            || sessionStorage.getItem('hv-signing-in') === '1';
+    } catch (e) {
+        var initialLoader = document.getElementById('hvAuthLoading');
+        showStartupNotifications = initialLoader && !initialLoader.hidden;
+    }
     function notificationId(n) { return n.id || n.type + ':' + n.message; }
+
+    function notificationLink(n) {
+        if (typeof n.link !== 'string' || n.link.trim() === '') return null;
+        try {
+            var url = new URL(n.link, window.location.href);
+            return url.origin === window.location.origin && /^https?:$/.test(url.protocol) ? url.href : null;
+        } catch (e) { return null; }
+    }
+
+    function afterLoginReady(callback) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { afterLoginReady(callback); }, { once: true });
+            return;
+        }
+        var loader = document.getElementById('hvAuthLoading');
+        if (loader && !loader.hidden) {
+            var observer = new MutationObserver(function() {
+                if (loader.hidden) { observer.disconnect(); callback(); }
+            });
+            observer.observe(loader, { attributes: true, attributeFilter: ['hidden'] });
+            window.addEventListener('pagehide', function() { observer.disconnect(); }, { once: true });
+            return;
+        }
+        callback();
+    }
 
     var sevIcons = {
         critical: { icon: 'ph-warning-circle', color: 'var(--danger)' },
@@ -604,7 +582,7 @@ function toggleNav(btn) {
         fetch(NOTIF_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF } })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (!data.ok) return;
+            if (!data.ok || !Array.isArray(data.items)) return;
 
             // Badge
             if (data.total > 0) {
@@ -623,7 +601,7 @@ function toggleNav(btn) {
                 data.items.forEach(function(n) {
                     var s = sevIcons[n.severity] || sevIcons.info;
                     var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
-                    html += '<a href="' + n.link + '" class="hv-notif-item">'
+                    html += '<a href="' + escHtml(notificationLink(n) || '#') + '" class="hv-notif-item">'
                         + '<i class="ph ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
                         + '<div class="hv-notif-text">'
                         + '<div>' + escHtml(n.message) + '</div>'
@@ -641,6 +619,15 @@ function toggleNav(btn) {
                 });
             } else {
                 seenNotificationIds = new Set();
+                if (showStartupNotifications) {
+                    showStartupNotifications = false;
+                    try { sessionStorage.setItem(startupStorageKey, currentUser); } catch (e) {}
+                    var priorities = { critical: 0, warning: 1, info: 2 };
+                    var initialNotifications = data.items.slice().sort(function(a, b) {
+                        return (priorities[a.severity] ?? 2) - (priorities[b.severity] ?? 2);
+                    }).slice(0, 3);
+                    afterLoginReady(function() { initialNotifications.forEach(showToast); });
+                }
             }
             data.items.forEach(function(n) { seenNotificationIds.add(notificationId(n)); });
 
@@ -655,26 +642,49 @@ function toggleNav(btn) {
     }
 
     function showToast(n) {
+        if (toastBox.children.length >= 3) return;
         var s = sevIcons[n.severity] || sevIcons.info;
-        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
+        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : 'Alert');
         var toast = document.createElement('div');
-        toast.className = 'hv-toast severity-' + n.severity;
+        toast.className = 'hv-toast severity-' + (sevIcons[n.severity] ? n.severity : 'info');
         toast.innerHTML = '<i class="ph ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
             + '<div class="hv-toast-body">'
             + '<div class="hv-toast-title" style="color:' + s.color + ';">' + typeLabel + '</div>'
             + '<div class="hv-toast-msg">' + escHtml(n.message) + '</div>'
             + '<div class="hv-toast-meta">' + escHtml(n.context) + '</div>'
             + '</div>'
-            + '<button class="hv-toast-close">&times;</button>';
-        toast.querySelector('.hv-toast-close').addEventListener('click', function() {
+            + '<button class="hv-toast-close" type="button" aria-label="Dismiss notification">&times;</button>';
+        var target = notificationLink(n);
+        if (target) {
+            var action = document.createElement('a');
+            action.className = 'hv-toast-action';
+            action.href = target;
+            action.textContent = 'Open details';
+            toast.querySelector('.hv-toast-body').appendChild(action);
+        }
+        var dismissTimer;
+        var dismissed = false;
+        function dismiss() {
+            if (dismissed) return;
+            dismissed = true;
+            clearTimeout(dismissTimer);
             toast.classList.add('fade-out');
-            setTimeout(function() { toast.remove(); }, 300);
-        });
+            setTimeout(function() { toast.remove(); }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300);
+        }
+        function pause() { clearTimeout(dismissTimer); }
+        function resume() {
+            pause();
+            if (!dismissed && !toast.matches(':hover') && !toast.contains(document.activeElement)) {
+                dismissTimer = setTimeout(dismiss, 10000);
+            }
+        }
+        toast.querySelector('.hv-toast-close').addEventListener('click', dismiss);
+        toast.addEventListener('mouseenter', pause);
+        toast.addEventListener('mouseleave', resume);
+        toast.addEventListener('focusin', pause);
+        toast.addEventListener('focusout', function() { setTimeout(resume, 0); });
         toastBox.appendChild(toast);
-        setTimeout(function() {
-            toast.classList.add('fade-out');
-            setTimeout(function() { toast.remove(); }, 300);
-        }, 6000);
+        resume();
     }
 
     function updateSidebarBadge(id, count) {

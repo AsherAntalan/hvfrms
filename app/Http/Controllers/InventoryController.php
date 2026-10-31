@@ -88,7 +88,7 @@ class InventoryController extends Controller
 
         if ($action === 'save') {
             if (! Auth::user()->canManageCatalog()) {
-                return response()->json(['ok' => false, 'error' => 'Only the Owner can add or edit products.'], 403);
+                return response()->json(['ok' => false, 'error' => 'Only the Owner or Commissary Manager can add or edit products.'], 403);
             }
 
             return $this->saveItem($request);

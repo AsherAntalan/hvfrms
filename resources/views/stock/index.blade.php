@@ -32,6 +32,91 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 14px; flex-shrink: 0;
 }
+
+/* ── Scan success confirmation ─────────────────────────── */
+.hv-scan-ok {
+    position: fixed; inset: 0; z-index: 1080;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    background: color-mix(in srgb, var(--maroon-dark) 46%, transparent);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease;
+}
+.hv-scan-ok.is-open { opacity: 1; pointer-events: auto; }
+.hv-scan-ok-card {
+    position: relative; width: 100%; max-width: 360px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 30px 26px 22px;
+    text-align: center;
+    box-shadow: 0 24px 60px -18px color-mix(in srgb, var(--maroon-dark) 55%, transparent),
+                0 4px 14px -6px rgba(43,43,43,.18);
+    transform: translateY(10px) scale(.965);
+    transition: transform .32s cubic-bezier(.16,1,.3,1);
+    overflow: hidden;
+}
+.hv-scan-ok.is-open .hv-scan-ok-card { transform: translateY(0) scale(1); }
+.hv-scan-ok-top { height: 5px; position: absolute; inset: 0 0 auto 0;
+    background: linear-gradient(90deg, var(--gold), var(--maroon-light)); }
+.hv-scan-ok-top[data-tone="out"] { background: linear-gradient(90deg, var(--maroon-light), var(--gold)); }
+.hv-scan-ok-badge {
+    width: 72px; height: 72px; margin: 6px auto 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #E1EFE3; color: var(--success);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--success) 12%, transparent);
+}
+.hv-scan-ok-badge svg { width: 36px; height: 36px; }
+.hv-scan-ok-badge path {
+    fill: none; stroke: var(--success); stroke-width: 3.2;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 32; stroke-dashoffset: 32;
+}
+.hv-scan-ok.is-open .hv-scan-ok-badge path {
+    animation: hvScanCheck .5s .12s cubic-bezier(.65,0,.35,1) forwards;
+}
+@keyframes hvScanCheck { to { stroke-dashoffset: 0; } }
+.hv-scan-ok-kicker {
+    font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--success);
+}
+.hv-scan-ok-title {
+    margin: 2px 0 14px; font-size: 1.35rem; font-weight: 800; letter-spacing: -.015em;
+    color: var(--maroon); line-height: 1.15;
+}
+.hv-scan-ok-qty {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    font-variant-numeric: tabular-nums;
+}
+.hv-scan-ok-qty b { font-size: 2.1rem; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1; }
+.hv-scan-ok-qty span { font-size: .95rem; font-weight: 600; color: color-mix(in srgb, var(--ink) 62%, var(--cream)); }
+.hv-scan-ok-meta {
+    margin: 14px auto 0; display: grid; gap: 7px; text-align: left;
+    background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px;
+}
+.hv-scan-ok-meta div { display: flex; justify-content: space-between; gap: 14px; font-size: 12.5px; }
+.hv-scan-ok-meta dt { color: color-mix(in srgb, var(--ink) 55%, var(--cream)); font-weight: 600; margin: 0; }
+.hv-scan-ok-meta dd { color: var(--ink); font-weight: 700; margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.hv-scan-ok-next {
+    width: 100%; margin-top: 18px; border: none; cursor: pointer;
+    background: var(--maroon); color: #fff; font-weight: 700; font-size: .95rem;
+    padding: 12px 16px; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background .15s ease;
+}
+.hv-scan-ok-next:hover { background: var(--maroon-dark); }
+.hv-scan-ok-next:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.hv-scan-ok-timer { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%;
+    transform-origin: left; transform: scaleX(1); background: var(--gold); opacity: .85; }
+.hv-scan-ok.is-open .hv-scan-ok-timer { animation: hvScanTimer 2.6s linear forwards; }
+@keyframes hvScanTimer { to { transform: scaleX(0); } }
+.hv-scan-ok.is-paused .hv-scan-ok-timer { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+    .hv-scan-ok, .hv-scan-ok-card { transition: none; }
+    .hv-scan-ok.is-open .hv-scan-ok-badge path { animation: none; stroke-dashoffset: 0; }
+    .hv-scan-ok.is-open .hv-scan-ok-timer { animation: none; }
+}
 </style>
 @endpush
 
@@ -40,13 +125,22 @@
 <div class="hv-scan-wrap">
     <div class="hv-card p-3 mb-3">
         {{-- ═══ MODE TOGGLE ═══════════════════════════════════ --}}
+        {{-- The Commissary is a production/dispatch source: its only scan action is
+             releasing prepared goods for delivery, so it sees a single Deliver
+             Product control instead of the Stock In / Stock Out toggle. --}}
         <div class="d-flex hv-mode-toggle gap-2 mb-3">
+            @if(!empty($lockToMain))
+            <button type="button" class="btn btn-outline-danger active" data-mode="out" id="btnOut">
+                <i class="ph ph-truck"></i> Deliver Product
+            </button>
+            @else
             <button type="button" class="btn btn-outline-success active" data-mode="in" id="btnIn">
                 <i class="ph ph-tray-arrow-down"></i> Stock In
             </button>
             <button type="button" class="btn btn-outline-danger" data-mode="out" id="btnOut">
                 <i class="ph ph-export"></i> Stock Out
             </button>
+            @endif
         </div>
 
         {{-- ═══ LOCATION ══════════════════════════════════════ --}}
@@ -104,6 +198,24 @@
     <div id="scanFeed" class="mt-3"></div>
 </div>
 
+{{-- Success confirmation (shown after a recorded Stock In / Stock Out) --}}
+<div class="hv-scan-ok" id="scanOk" role="dialog" aria-modal="true" aria-labelledby="scanOkTitle" hidden>
+    <div class="hv-scan-ok-card">
+        <span class="hv-scan-ok-top" id="scanOkTop"></span>
+        <div class="hv-scan-ok-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></svg>
+        </div>
+        <div class="hv-scan-ok-kicker" id="scanOkKicker">Recorded</div>
+        <h3 class="hv-scan-ok-title" id="scanOkTitle">Stock In recorded</h3>
+        <div class="hv-scan-ok-qty"><b id="scanOkQty">0</b><span id="scanOkUnit">unit</span></div>
+        <dl class="hv-scan-ok-meta" id="scanOkMeta"></dl>
+        <button type="button" class="hv-scan-ok-next" id="scanOkNext">
+            <i class="ph ph-barcode"></i> Scan next item
+        </button>
+        <span class="hv-scan-ok-timer" aria-hidden="true"></span>
+    </div>
+</div>
+
 @endsection
 
 @include('partials.commissary-group-scanner')
@@ -118,7 +230,8 @@
     const STOCK_API = '{{ route("stock.api") }}';
     const CSRF      = document.querySelector('meta[name="csrf-token"]').content;
 
-    let mode       = 'in';
+    let mode       = @json(!empty($lockToMain)) ? 'out' : 'in';
+    let modeSelected = false;
     let current    = null;     // last looked-up product
     let currentGroup = null;
     let scanner    = null;
@@ -170,15 +283,16 @@
     }
 
     // -- Mode Toggle --
-    function setMode(m) {
+    function setMode(m, selected = false) {
         mode = m;
-        $('btnIn').classList.toggle('active', m === 'in');
-        $('btnOut').classList.toggle('active', m === 'out');
+        if (selected) modeSelected = true;
+        if ($('btnIn')) $('btnIn').classList.toggle('active', m === 'in');
+        if ($('btnOut')) $('btnOut').classList.toggle('active', m === 'out');
         if (currentGroup) window.renderCommissaryGroup(currentGroup, $('scanResult'), postData, STOCK_API, beep, {mode, branchId: branchVal()});
         else if (current) renderItem(current);
     }
-    $('btnIn').addEventListener('click', () => setMode('in'));
-    $('btnOut').addEventListener('click', () => setMode('out'));
+    if ($('btnIn')) $('btnIn').addEventListener('click', () => setMode('in', true));
+    if ($('btnOut')) $('btnOut').addEventListener('click', () => setMode('out', true));
     $('branchSelect')?.addEventListener('change', () => {
         if (currentGroup) lookup(currentGroup.qr_code);
     });
@@ -187,7 +301,7 @@
     // links to ?mode=out so releasing never defaults to Stock In.
     try {
         const wantMode = new URLSearchParams(location.search).get('mode');
-        if (wantMode === 'out' || wantMode === 'in') setMode(wantMode);
+        if (wantMode === 'out' || wantMode === 'in') setMode(wantMode, true);
     } catch (e) {}
 
     // -- Lookup --
@@ -211,9 +325,9 @@
             if (r.production_group) {
                 current = null;
                 currentGroup = r.production_group;
-                // Dispatcher at source releases (Stock Out); the destination branch
-                // receives (Stock In). can_dispatch is false for branch users.
-                setMode(currentGroup.can_dispatch ? 'out' : 'in');
+                // Default source goods to release, while preserving an explicit
+                // selection and the current mode when looking up received goods.
+                setMode(!modeSelected && currentGroup.can_dispatch ? 'out' : mode);
                 return;
             }
             if (r.production_unit) {
@@ -546,12 +660,20 @@
                 return;
             }
             beep(true);
+            const okDetail = {
+                mode: mode,
+                item: current.item_name,
+                unit: current.unit,
+                qty: qty,
+                detail: (mode === 'in')
+                    ? (($('fExpiry') && $('fExpiry').value) ? 'Expires ' + $('fExpiry').value : 'No expiry')
+                    : (fields.reason || ''),
+            };
             prependFeed(r.message || (qty + ' ' + escapeHtml(current.unit) + ' — ' + escapeHtml(current.item_name)));
-            $('scanResult').innerHTML =
-                '<div class="alert alert-success mt-3">' + escapeHtml(r.message || 'Saved!') +
-                ' Scan the next item.</div>';
+            $('scanResult').innerHTML = '';
             current = null;
             pendingKey = null;   // key consumed — a retry would need a new movement
+            showScanSuccess(okDetail);
         } catch (e) {
             beep(false);
             btn.disabled = false;
@@ -560,6 +682,64 @@
                 '<div class="alert alert-danger py-2">Network error. Try again.</div>');
         }
     }
+
+    // -- Scan success confirmation --
+    let scanOkTimer = null;
+    function branchLabel() {
+        const sel = $('branchSelect');
+        if (sel && sel.tagName === 'SELECT' && sel.selectedIndex >= 0) return sel.options[sel.selectedIndex].text.trim();
+        const locked = document.querySelector('.hv-scan-wrap .form-control.bg-light strong, .hv-scan-wrap .alert strong');
+        return locked ? locked.textContent.trim() : '';
+    }
+    function closeScanOk() {
+        const ok = $('scanOk');
+        if (!ok || ok.hidden) return;
+        ok.classList.remove('is-open');
+        clearTimeout(scanOkTimer);
+        setTimeout(function () { ok.hidden = true; }, 200);
+    }
+    function showScanSuccess(d) {
+        const ok = $('scanOk');
+        if (!ok) return;
+        const isIn = d.mode === 'in';
+        $('scanOkTop').setAttribute('data-tone', isIn ? 'in' : 'out');
+        $('scanOkKicker').textContent = isIn ? 'Stock received' : 'Stock released';
+        $('scanOkTitle').textContent = isIn ? 'Stock In recorded' : 'Stock Out recorded';
+        $('scanOkQty').textContent = d.qty;
+        $('scanOkUnit').textContent = d.unit + (d.qty === 1 ? '' : 's');
+
+        const rows = [['Product', d.item]];
+        const loc = branchLabel();
+        if (loc) rows.push([isIn ? 'Location' : 'Branch', loc]);
+        if (d.detail) rows.push([isIn ? 'Shelf life' : 'Reason', d.detail]);
+        rows.push(['Recorded', new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })]);
+        $('scanOkMeta').innerHTML = rows.map(function (r) {
+            return '<div><dt>' + escapeHtml(r[0]) + '</dt><dd>' + escapeHtml(r[1]) + '</dd></div>';
+        }).join('');
+
+        ok.hidden = false;
+        // reflow so the open transition + timer animation restart each time
+        void ok.offsetWidth;
+        ok.classList.remove('is-paused');
+        ok.classList.add('is-open');
+        $('scanOkNext').focus();
+        clearTimeout(scanOkTimer);
+        scanOkTimer = setTimeout(closeScanOk, 2600);
+    }
+    (function () {
+        const ok = $('scanOk');
+        if (!ok) return;
+        $('scanOkNext').addEventListener('click', function () {
+            closeScanOk();
+            const code = $('manualCode'); if (code) code.focus();
+        });
+        // Clicking the dim backdrop (not the card) dismisses.
+        ok.addEventListener('click', function (e) { if (e.target === ok) closeScanOk(); });
+        // Pause the auto-dismiss while the user is reading/interacting.
+        ok.addEventListener('mouseenter', function () { ok.classList.add('is-paused'); clearTimeout(scanOkTimer); });
+        ok.addEventListener('mouseleave', function () { if (!ok.hidden) { ok.classList.remove('is-paused'); scanOkTimer = setTimeout(closeScanOk, 1400); } });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ok.hidden) closeScanOk(); });
+    })();
 
     // -- Activity Feed --
     function prependFeed(msg) {

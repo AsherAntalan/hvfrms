@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Middleware\BranchScope;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\IdleTimeout;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,20 +17,32 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            \App\Http\Middleware\SecurityHeaders::class,
+            SecurityHeaders::class,
         ]);
 
         $middleware->alias([
-            'role'         => \App\Http\Middleware\CheckRole::class,
-            'branch.scope' => \App\Http\Middleware\BranchScope::class,
-            'idle.timeout' => \App\Http\Middleware\IdleTimeout::class,
+            'role' => CheckRole::class,
+            'branch.scope' => BranchScope::class,
+            'idle.timeout' => IdleTimeout::class,
         ]);
 
         // Redirect guests to the login page (override default '/').
         $middleware->redirectGuestsTo('/login');
 
-        // Redirect authenticated users away from guest-only routes.
-        $middleware->redirectUsersTo('/dashboard');
+        // Redirect authenticated users away from guest-only routes to their
+        // landing page: Branch Staff → QR scanner, Commissary Staff → Stock
+        // Management (Deliver Product) scanner, everyone else → dashboard.
+        $middleware->redirectUsersTo(function (Request $request): string {
+            $user = $request->user();
+            if ($user && $user->isBranchStaff()) {
+                return route('qr');
+            }
+            if ($user && $user->isCommissaryStaff()) {
+                return route('stock');
+            }
+
+            return route('dashboard');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

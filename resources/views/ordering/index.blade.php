@@ -3,6 +3,8 @@
 
 @section('content')
 
+@include('partials.orders-navigation')
+
 @if(!$isFranchise)
 <div class="alert alert-warning">
     <i class="ph ph-info me-1"></i>
