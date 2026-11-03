@@ -10,12 +10,13 @@ use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderProduction;
-use App\Models\Setting;
+use App\Models\ReceivingIssue;
 use App\Models\User;
 use App\Services\OrderGroupLabelService;
 use App\Services\OrderLabelService;
 use App\Services\OrderPaymentService;
 use App\Services\OrderWorkflowService;
+use App\Services\ReceivingIssueService;
 use App\Services\StockService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -40,12 +41,13 @@ class OrderController extends Controller
         $isWS = $user->isWarehouseStaff();
         $isBM = $user->isBranchManager();
         $showArchivedOrders = $request->boolean('archived');
-        $canArchiveOrders = $user->isOwner() || $user->isCommissaryManager() || $isBM;
+        $canArchiveOrders = ! $user->isAdmin() && ($user->isOwner() || $user->isCommissaryManager() || $isBM);
 
         // Fetch orders with branch and user names
         $ordersQuery = Order::select('orders.*', 'branches.branch_name',
             'u_ord.full_name as ordered_by_name',
             'u_app.full_name as approved_by_name', 'u_arc.full_name as archived_by_name')
+            ->selectRaw('(SELECT COUNT(*) FROM receiving_issues ri WHERE ri.order_id = orders.id AND ri.status = \'pending\') AS receiving_issue_count')
             ->selectRaw('(SELECT COUNT(*) FROM order_productions p WHERE p.order_id = orders.id AND (p.stock_batch_id IS NOT NULL OR EXISTS (SELECT 1 FROM order_production_units u WHERE u.production_id = p.id))) AS piece_outputs')
             ->selectRaw('(SELECT COALESCE(SUM(p.produced_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS prepared_units')
             ->selectRaw('(SELECT COALESCE(SUM(p.dispatched_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS released_units')
@@ -71,7 +73,7 @@ class OrderController extends Controller
         $simpleQueues = $user->isOwner() && ! $user->isCommissaryRole();
         $organizeCommissaryOrders = $user->isCommissaryRole() || $simpleQueues;
         $orderQueues = $simpleQueues
-            ? ['active' => 'Active', 'history' => 'History', 'all' => 'All Orders']
+            ? ['active' => 'Active', 'all' => 'All Orders', 'history' => 'History']
             : ['review' => 'Needs Review', 'prepare' => 'To Prepare', 'release' => 'For Release', 'transit' => 'In Transit', 'history' => 'History', 'all' => 'All Orders'];
         $orderQueueCounts = array_fill_keys(array_keys($orderQueues), 0);
         $defaultOrderQueue = 'all';
@@ -83,7 +85,9 @@ class OrderController extends Controller
                 }
             }
             $orderQueueCounts['all'] = $orders->count();
-            $priorities = $user->isCommissaryStaff() ? ['release', 'transit', 'review', 'prepare', 'history', 'all'] : array_keys($orderQueues);
+            $priorities = $user->isCommissaryStaff()
+                ? ['release', 'transit', 'review', 'prepare', 'history', 'all']
+                : ($simpleQueues ? ['active', 'history', 'all'] : array_keys($orderQueues));
             foreach ($priorities as $queue) {
                 if ($orderQueueCounts[$queue] > 0) {
                     $defaultOrderQueue = $queue;
@@ -131,7 +135,10 @@ class OrderController extends Controller
             $openOrderId = 0;
         }
 
-        return view('orders.index', compact('user', 'canManage', 'isBranchScoped', 'isWarehouse', 'isWA', 'isWS', 'isBM', 'orders', 'items', 'branches', 'productsJson', 'organizeCommissaryOrders', 'orderQueues', 'orderQueueCounts', 'defaultOrderQueue', 'showArchivedOrders', 'canArchiveOrders', 'archivedOrderCount', 'openOrderId'));
+        // Badge for the Active Shipments button — same orders the shipment page lists.
+        $activeShipmentCount = DeliveryController::activeShipmentsCount($user);
+
+        return view('orders.index', compact('user', 'canManage', 'isBranchScoped', 'isWarehouse', 'isWA', 'isWS', 'isBM', 'orders', 'items', 'branches', 'productsJson', 'organizeCommissaryOrders', 'orderQueues', 'orderQueueCounts', 'defaultOrderQueue', 'showArchivedOrders', 'canArchiveOrders', 'archivedOrderCount', 'activeShipmentCount', 'openOrderId'));
     }
 
     /** Display grouping only; actual workflow statuses remain unchanged. */
@@ -200,7 +207,7 @@ class OrderController extends Controller
 
     private function setOrderArchive(Request $request, User $user, bool $restore): JsonResponse
     {
-        abort_unless($user->isOwner() || $user->isCommissaryManager() || $user->isBranchManager(), 403);
+        abort_unless(! $user->isAdmin() && ($user->isOwner() || $user->isCommissaryManager() || $user->isBranchManager()), 403);
         $data = $request->validate(['id' => ['required', 'integer', 'min:1']]);
 
         return DB::transaction(function () use ($data, $request, $user, $restore): JsonResponse {
@@ -241,13 +248,16 @@ class OrderController extends Controller
      */
     private function deleteArchivedOrder(Request $request, User $user): JsonResponse
     {
-        abort_unless($user->isOwner(), 403);
+        abort_unless($user->isOwner() && ! $user->isAdmin(), 403);
         $data = $request->validate(['id' => ['required', 'integer', 'min:1']]);
 
         return DB::transaction(function () use ($data, $request, $user): JsonResponse {
             $order = Order::whereKey($data['id'])->lockForUpdate()->firstOrFail();
             if ($order->archived_at === null) {
                 return response()->json(['ok' => false, 'error' => 'Only archived orders can be permanently deleted. Archive it first.'], 422);
+            }
+            if (ReceivingIssue::where('order_id', $order->id)->exists()) {
+                return response()->json(['ok' => false, 'error' => 'Orders with receiving assistance records must be retained for audit.'], 422);
             }
             $number = $order->order_number;
 
@@ -270,7 +280,7 @@ class OrderController extends Controller
                 'ip_address' => $request->ip(),
             ]);
 
-            return response()->json(['ok' => true, 'message' => "Order {$number} permanently deleted.", 'redirect_url' => route('delivery', ['tab' => 'archived'])]);
+            return response()->json(['ok' => true, 'message' => "Order {$number} permanently deleted.", 'redirect_url' => route('orders', ['archived' => 1])]);
         });
     }
 
@@ -279,6 +289,31 @@ class OrderController extends Controller
         $user = Auth::user();
         $user->load('role', 'branch');
         $action = $request->input('action', '');
+        if ($action === 'report_receiving_issue') {
+            abort_unless($user->isBranchManager(), 403);
+            $request->merge(['reason' => trim((string) $request->input('reason'))]);
+            $data = $request->validate([
+                'id' => ['required', 'integer'], 'reason' => ['required', 'string', 'min:10', 'max:2000'],
+                'branch_confirmed' => ['required', 'accepted'],
+                'receipt' => ['required', 'array', 'min:1'],
+                'receipt.*.order_item_id' => ['required', 'integer', 'distinct'],
+                'receipt.*.received_quantity' => ['required', 'integer', 'min:0'],
+                'receipt.*.reason' => ['nullable', 'string', 'in:Missing Quantity,Damaged in Transit,Incorrect Quantity,Incorrect Item,Other'],
+            ]);
+            $issue = app(ReceivingIssueService::class)->report(Order::findOrFail($data['id']), $user, $data['reason'], $data['receipt']);
+
+            return response()->json(['ok' => true, 'issue_id' => $issue->id, 'message' => 'Branch-confirmed receiving issue submitted. Admin can now review and reprocess this receipt.']);
+        }
+        if ($action === 'resolve_receiving_issue') {
+            abort_unless($user->isAdmin(), 403);
+            $request->merge(['reason' => trim((string) $request->input('reason'))]);
+            $data = $request->validate([
+                'issue_id' => ['required', 'integer'], 'reason' => ['required', 'string', 'min:10', 'max:2000'],
+                'review_confirmed' => ['required', 'accepted'],
+            ]);
+
+            return response()->json(app(ReceivingIssueService::class)->resolve(ReceivingIssue::findOrFail($data['issue_id']), $user, $data['reason']));
+        }
         if (in_array($action, ['archive_order', 'restore_order'], true)) {
             return $this->setOrderArchive($request, $user, $action === 'restore_order');
         }
@@ -377,11 +412,6 @@ class OrderController extends Controller
                 $byItem[$itemId] = ($byItem[$itemId] ?? 0) + (int) $rawQty;
             }
 
-            // Tanza is the commissary: finished products are MADE on order, so
-            // creation is NOT gated on existing finished stock. The only numeric
-            // policy is the owner-configurable per-line quantity limit.
-            $maxPerLine = (int) Setting::get('order_max_qty_per_line', '0');
-
             // The Commissary is the source, never a destination for its own order.
             $mainBranch = Branch::commissary();
             if ($mainBranch && (int) $branchId === (int) $mainBranch->id) {
@@ -393,13 +423,6 @@ class OrderController extends Controller
                 $item = Item::where('id', $itemId)->where('is_active', true)->first();
                 if (! $item) {
                     return response()->json(['ok' => false, 'error' => "Product ID {$itemId} not found or is inactive."], 422);
-                }
-
-                if ($maxPerLine > 0 && $quantity > $maxPerLine) {
-                    return response()->json([
-                        'ok' => false,
-                        'error' => "{$item->item_name}: {$quantity} exceeds the per-product limit of {$maxPerLine}.",
-                    ], 422);
                 }
 
                 $validatedItems[] = [
@@ -761,6 +784,7 @@ class OrderController extends Controller
 
         // ── DESTINATION RECEIVING SCAN (delivering → delivered + settled) ──
         if ($action === 'receive_scan') {
+            abort_if($user->isAdmin(), 403, 'Admins monitor receipts; destination branch personnel must receive deliveries.');
             $groupQr = trim((string) $request->input('qr', ''));
             if (str_starts_with($groupQr, 'HV-PROD-') && ! str_contains($groupQr, '-U')) {
                 return response()->json((new OrderGroupLabelService)->receive($groupQr, $user, $request->input('quantity'), $request->input('reason'), $request->input('idempotency_key'), $request->boolean('finalize')));
@@ -1000,6 +1024,9 @@ class OrderController extends Controller
             $canRelease = $user->isOwner() || $user->isCommissaryRole();
             $canCancel = $canPrepare || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id);
             $isActiveOrder = $order->archived_at === null;
+            $receivingIssue = ReceivingIssue::where('order_id', $order->id)->where('status', 'pending')->latest('id')->first();
+            $receiptReady = $isActiveOrder && $order->status === 'delivering'
+                && ($productions->isNotEmpty() ? (new OrderWorkflowService)->isFullyDispatched($order) : (new OrderWorkflowService)->isAllocated($order));
 
             return response()->json([
                 'ok' => true,
@@ -1013,10 +1040,17 @@ class OrderController extends Controller
                     'payment_screenshot_url' => ! $user->isCommissaryStaff() && $order->payment_screenshot_path ? route('orders.payment-screenshot', $order) : null,
                     'payment_submitted_at' => $user->isCommissaryStaff() ? null : $fmt($order->payment_submitted_at),
                     'status' => $order->status,
+                    'receiving_issue' => $receivingIssue ? [
+                        'id' => $receivingIssue->id, 'reason' => $receivingIssue->reason,
+                        'reported_by' => User::whereKey($receivingIssue->reported_by)->value('full_name'),
+                        'reported_at' => $fmt($receivingIssue->created_at), 'receipt' => $receivingIssue->receipt,
+                    ] : null,
                     'actions' => [
+                        'can_report_receiving_issue' => $receiptReady && $user->isBranchManager() && (int) $user->branch_id === (int) $order->branch_id,
+                        'can_resolve_receiving_issue' => $isActiveOrder && $order->status === 'delivering' && $user->isAdmin() && $receivingIssue !== null,
                         'can_prepare' => $isActiveOrder && $canPrepare && in_array($order->status, ['approved', 'preparing'], true) && ! $hasPreparedOutput,
                         'can_release' => $isActiveOrder && $canRelease && in_array($order->status, ['approved', 'preparing', 'delivering'], true) && $hasPreparedOutput && (int) $productions->sum('produced_qty') > $releasedQuantity,
-                        'can_receive' => $isActiveOrder && $order->status === 'delivering' && (! $hasPreparedOutput || ((int) $productions->sum('produced_qty') > 0 && $releasedQuantity >= (int) $productions->sum('produced_qty'))) && ($user->isOwner() || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id)),
+                        'can_receive' => ! $user->isAdmin() && $isActiveOrder && $order->status === 'delivering' && (! $hasPreparedOutput || ((int) $productions->sum('produced_qty') > 0 && $releasedQuantity >= (int) $productions->sum('produced_qty'))) && ($user->isOwner() || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id)),
                         'can_cancel' => $isActiveOrder && $canCancel && in_array($order->status, ['pending', 'approved', 'preparing', 'delivering'], true) && $releasedQuantity === 0,
                         'labels_url' => $canPrepare && $productions->isNotEmpty() && ! in_array($order->status, ['cancelled', 'declined'], true) ? route('orders.labels', $order) : null,
                         'scan_out_url' => $canRelease ? route('stock', ['mode' => 'out']) : null,

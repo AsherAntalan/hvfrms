@@ -2,11 +2,20 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Branch extends Model
 {
+    public function scopeForecastDestinations(Builder $query): Builder
+    {
+        $commissaryId = static::commissary()?->id;
+
+        return $query->where('branch_type', '!=', 'commissary')
+            ->when($commissaryId !== null, fn (Builder $branches): Builder => $branches->where('id', '!=', $commissaryId));
+    }
+
     protected $fillable = [
         'branch_name',
         'branch_type',

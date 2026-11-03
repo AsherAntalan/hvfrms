@@ -14,12 +14,7 @@
     The suggested order quantity accounts for a safety factor of {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}&times; and your current recorded stock on hand.
 </div>
 
-{{-- Success flash --}}
-@if(session('success'))
-    <div class="alert alert-success py-2 small mb-3">
-        <i class="ph ph-check-circle me-1"></i> {{ session('success') }}
-    </div>
-@endif
+{{-- Success flash is shown once by the shared success modal (layouts.app). --}}
 
 {{-- Branch filter chips (inline navigation, no modal) --}}
 <div class="hv-card p-3 mb-3 no-print">
@@ -37,38 +32,9 @@
     </div>
 </div>
 
-{{-- Branch filter --}}
-<div class="hv-card p-3 mb-3">
-    <form method="GET" action="{{ route('forecast') }}" class="row g-2 align-items-end">
-        <div class="col-md-4">
-            <label class="form-label small fw-semibold mb-1">Branch</label>
-            <select class="form-select form-select-sm" name="branch">
-                @if(!auth()->user()->isBranchScoped())
-                <option value="0">All Branches (aggregated)</option>
-                @endif
-                @foreach($branches as $br)
-                    <option value="{{ $br->id }}" {{ $selBranch === (int)$br->id ? 'selected' : '' }}>
-                        {{ $br->branch_name }}
-                    </option>
-                @endforeach
-            </select>
-        </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="ph ph-funnel me-1"></i> Generate Forecast
-            </button>
-        </div>
-        <div class="col-md-5 text-end">
-            @php
-                $nextWeek = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY)->addDays(7)->format('Y-m-d');
-            @endphp
-            <span class="text-muted small">
-                Forecast period: <strong>{{ $nextWeek }}</strong> (next week)
-            </span>
-        </div>
-    </form>
+<div class="small text-muted text-end mb-3">
+    Forecast period: <strong>{{ $forecastMeta['target_start'] }}</strong> to <strong>{{ $forecastMeta['target_end'] }}</strong>
 </div>
-
 {{-- ═══ FORECAST TABLE ════════════════════════════════════ --}}
 <div class="hv-card p-0">
     <div class="table-responsive">

@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\AccountRequestController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\Auth\CodeResetController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\InitialPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\BranchController;
@@ -16,6 +19,7 @@ use App\Http\Controllers\OrderPaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ResetRequestController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\UserController;
@@ -55,12 +59,27 @@ Route::middleware('guest')->group(function () {
     Route::post('reset-password', [ResetPasswordController::class, 'reset'])
         ->middleware('throttle:password-reset')
         ->name('password.update');
+
+    // Hierarchical recovery: public entry with a username + one-time code.
+    Route::get('account-recovery', [CodeResetController::class, 'showForm'])
+        ->name('password.code.request');
+    Route::post('account-recovery', [CodeResetController::class, 'reset'])
+        ->middleware('throttle:password-reset')
+        ->name('password.code.update');
+    Route::get('account-recovery/verify/{token}', [CodeResetController::class, 'showVerification'])->name('password.code.verify');
+    Route::post('account-recovery/verify/{token}', [CodeResetController::class, 'verifyEmail'])
+        ->middleware('throttle:password-reset')->name('password.code.verify-confirm');
+    Route::get('account-recovery/reset/{token}', [CodeResetController::class, 'showResetForm'])->name('password.code.link');
+    Route::post('account-recovery/reset', [CodeResetController::class, 'completeReset'])
+        ->middleware('throttle:password-reset')->name('password.code.complete');
 });
 
 // -------------------------------------------------------------------------
 // Authenticated routes — require auth + idle timeout + branch scoping
 // -------------------------------------------------------------------------
 Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
+    Route::get('initial-password', [InitialPasswordController::class, 'show'])->name('password.initial');
+    Route::post('initial-password', [InitialPasswordController::class, 'update'])->middleware('throttle:password-reset')->name('password.initial.update');
 
     // Logout (POST only)
     Route::post('logout', [LoginController::class, 'logout'])
@@ -188,13 +207,27 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     });
 
     // ---------------------------------------------------------------
+    // Password-recovery requests — managers raise staff requests; authorizing
+    // admins approve and directly initiate manager/admin resets. Every action is
+    // re-authorized server-side inside the controller.
+    // ---------------------------------------------------------------
+    Route::middleware('role:super_admin,owner,admin,branch_manager,commissary_manager')->group(function () {
+        Route::get('users', [UserController::class, 'index'])->name('users');
+        Route::get('account-requests', [AccountRequestController::class, 'index'])->name('account-requests');
+        Route::post('account-requests', [AccountRequestController::class, 'store'])->middleware('throttle:10,1')->name('account-requests.store');
+        Route::post('account-requests/api', [AccountRequestController::class, 'api'])->middleware('throttle:10,1')->name('account-requests.api');
+        Route::get('reset-requests', [ResetRequestController::class, 'index'])
+            ->name('reset-requests');
+        Route::post('reset-requests/api', [ResetRequestController::class, 'api'])
+            ->name('reset-requests.api');
+    });
+
+    // ---------------------------------------------------------------
     // Owner-only routes (super_admin, owner)
     // ---------------------------------------------------------------
     Route::middleware('role:super_admin,owner,admin')->group(function () {
 
         // User management
-        Route::get('users', [UserController::class, 'index'])
-            ->name('users');
         Route::post('users/api', [UserController::class, 'api'])
             ->name('users.api');
 

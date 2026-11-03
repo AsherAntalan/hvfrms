@@ -87,6 +87,7 @@ class OrderWorkflowService
      */
     public function receive(Order $order, int $userId, array $receivedMap, int $mainBid, array $receivedReasons = []): array
     {
+        abort_if(User::findOrFail($userId)->isAdmin(), 403, 'Admins monitor receipts; destination branch personnel must receive deliveries.');
         if ((new OrderLabelService)->hasUnits($order->id)) {
             return (new OrderGroupLabelService)->receiveOrder($order, User::findOrFail($userId), $receivedMap, $receivedReasons);
         }

@@ -53,6 +53,30 @@ class CommissaryInventoryReadOnlyTest extends TestCase
         $this->assertTrue($w['bm']->canHandleInventory());
     }
 
+    public function test_admin_can_monitor_but_cannot_dispose_or_archive_inventory(): void
+    {
+        $world = $this->world();
+        $admin = $world['owner'];
+        $admin->role_id = Role::firstOrCreate(['role_name' => 'admin'], ['description' => 'Admin'])->id;
+        $admin->save();
+        $admin->unsetRelation('role');
+        $this->assertFalse($admin->canHandleInventory());
+        foreach (['dispose_batch', 'adjust_batch', 'edit_batch', 'void_batch', 'delete_batch'] as $action) {
+            $this->actingAs($admin)->postJson(route('warehouse.api'), [
+                'action' => $action, 'batch_id' => $world['expired']->id,
+                'quantity' => 1, 'reason' => 'Expired',
+            ])->assertForbidden();
+        }
+        $this->postJson(route('stock.api'), ['action' => 'adjustment'])->assertForbidden();
+        $this->postJson(route('reports.archive'), ['batch_id' => $world['expired']->id])->assertForbidden();
+        $this->postJson(route('reports.archiveRemove'), ['id' => 1])->assertForbidden();
+        $this->get('/warehouse')->assertOk()->assertViewHas('canDisposeBatches', false)
+            ->assertViewHas('canArchiveBatches', false)
+            ->assertDontSee('title="Void expired batch"', false);
+        $this->assertSame(5, (int) $world['expired']->fresh()->quantity_left);
+        $this->assertDatabaseCount('stock_transactions', 0);
+    }
+
     public function test_commissary_manager_inventory_mutations_return_403_without_side_effects(): void
     {
         $w = $this->world();

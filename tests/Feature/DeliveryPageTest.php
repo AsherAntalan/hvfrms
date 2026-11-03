@@ -95,12 +95,35 @@ class DeliveryPageTest extends TestCase
             ->assertViewHas('history', fn ($history) => $history->contains('order_number', 'ORD-H-1'));
     }
 
-    public function test_legacy_history_route_redirects_into_delivery_page(): void
+    public function test_active_shipments_badge_counts_only_eligible_distinct_orders(): void
+    {
+        $main = $this->branch('Tanza', 'main');
+        $silang = $this->branch('Silang');
+        $dasma = $this->branch('Dasma');
+        $owner = $this->user($this->role('owner'), $main, 'o@t.com');
+        $bm = $this->user($this->role('branch_manager'), $silang, 'bm@t.com');
+
+        $this->order($silang, 'ORD-P', 'pending', $bm->id);        // excluded: pending
+        $this->order($silang, 'ORD-A', 'approved', $owner->id);    // excluded: approved, nothing prepared
+        $this->order($silang, 'ORD-T1', 'delivering', $owner->id); // active
+        $this->order($silang, 'ORD-T2', 'delivering', $owner->id); // active
+        $this->order($dasma, 'ORD-T3', 'delivering', $owner->id);  // active (other branch)
+        $arc = $this->order($silang, 'ORD-ARC', 'delivering', $owner->id);
+        DB::table('orders')->where('id', $arc)->update(['archived_at' => now()]); // excluded: archived
+        $this->order($silang, 'ORD-DONE', 'settled', $owner->id);  // excluded: completed
+
+        // Owner sees active shipments across every branch.
+        $this->actingAs($owner)->get('/orders')->assertOk()->assertViewHas('activeShipmentCount', 3);
+        // Branch manager is scoped to their own branch.
+        $this->actingAs($bm)->get('/orders')->assertOk()->assertViewHas('activeShipmentCount', 2);
+    }
+
+    public function test_legacy_history_route_redirects_to_orders_history(): void
     {
         $main = $this->branch('Tanza', 'main');
         $owner = $this->user($this->role('owner'), $main, 'o@t.com');
 
         $this->actingAs($owner)->get('/delivery/history')
-            ->assertRedirect(route('delivery', ['tab' => 'history']));
+            ->assertRedirect(route('orders', ['queue' => 'history']));
     }
 }

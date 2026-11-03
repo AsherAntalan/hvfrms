@@ -7,10 +7,12 @@ use App\Models\Branch;
 use App\Models\RememberToken;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\ResetCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 class UserController extends Controller
 {
@@ -19,7 +21,29 @@ class UserController extends Controller
      */
     public function index()
     {
-        $users = User::select('users.*', 'roles.role_name', 'branches.branch_name')
+        if (Auth::user()->isManagerRole()) {
+            $actor = Auth::user();
+            $staffRole = $actor->isBranchManager() ? 'branch_staff' : 'commissary_staff';
+            $staff = User::with('role')->where('branch_id', $actor->branch_id)
+                ->whereHas('role', fn ($roles) => $roles->where('role_name', $staffRole))->orderBy('full_name')->get();
+            $recoveryCodes = [];
+            foreach ($staff as $employee) {
+                if ($actor->canViewRecoveryCodeFor($employee)) {
+                    $recoveryCodes[$employee->id] = app(ResetCodeService::class)->forAccount($employee);
+                }
+            }
+            if ($recoveryCodes !== []) {
+                AuditLog::create([
+                    'user_id' => $actor->id, 'action' => 'account_recovery_codes_viewed', 'table_name' => 'users',
+                    'details' => 'Viewed recovery codes for account IDs: '.implode(', ', array_keys($recoveryCodes)),
+                    'ip_address' => request()->ip(),
+                ]);
+            }
+
+            return response()->view('users.manager', compact('staff', 'recoveryCodes'))->header('Cache-Control', 'no-store, private');
+        }
+
+        $users = User::with('role')->select('users.*', 'roles.role_name', 'branches.branch_name')
             ->join('roles', 'roles.id', '=', 'users.role_id')
             ->join('branches', 'branches.id', '=', 'users.branch_id')
             ->orderBy('users.status')
@@ -30,7 +54,24 @@ class UserController extends Controller
         $roles = Role::orderBy('id')->get();
         $branches = Branch::where('is_active', 1)->orderBy('branch_name')->get();
 
-        return view('users.index', compact('users', 'roles', 'branches'));
+        $recoveryCodes = [];
+        foreach ($users as $user) {
+            if (Auth::user()->canViewRecoveryCodeFor($user)) {
+                $recoveryCodes[$user->id] = app(ResetCodeService::class)->forAccount($user);
+            }
+        }
+        if ($recoveryCodes !== []) {
+            AuditLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'account_recovery_codes_viewed',
+                'table_name' => 'users',
+                'details' => 'Viewed recovery codes for account IDs: '.implode(', ', array_keys($recoveryCodes)),
+                'ip_address' => request()->ip(),
+            ]);
+        }
+
+        return response()->view('users.index', compact('users', 'roles', 'branches', 'recoveryCodes'))
+            ->header('Cache-Control', 'no-store, private');
     }
 
     /**
@@ -52,6 +93,10 @@ class UserController extends Controller
             return $this->resetPassword($request);
         }
 
+        if ($action === 'reset_code') {
+            return $this->generateResetCode($request);
+        }
+
         return response()->json(['ok' => false, 'error' => 'Unknown action.'], 400);
     }
 
@@ -61,18 +106,27 @@ class UserController extends Controller
     protected function saveUser(Request $request): JsonResponse
     {
         $id = (int) $request->input('id', 0);
+        $usernameInput = $request->input('username');
+        $username = is_string($usernameInput) ? trim($usernameInput) : '';
         $fullName = trim($request->input('full_name', ''));
         $email = trim($request->input('email', ''));
-        $password = $request->input('password', '');
+        $password = $request->input('password') ?? '';
         $roleId = (int) $request->input('role_id', 0);
         $branchId = (int) $request->input('branch_id', 0);
 
         // Validation
+        if ($username === '' || strlen($username) > 50 || ! preg_match('/\A[A-Za-z0-9_.-]+\z/', $username)) {
+            return response()->json(['ok' => false, 'error' => 'Username is required and must contain up to 50 letters, numbers, dots, underscores, or hyphens.'], 422);
+        }
+        if (User::whereRaw('LOWER(username) = ?', [strtolower($username)])->when($id > 0, fn ($query) => $query->where('id', '!=', $id))->exists()) {
+            return response()->json(['ok' => false, 'error' => 'That username is already taken.'], 422);
+        }
         if ($fullName === '') {
             return response()->json(['ok' => false, 'error' => 'Full name is required.'], 422);
         }
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return response()->json(['ok' => false, 'error' => 'A valid email is required.'], 422);
+        // Email is optional for accounts that recover through the code hierarchy.
+        if ($email !== '' && ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['ok' => false, 'error' => 'Enter a valid email, or leave it blank.'], 422);
         }
         if ($roleId <= 0) {
             return response()->json(['ok' => false, 'error' => 'Please select a role.'], 422);
@@ -89,19 +143,27 @@ class UserController extends Controller
             return response()->json(['ok' => false, 'error' => 'Password must be at least 6 characters.'], 422);
         }
 
-        // Check duplicate email
-        $dupQuery = User::where('email', $email);
-        if ($id > 0) {
-            $dupQuery->where('id', '!=', $id);
-        }
-        if ($dupQuery->exists()) {
-            return response()->json(['ok' => false, 'error' => 'A user with that email already exists.'], 422);
+        // Check duplicate email only when one is supplied (blanks stay NULL).
+        if ($email !== '') {
+            $dupQuery = User::where('email', $email);
+            if ($id > 0) {
+                $dupQuery->where('id', '!=', $id);
+            }
+            if ($dupQuery->exists()) {
+                return response()->json(['ok' => false, 'error' => 'A user with that email already exists.'], 422);
+            }
         }
 
         // Verify role exists
         $role = Role::find($roleId);
         if (! $role) {
             return response()->json(['ok' => false, 'error' => 'Invalid role selected.'], 422);
+        }
+
+        // The super admin recovers through the email reset link, so an email is
+        // mandatory for that role only.
+        if ($role->role_name === 'super_admin' && $email === '') {
+            return response()->json(['ok' => false, 'error' => 'A super admin account requires an email for recovery.'], 422);
         }
 
         // Verify branch exists and is active
@@ -119,8 +181,9 @@ class UserController extends Controller
             // Update existing user
             $user = User::findOrFail($id);
             $data = [
+                'username' => $username,
                 'full_name' => $fullName,
-                'email' => $email,
+                'email' => $email !== '' ? $email : null,
                 'role_id' => $roleId,
                 'branch_id' => $branchId,
             ];
@@ -144,8 +207,9 @@ class UserController extends Controller
         } else {
             // Create new user
             $user = User::create([
+                'username' => $username,
                 'full_name' => $fullName,
-                'email' => $email,
+                'email' => $email !== '' ? $email : null,
                 'password_hash' => Hash::make($password),
                 'role_id' => $roleId,
                 'branch_id' => $branchId,
@@ -161,7 +225,12 @@ class UserController extends Controller
                 'ip_address' => $request->ip(),
             ]);
 
-            return response()->json(['ok' => true, 'message' => 'User created successfully.', 'id' => $user->id]);
+            return response()->json([
+                'ok' => true,
+                'message' => 'User created successfully.',
+                'id' => $user->id,
+                'recovery_code' => Auth::user()->canViewRecoveryCodeFor($user) ? $user->recovery_code : null,
+            ])->header('Cache-Control', 'no-store');
         }
     }
 
@@ -238,5 +307,30 @@ class UserController extends Controller
         ]);
 
         return response()->json(['ok' => true, 'message' => 'Password reset successfully.']);
+    }
+
+    /** Reveal the assigned account code without authorizing a password reset. */
+    protected function generateResetCode(Request $request): JsonResponse
+    {
+        $actor = Auth::user();
+        $target = User::with('role')->find((int) $request->input('id', 0));
+        abort_unless($target && $actor->canViewRecoveryCodeFor($target), 403);
+
+        $key = 'recovery-reveal:'.$actor->id;
+        if (RateLimiter::tooManyAttempts($key, 10)) {
+            return response()->json(['ok' => false, 'error' => 'Please wait before viewing another code.'], 429);
+        }
+        RateLimiter::hit($key, 60);
+        $plain = app(ResetCodeService::class)->forAccount($target);
+        AuditLog::create([
+            'user_id' => $actor->id,
+            'action' => 'account_recovery_code_viewed',
+            'table_name' => 'users',
+            'record_id' => $target->id,
+            'ip_address' => $request->ip(),
+        ]);
+
+        return response()->json(['ok' => true, 'code' => $plain])
+            ->header('Cache-Control', 'no-store');
     }
 }

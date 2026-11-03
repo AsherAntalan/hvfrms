@@ -97,6 +97,10 @@ class LoginController extends Controller
                 ->with('error', $error);
         }
 
+        if ($user->must_change_password && ! $user->temporary_password_expires_at?->isFuture()) {
+            return back()->withInput($request->only('login'))->with('error', 'Temporary password expired. Ask your manager for replacement credentials.');
+        }
+
         // --- Success ---
         // Reset failed attempts and lockout
         $user->update([
@@ -107,6 +111,11 @@ class LoginController extends Controller
         // Log the user in and regenerate session to prevent fixation
         Auth::login($user);
         $request->session()->regenerate();
+        if ($user->must_change_password) {
+            $request->session()->put('password_fingerprint', hash('sha256', $user->password_hash));
+        } else {
+            $request->session()->forget('password_fingerprint');
+        }
 
         // Write audit log
         AuditLog::create([
@@ -119,6 +128,12 @@ class LoginController extends Controller
 
         if ($user->isBranchStaff() || $user->isCommissaryStaff()) {
             $request->session()->forget('url.intended');
+        }
+
+        if ($user->must_change_password) {
+            $request->session()->forget('url.intended');
+
+            return redirect()->route('password.initial');
         }
 
         return redirect()->intended($this->redirectPath($user));

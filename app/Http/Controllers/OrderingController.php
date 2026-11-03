@@ -8,7 +8,6 @@ use App\Models\Category;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Setting;
 use App\Services\ForecastService;
 use App\Services\OrderPaymentService;
 use Illuminate\Http\Request;
@@ -58,8 +57,6 @@ class OrderingController extends Controller
             ORDER BY c.name ASC, i.item_name ASC
         ', [$user->branch_id]);
 
-        $maxOrderQuantity = max(0, (int) Setting::get('order_max_qty_per_line', '0'));
-
         // Forecast-driven suggested order quantity per item for THIS branch.
         // Decision support only — the branch can override it in the modal.
         $suggested = [];
@@ -67,9 +64,6 @@ class OrderingController extends Controller
             $qty = (int) ($fc['recommend_qty'] ?? 0);
             if ($qty <= 0) {
                 continue;
-            }
-            if ($maxOrderQuantity > 0) {
-                $qty = min($qty, $maxOrderQuantity);
             }
             $suggested[$fc['item']->id] = $qty;
         }
@@ -82,7 +76,7 @@ class OrderingController extends Controller
 
         return view('ordering.index', compact(
             'user', 'mainBid', 'isFranchise', 'pendingOrders',
-            'recentOrders', 'items', 'categories', 'maxOrderQuantity'
+            'recentOrders', 'items', 'categories'
         ));
     }
 
@@ -167,9 +161,6 @@ class OrderingController extends Controller
                     return response()->json(['ok' => false, 'error' => 'No valid items in cart.'], 422);
                 }
 
-                // Tanza is the commissary — made to order, so NOT gated on
-                // finished stock. Only the owner-configurable per-line limit.
-                $maxPerLine = (int) Setting::get('order_max_qty_per_line', '0');
                 $total = 0;
                 $lineItems = [];
 
@@ -179,15 +170,6 @@ class OrderingController extends Controller
                         DB::rollBack();
 
                         return response()->json(['ok' => false, 'error' => 'A product in your cart is no longer available.'], 422);
-                    }
-
-                    if ($maxPerLine > 0 && $qty > $maxPerLine) {
-                        DB::rollBack();
-
-                        return response()->json([
-                            'ok' => false,
-                            'error' => "{$item->item_name}: {$qty} exceeds the per-product limit of {$maxPerLine}.",
-                        ], 422);
                     }
 
                     $subtotal = (float) $item->price * $qty;

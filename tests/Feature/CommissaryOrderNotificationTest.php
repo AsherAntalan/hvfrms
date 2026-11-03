@@ -66,4 +66,31 @@ class CommissaryOrderNotificationTest extends TestCase
         $msgs = collect($res->json('items'))->pluck('message')->implode(' | ');
         $this->assertStringNotContainsString('ORD-N-2', $msgs);
     }
+
+    public function test_delivery_dashboard_links_go_to_orders_for_admin_and_managers(): void
+    {
+        if (DB::getDriverName() === 'sqlite') {
+            DB::connection()->getPdo()->sqliteCreateFunction('CURDATE', fn (): string => now()->toDateString());
+        }
+        $commissary = Branch::create(['branch_name' => 'Commissary', 'branch_type' => 'commissary', 'is_active' => 1]);
+        $branch = Branch::create(['branch_name' => 'Baguio', 'branch_type' => 'franchise', 'is_active' => 1]);
+        $manager = $this->user('branch_manager', $branch, 'manager@delivery.test');
+        $admin = $this->user('admin', $commissary, 'admin@delivery.test');
+        $commissaryManager = $this->user('commissary_manager', $commissary, 'commissary@delivery.test');
+        $orderId = DB::table('orders')->insertGetId([
+            'order_number' => 'ORD-DASHBOARD-DELIVERY', 'branch_id' => $branch->id, 'status' => 'delivering',
+            'ordered_by' => $manager->id, 'total_amount' => 50, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->actingAs($admin)->getJson('/notifications')->assertOk()
+            ->assertJsonFragment(['link' => route('orders', ['order' => $orderId, 'queue' => 'active'])]);
+        foreach ([$admin, $manager, $commissaryManager] as $viewer) {
+            $response = $this->actingAs($viewer)->get('/dashboard')->assertOk()
+                ->assertSee('1 delivery in progress');
+            $document = new \DOMDocument;
+            @$document->loadHTML($response->getContent());
+            $links = (new \DOMXPath($document))->query('//a[contains(., "delivery in progress")]');
+            $this->assertSame(1, $links->length);
+            $this->assertSame(route('orders', ['queue' => 'active']), $links->item(0)->getAttribute('href'));
+        }
+    }
 }

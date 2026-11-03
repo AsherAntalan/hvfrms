@@ -85,15 +85,17 @@
     {{-- ═══ ACTIVE STOCK ═══════════════════════════════════ --}}
     <div class="tab-pane fade {{ $showExpired ? '' : 'show active' }}" id="tabActive">
         <div class="hv-card p-0 hv-panel" style="border-top-left-radius:0;">
-            @unless($monitorAllBranches)
+            @if($monitorAllBranches)
+                @include('partials.inventory-filter-bar',['kind'=>'active'])
+            @else
             <div class="p-3 border-bottom">
                 <input type="text" id="searchActive" class="form-control form-control-sm"
                        placeholder="Search active stock..." style="max-width:300px;" oninput="filterRows('active')">
             </div>
-            @endunless
+            @endif
             <div id="panelBody-active" class="hv-panel-body" aria-live="polite">
                 @if($monitorAllBranches)
-                    @include('partials.inventory-branch-groups',['kind'=>'active'])
+                    @include('partials.inventory-flat-body',['kind'=>'active'])
                 @else
                     @include('partials.inventory-active-table')
                 @endif
@@ -105,15 +107,17 @@
     {{-- ═══ EXPIRED STOCK ═══════════════════════════════════ --}}
     <div class="tab-pane fade {{ $showExpired ? 'show active' : '' }}" id="tabExpired">
         <div class="hv-card p-0 hv-panel" style="border-top-left-radius:0;">
-            @unless($monitorAllBranches)
+            @if($monitorAllBranches)
+                @include('partials.inventory-filter-bar',['kind'=>'expired'])
+            @else
             <div class="p-3 border-bottom">
                 <input type="text" id="searchExpired" class="form-control form-control-sm"
                        placeholder="Search expired stock..." style="max-width:300px;" oninput="filterRows('expired')">
             </div>
-            @endunless
+            @endif
             <div id="panelBody-expired" class="hv-panel-body" aria-live="polite">
                 @if($monitorAllBranches)
-                    @include('partials.inventory-branch-groups',['kind'=>'expired'])
+                    @include('partials.inventory-flat-body',['kind'=>'expired'])
                 @else
                     @include('partials.inventory-expired-table')
                 @endif
@@ -126,9 +130,12 @@
     @unless($isWarehouseStaff)
     <div class="tab-pane fade" id="tabOrders">
         <div class="hv-card p-0 hv-panel" style="border-top-left-radius:0;">
+            @if($monitorAllBranches)
+                @include('partials.inventory-filter-bar',['kind'=>'orders'])
+            @endif
             <div id="panelBody-orders" class="hv-panel-body" aria-live="polite">
                 @if($monitorAllBranches)
-                    @include('partials.inventory-branch-groups',['kind'=>'orders'])
+                    @include('partials.inventory-flat-body',['kind'=>'orders'])
                 @else
                     @include('partials.inventory-orders-table')
                 @endif
@@ -150,9 +157,12 @@
                 </button>
             </div>
             @endif
+            @if($monitorAllBranches)
+                @include('partials.inventory-filter-bar',['kind'=>'disposal'])
+            @endif
             <div id="panelBody-disposal" class="hv-panel-body" aria-live="polite">
                 @if($monitorAllBranches)
-                    @include('partials.inventory-branch-groups',['kind'=>'disposal'])
+                    @include('partials.inventory-flat-body',['kind'=>'disposal'])
                 @else
                     @include('partials.inventory-disposal-table')
                 @endif
@@ -329,6 +339,22 @@
 .hv-wh-toast.is-info i{ color:var(--maroon); }
 @keyframes whToastIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion:reduce){ .hv-wh-toast{ animation:none; } }
+
+/* Flat All-Branches monitor: pagination + filter bar */
+.hv-inv-pager{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.hv-page-btn{ min-width:34px; height:32px; padding:0 .55rem; border:1px solid var(--border);
+  background:#fff; color:var(--maroon-dark); border-radius:8px; font-size:13px; font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center; gap:.25rem; cursor:pointer; }
+.hv-page-btn:hover:not(:disabled):not(.active){ background:var(--gold-soft); border-color:var(--maroon); }
+.hv-page-btn.active{ background:var(--maroon); border-color:var(--maroon); color:#fff; cursor:default; }
+.hv-page-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.hv-page-gap{ padding:0 2px; color:var(--muted,#8a817a); }
+.hv-row-summary{ background:rgba(0,0,0,.015); }
+.hv-row-summary td{ color:#8a817a; }
+@media (max-width:575.98px){
+  .hv-inv-filter .row > [class*="col-"]{ flex:1 1 100%; }
+  .hv-inv-pager-wrap{ flex-direction:column; align-items:flex-start; }
+}
 </style>
 @endpush
 
@@ -341,6 +367,62 @@ const PANEL = '{{ route("warehouse.panel") }}';
 const ARCHIVE_URL  = '{{ route("reports.archive") }}';
 const ARCHIVES_URL = '{{ route("reports.archives") }}';
 const CSRF  = document.querySelector('meta[name="csrf-token"]').content;
+const INV_FLAT = {{ $monitorAllBranches ? 'true' : 'false' }};
+
+// ── Flat All-Branches monitor: server-side filter / sort / paginate ──
+function flatFilterParams(kind, page) {
+    var get = function (field) { return document.getElementById('flt-' + kind + '-' + field); };
+    var p = new URLSearchParams();
+    p.set('tab', kind);
+    ['q', 'branch', 'product', 'unit', 'status', 'from', 'to', 'sort'].forEach(function (field) {
+        var el = get(field);
+        if (el && el.value !== '') { p.set(field, el.value.trim ? el.value.trim() : el.value); }
+    });
+    p.set('page', page || 1);
+    return p;
+}
+
+async function applyFlatFilter(kind, page) {
+    var body = document.getElementById('panelBody-' + kind);
+    if (!body) { return; }
+    overlay(kind, 'Filtering…', true);
+    try {
+        var res = await fetch(PANEL + '?' + flatFilterParams(kind, page).toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!res.ok) { throw new Error('http'); }
+        var json = await res.json();
+        if (json.ok && json.html[kind] != null) { body.innerHTML = json.html[kind]; }
+        updateCounts(json.counts);
+    } catch (e) {
+        whToast('error', 'Could not load records. Please try again.');
+    } finally {
+        overlay(kind, '', false);
+    }
+}
+
+var flatFilterTimers = {};
+function debounceFlatFilter(kind) {
+    clearTimeout(flatFilterTimers[kind]);
+    flatFilterTimers[kind] = setTimeout(function () { applyFlatFilter(kind, 1); }, 300);
+}
+
+function clearFlatFilters(kind) {
+    ['q', 'branch', 'product', 'unit', 'status', 'from', 'to'].forEach(function (field) {
+        var el = document.getElementById('flt-' + kind + '-' + field);
+        if (el) { el.value = ''; }
+    });
+    var sort = document.getElementById('flt-' + kind + '-sort');
+    if (sort) { sort.selectedIndex = 0; }
+    applyFlatFilter(kind, 1);
+}
+
+if (INV_FLAT) {
+    // Pagination is rendered inside the swapped body; delegate clicks.
+    document.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.hv-page-btn');
+        if (!btn || btn.disabled) { return; }
+        applyFlatFilter(btn.dataset.kind, parseInt(btn.dataset.page, 10) || 1);
+    });
+}
 
 @if($canEditBatches) let adjustModal; @endif
 @if($canDisposeBatches ?? false) let disposeModal; @endif
@@ -478,6 +560,10 @@ async function refreshPanels(busyText) {
 
     window.scrollTo(0, scrollY);
     overlay(current, '', false);
+
+    // Flat monitor: the generic refresh re-renders page 1 unfiltered, so
+    // re-apply the active tab's current filters/sort after a mutation.
+    if (INV_FLAT) { applyFlatFilter(current, 1); }
 }
 
 function updateCounts(c) {

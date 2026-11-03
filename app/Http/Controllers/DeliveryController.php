@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -11,28 +12,17 @@ use Illuminate\Support\Facades\Auth;
 class DeliveryController extends Controller
 {
     /**
-     * Delivery Status within Orders, with prepared/in-transit shipments grouped
-     * by branch. Requests awaiting review or preparation remain in All Orders.
+     * Orders that belong on the Active Shipments listing: prepared and awaiting
+     * dispatch, partially released, or in transit. Archived and completed/closed
+     * orders are excluded, and branch-scoped users see only their own branch.
+     * Shared so the Orders page badge count and this page cannot drift apart.
      */
-    public function index(): View
+    public static function activeShipmentsQuery(User $user): Builder
     {
-        $user = Auth::user();
-        $user->load('role', 'branch');
-        $isBranchScoped = $user->isBranchScoped();
-        $isWarehouse = $user->isWarehouseRole();
-
-        $activeQuery = Order::select('orders.*', 'branches.branch_name',
-            'u.full_name as ordered_by_name',
-            'u_prep.full_name as prepared_by_name')
-            ->selectRaw('(SELECT COUNT(*) FROM order_productions p WHERE p.order_id = orders.id AND (p.stock_batch_id IS NOT NULL OR EXISTS (SELECT 1 FROM order_production_units u WHERE u.production_id = p.id))) AS piece_outputs')
-            ->selectRaw('(SELECT COALESCE(SUM(p.produced_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS prepared_units')
-            ->selectRaw('(SELECT COALESCE(SUM(p.dispatched_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS released_units')
-            ->join('branches', 'branches.id', '=', 'orders.branch_id')
-            ->leftJoin('users as u', 'u.id', '=', 'orders.ordered_by')
-            ->leftJoin('users as u_prep', 'u_prep.id', '=', 'orders.prepared_by')
+        $query = Order::query()
             ->whereIn('orders.status', ['approved', 'preparing', 'delivering'])
-            ->where(function (Builder $query): void {
-                $query->where('orders.status', 'delivering')
+            ->where(function (Builder $statusQuery): void {
+                $statusQuery->where('orders.status', 'delivering')
                     ->orWhereExists(function (QueryBuilder $productionQuery): void {
                         $productionQuery->selectRaw('1')
                             ->from('order_productions as prepared')
@@ -49,9 +39,42 @@ class DeliveryController extends Controller
             })
             ->whereNull('orders.archived_at');
 
-        if ($isBranchScoped && ! $isWarehouse) {
-            $activeQuery->where('orders.branch_id', $user->branch_id);
+        if ($user->isBranchScoped() && ! $user->isWarehouseRole()) {
+            $query->where('orders.branch_id', $user->branch_id);
         }
+
+        return $query;
+    }
+
+    /**
+     * Distinct count of orders shown on the Active Shipments listing for this user.
+     */
+    public static function activeShipmentsCount(User $user): int
+    {
+        return static::activeShipmentsQuery($user)->count('orders.id');
+    }
+
+    /**
+     * Active Shipments within Orders, with prepared/in-transit shipments grouped
+     * by branch. Requests awaiting review or preparation remain in All Orders.
+     */
+    public function index(): View
+    {
+        $user = Auth::user();
+        $user->load('role', 'branch');
+        $isBranchScoped = $user->isBranchScoped();
+        $isWarehouse = $user->isWarehouseRole();
+
+        $activeQuery = static::activeShipmentsQuery($user)
+            ->select('orders.*', 'branches.branch_name',
+                'u.full_name as ordered_by_name',
+                'u_prep.full_name as prepared_by_name')
+            ->selectRaw('(SELECT COUNT(*) FROM order_productions p WHERE p.order_id = orders.id AND (p.stock_batch_id IS NOT NULL OR EXISTS (SELECT 1 FROM order_production_units u WHERE u.production_id = p.id))) AS piece_outputs')
+            ->selectRaw('(SELECT COALESCE(SUM(p.produced_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS prepared_units')
+            ->selectRaw('(SELECT COALESCE(SUM(p.dispatched_qty),0) FROM order_productions p WHERE p.order_id = orders.id) AS released_units')
+            ->join('branches', 'branches.id', '=', 'orders.branch_id')
+            ->leftJoin('users as u', 'u.id', '=', 'orders.ordered_by')
+            ->leftJoin('users as u_prep', 'u_prep.id', '=', 'orders.prepared_by');
 
         $active = $activeQuery
             ->orderByRaw("CASE orders.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'preparing' THEN 3 WHEN 'delivering' THEN 4 ELSE 5 END")
@@ -97,11 +120,11 @@ class DeliveryController extends Controller
     }
 
     /**
-     * Legacy route kept for existing bookmarks/notifications. History now lives
-     * inside the single Delivery page, so redirect there with the tab preselected.
+     * Legacy route kept for existing bookmarks/notifications. Completed delivery
+     * records now live in Orders History, so redirect there.
      */
     public function history()
     {
-        return redirect()->route('delivery', ['tab' => 'history']);
+        return redirect()->route('orders', ['queue' => 'history']);
     }
 }

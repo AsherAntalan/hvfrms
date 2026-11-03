@@ -155,7 +155,7 @@ class StockController extends Controller
 
         // The Commissary Manager monitors inventory but may not dispose it; the
         // adjustment/disposal path is refused before any stock movement.
-        if ($user->isCommissaryManager() && $action === 'adjustment') {
+        if (($user->isCommissaryManager() || $user->isAdmin()) && $action === 'adjustment') {
             return response()->json([
                 'ok' => false,
                 'error' => 'Inventory monitoring only. Disposal requires an authorized inventory handler.',

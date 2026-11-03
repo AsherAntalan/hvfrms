@@ -32,26 +32,19 @@ class SettingsController extends Controller
      */
     public function update(Request $request)
     {
+        $request->validate(['expiry_warning_days' => ['sometimes', 'required', 'integer', 'between:1,30']]);
+
         $fields = [
             'app_name' => 'Application Name',
             'forecast_weeks' => 'Forecast Weeks',
             'safety_stock_factor' => 'Safety Stock Factor',
-            'unusual_sales_sigma' => 'Unusual Sales Sigma',
-            'idle_branch_days' => 'Idle Branch Days',
             'expiry_warning_days' => 'Expiry Warning Days',
-            'order_max_qty_per_line' => 'Order Max Qty Per Line',
         ];
 
         foreach ($fields as $key => $label) {
             if ($request->has($key)) {
                 $val = trim($request->input($key));
-                if ($key === 'order_max_qty_per_line') {
-                    // Whole number ≥ 0 (0 = unlimited). Reject malformed input.
-                    if (! ctype_digit($val)) {
-                        return redirect()->route('settings')->with('error', 'Order max qty per line must be a whole number (0 = unlimited).');
-                    }
-                    Setting::set($key, (string) (int) $val);
-                } elseif ($val !== '') {
+                if ($val !== '') {
                     Setting::set($key, $val);
                 }
             }

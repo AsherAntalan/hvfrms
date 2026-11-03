@@ -226,7 +226,7 @@ class CommissaryOrdersOrganizationTest extends TestCase
         // staff keep the granular operational queues).
         $this->actingAs($w['users']['owner'])->get('/orders')->assertOk()->assertViewHas('organizeCommissaryOrders', true)
             ->assertViewHas('orders', fn ($orders) => $orders->count() === 11)
-            ->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'history', 'all'])
+            ->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'all', 'history'])
             ->assertSee('data-order-queue=', false);
     }
 
@@ -252,32 +252,57 @@ class CommissaryOrdersOrganizationTest extends TestCase
         $this->capture('empty', $response->getContent());
     }
 
-    public function test_orders_and_delivery_share_tabs_and_one_sidebar_entry_for_every_permitted_role(): void
+    public function test_active_shipments_button_replaces_the_delivery_status_tab_for_every_permitted_role(): void
     {
         $world = $this->world();
 
+        // Distinct active shipments visible to each role (branch managers are scoped).
+        $expectedCounts = ['commissary_manager' => 3, 'commissary_staff' => 3, 'branch_manager' => 2, 'owner' => 3];
+
         foreach ($world['users'] as $role => $user) {
-            foreach (['/orders', '/delivery', '/delivery?tab=history', '/delivery?tab=archived'] as $path) {
-                $response = $this->actingAs($user)->get($path)->assertOk()
-                    ->assertSee('aria-label="Orders views"', false)
-                    ->assertSee('data-orders-view="all"', false)
-                    ->assertSee('data-orders-view="delivery"', false);
+            $orders = $this->actingAs($user)->get('/orders')->assertOk();
+            $html = $orders->getContent();
 
-                $html = $response->getContent();
-                preg_match('/<aside\b[^>]*id="sidebar"[^>]*>(.*?)<\/aside>/s', $html, $sidebar);
-                $this->assertCount(2, $sidebar);
-                // Commissary Staff is scanner-only (no Orders sidebar entry); every
-                // other permitted role keeps exactly one.
-                $expectedOrdersEntries = $role === 'commissary_staff' ? 0 : 1;
-                $this->assertSame($expectedOrdersEntries, substr_count($sidebar[1], 'data-sidebar-orders'));
-                $this->assertStringNotContainsString('Delivery Status', $sidebar[1]);
-                $this->assertStringNotContainsString('All Orders', $sidebar[1]);
-                $this->assertSame($role === 'branch_manager', str_contains($html, 'data-orders-view="supplies"'));
+            // Active Shipments is a header button to the shipments page, not a top tab.
+            $this->assertStringNotContainsString('data-orders-view="delivery"', $html);
+            $orders->assertDontSee('Active Shipments');
 
-                $selectedView = str_starts_with($path, '/delivery') ? 'delivery' : 'all';
-                $this->assertMatchesRegularExpression('/data-orders-view="'.$selectedView.'"\s+class="[^"]*active"\s+aria-current="page"/', $html);
+            // Only branch managers keep a two-tab bar (Order Supplies + All Orders).
+            if ($role === 'branch_manager') {
+                $orders->assertSee('aria-label="Orders views"', false)
+                    ->assertSee('data-orders-view="supplies"', false)
+                    ->assertSee('data-orders-view="all"', false);
+            } else {
+                $this->assertStringNotContainsString('aria-label="Orders views"', $html);
+            }
+
+            // Sidebar keeps a single Orders entry (commissary staff is scanner-only),
+            // and no legacy Delivery Status / All Orders labels.
+            preg_match('/<aside\b[^>]*id="sidebar"[^>]*>(.*?)<\/aside>/s', $html, $sidebar);
+            $this->assertCount(2, $sidebar);
+            $expectedOrdersEntries = $role === 'commissary_staff' ? 0 : 1;
+            $this->assertSame($expectedOrdersEntries, substr_count($sidebar[1], 'data-sidebar-orders'));
+            $this->assertStringNotContainsString('Delivery Status', $sidebar[1]);
+
+            // The shipments page: renamed heading, Back to Orders, no Delivery Status tab.
+            $delivery = $this->actingAs($user)->get('/delivery')->assertOk();
+            $deliveryHtml = $delivery->getContent();
+            $delivery->assertSee('Active Shipments')->assertSee('Back to Orders')
+                ->assertSee('href="'.route('orders').'"', false);
+            $this->assertStringNotContainsString('data-orders-view="delivery"', $deliveryHtml);
+
+            // Owner-level drops the duplicate history/archive tabs; other roles keep them.
+            if ($role === 'owner') {
+                $this->assertStringNotContainsString('id="tabHistory"', $deliveryHtml);
+                $this->assertStringNotContainsString('id="tabArchived"', $deliveryHtml);
+            } else {
+                $this->assertStringContainsString('id="tabHistory"', $deliveryHtml);
             }
         }
+
+        // Legacy delivery-history link now resolves to Orders History.
+        $this->actingAs($world['users']['owner'])->get('/delivery/history')
+            ->assertRedirect(route('orders', ['queue' => 'history']));
     }
 
     public function test_delivery_status_contains_ready_partial_and_transit_shipments_with_scoped_counts(): void

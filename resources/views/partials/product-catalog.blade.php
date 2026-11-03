@@ -107,6 +107,12 @@
                                 </button>
                             @endif
                             @endif
+                            @if(auth()->user()->isOwner())
+                            <button type="button" class="btn btn-sm btn-outline-danger" title="Delete product"
+                                    onclick="deleteProduct({{ $item->id }}, {{ Illuminate\Support\Js::from($item->item_name) }})">
+                                <i class="ph ph-trash" aria-hidden="true"></i> Delete
+                            </button>
+                            @endif
                         </div>
                     </td>
                 </tr>

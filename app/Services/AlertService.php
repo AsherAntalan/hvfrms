@@ -82,7 +82,7 @@ class AlertService
             ->whereIn('st.type', ['out', 'adjustment', 'damaged', 'expired'])
             ->where('st.created_at', '>=', Carbon::today('Asia/Manila')->subWeeks(8))
             ->orderBy('st.created_at')->select('st.item_id', 'st.branch_id', 'st.quantity', 'st.created_at', 'i.item_name', 'b.branch_name')->get();
-        $sigma = max(1.0, (float) Setting::get('unusual_sales_sigma', '2'));
+        $sigma = 2.0;
         foreach ($movements->groupBy(fn (object $movement): string => $movement->item_id.'-'.$movement->branch_id) as $group) {
             $values = $group->groupBy(fn (object $movement): string => Carbon::parse($movement->created_at)->startOfWeek()->toDateString())
                 ->sortKeys()->map(fn (Collection $week): int => abs((int) $week->sum('quantity')))->values()->all();

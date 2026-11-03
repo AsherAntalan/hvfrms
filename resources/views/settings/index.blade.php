@@ -42,35 +42,16 @@
 
             {{-- Alert Settings --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-bell me-1"></i>Alert Thresholds</h6>
+                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-bell me-1"></i>Expiry Warning</h6>
                 <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Unusual Sales (σ)</label>
-                        <input type="number" class="form-control" name="unusual_sales_sigma"
-                               value="{{ $cfg['unusual_sales_sigma']['value'] ?? '2' }}" min="1" max="5" step="0.5">
-                        <div class="form-text">Z-score threshold for unusual sales alerts.</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Idle Branch (days)</label>
-                        <input type="number" class="form-control" name="idle_branch_days"
-                               value="{{ $cfg['idle_branch_days']['value'] ?? '3' }}" min="1" max="30">
-                        <div class="form-text">Days without activity to trigger idle alert.</div>
-                    </div>
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label fw-semibold">Expiry Warning (days)</label>
                         <input type="number" class="form-control" name="expiry_warning_days"
                                value="{{ $cfg['expiry_warning_days']['value'] ?? '7' }}" min="1" max="30">
                         <div class="form-text">Days before expiry to trigger a warning.</div>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Order Max Qty / Product Line</label>
-                        <input type="number" class="form-control" name="order_max_qty_per_line"
-                               value="{{ $cfg['order_max_qty_per_line']['value'] ?? '0' }}" min="0" step="1">
-                        <div class="form-text">Max units per product line on an order. <strong>0 = unlimited.</strong></div>
-                    </div>
                 </div>
             </div>
-
             <button type="submit" class="btn btn-maroon">
                 <i class="ph ph-check me-1"></i> Save Settings
             </button>

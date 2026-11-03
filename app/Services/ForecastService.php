@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Branch;
 use App\Models\ForecastRecommendation;
 use App\Models\Item;
 use App\Models\Setting;
@@ -88,6 +89,7 @@ class ForecastService
         $query = DB::table('stock_transactions')
             ->select('item_id', DB::raw('DATE(created_at) AS tx_date'), DB::raw('ABS(SUM(quantity)) AS daily_out'))
             ->whereIn('type', ['out', 'expired', 'damaged', 'adjustment'])
+            ->whereIn('branch_id', Branch::forecastDestinations()->select('id'))
             ->where(DB::raw('DATE(created_at)'), '>=', $periodStart)
             ->where(DB::raw('DATE(created_at)'), '<', $weekStart->format('Y-m-d'));
 
@@ -285,6 +287,7 @@ class ForecastService
             // Stock on hand (recorded remaining quantity; NOT filtered for
             // expired/damaged batches — see UI note).
             $sohQuery = StockBatch::where('item_id', $item->id)
+                ->whereIn('branch_id', Branch::forecastDestinations()->select('id'))
                 ->where('quantity_left', '>', 0);
             if ($branchId && $branchId > 0) {
                 $sohQuery->where('branch_id', $branchId);

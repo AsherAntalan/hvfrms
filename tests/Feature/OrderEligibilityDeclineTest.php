@@ -102,29 +102,27 @@ class OrderEligibilityDeclineTest extends TestCase
         $this->assertEquals(2, Order::count());
     }
 
-    // 2. Healthy 3 → accept 3, reject 4 on both endpoints.
-    // The only numeric policy is the owner-configurable per-line quantity limit.
-    public function test_per_line_limit_enforced_both_endpoints(): void
+    public function test_retired_per_line_limit_does_not_restrict_either_endpoint(): void
     {
         $w = $this->world();
         Setting::set('order_max_qty_per_line', '3');
         $item = $this->item('Rice'); // no stock needed
 
-        $this->placeViaOrdering($w['bm'], [['item_id' => $item->id, 'quantity' => 4]])->assertStatus(422);
-        $this->assertEquals(0, Order::count());
+        $this->placeViaOrdering($w['bm'], [['item_id' => $item->id, 'quantity' => 4]])->assertOk();
+        $this->assertEquals(1, Order::count());
 
         $this->placeViaOrdering($w['bm'], [['item_id' => $item->id, 'quantity' => 3]])->assertOk();
-        $this->assertEquals(1, Order::count());
+        $this->assertEquals(2, Order::count());
 
-        $this->createViaOrders($w['owner'], $w['silang']->id, [['item_id' => $item->id, 'quantity' => 4]])->assertStatus(422);
-        $this->assertEquals(1, Order::count());
+        $this->createViaOrders($w['owner'], $w['silang']->id, [['item_id' => $item->id, 'quantity' => 4]])->assertOk();
+        $this->assertEquals(3, Order::count());
 
-        // Duplicate lines aggregate before the limit (2+2 > 3 rejected).
+        // Duplicate lines still aggregate into one product line.
         $this->createViaOrders($w['owner'], $w['silang']->id, [
             ['item_id' => $item->id, 'quantity' => 2],
             ['item_id' => $item->id, 'quantity' => 2],
-        ])->assertStatus(422);
-        $this->assertEquals(1, Order::count());
+        ])->assertOk();
+        $this->assertEquals(4, Order::count());
     }
 
     // 3. Mixed batches: only eligible quantity counts.
@@ -143,17 +141,17 @@ class OrderEligibilityDeclineTest extends TestCase
         Setting::set('order_max_qty_per_line', '3');
         $item = $this->item('Oil');
 
-        // Two lines of 2 each (=4) must not bypass the per-line max of 3.
+        // Two lines of 2 each are accepted as one line of 4.
         $dup = $this->createViaOrders($w['owner'], $w['silang']->id, [
             ['item_id' => $item->id, 'quantity' => 2],
             ['item_id' => $item->id, 'quantity' => 2],
         ]);
-        $dup->assertStatus(422);
-        $this->assertEquals(0, Order::count());
+        $dup->assertOk();
+        $this->assertEquals(1, Order::count());
 
         // Non-integer quantity rejected, not truncated.
         $this->createViaOrders($w['owner'], $w['silang']->id, [['item_id' => $item->id, 'quantity' => 2.5]])->assertStatus(422);
-        $this->assertEquals(0, Order::count());
+        $this->assertEquals(1, Order::count());
     }
 
     // 7. Authorized decline persists metadata, no stock movement, shows in history.

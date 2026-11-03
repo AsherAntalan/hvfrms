@@ -20,7 +20,7 @@ class PasswordResetTest extends TestCase
         return Branch::firstOrCreate(['branch_name' => 'Tanza'], ['branch_type' => 'main', 'is_active' => true]);
     }
 
-    private function user(string $email, string $status = 'active', string $role = 'branch_manager'): User
+    private function user(string $email, string $status = 'active', string $role = 'super_admin'): User
     {
         $roleId = Role::firstOrCreate(['role_name' => $role], ['description' => $role])->id;
 
@@ -47,18 +47,38 @@ class PasswordResetTest extends TestCase
         return $raw;
     }
 
-    public function test_login_page_links_to_recovery_and_forgot_page_renders(): void
+    public function test_login_page_links_to_code_recovery_and_email_fallback_still_renders(): void
     {
+        // The login page now points to the hierarchical code-recovery screen.
         $this->get('/login')
             ->assertOk()
-            ->assertSee(route('password.request'), false)
-            ->assertSee('Reset your password using your registered email')
+            ->assertSee(route('password.code.request'), false)
+            ->assertSee('Use your assigned recovery code')
             ->assertDontSee('self-service password reset');
 
+        $this->get(route('password.code.request'))
+            ->assertOk()
+            ->assertSee('Request a password reset')
+            ->assertSee('Reset code');
+
+        // The email reset flow is retained (super-admin fallback) and still renders.
         $this->get(route('password.request'))
             ->assertOk()
             ->assertSee('Forgot your password?')
             ->assertSee('Send reset link');
+    }
+
+    public function test_recovery_submission_notice_uses_the_shared_email_modal_only_after_submission(): void
+    {
+        $this->get(route('password.code.request'))->assertOk()
+            ->assertDontSee('id="hvModal"', false);
+
+        $this->withSession(['recovery_requested' => true])
+            ->get(route('password.code.request'))->assertOk()
+            ->assertSee('id="hvModal"', false)
+            ->assertSee("title: 'Check your email'", false)
+            ->assertSee('Check your Inbox and Spam folder', false)
+            ->assertSee("doneText: 'Got it'", false);
     }
 
     public function test_eligible_active_account_receives_a_reset_email(): void
@@ -72,6 +92,18 @@ class PasswordResetTest extends TestCase
         Mail::assertSent(PasswordResetMail::class, fn ($m) => $m->hasTo('active@test.com'));
         $this->assertNotNull($user->fresh()->reset_token);
         $this->assertDatabaseHas('audit_log', ['user_id' => $user->id, 'action' => 'password_reset_request']);
+    }
+
+    public function test_normal_registered_email_cannot_bypass_the_new_recovery_approval(): void
+    {
+        Mail::fake();
+        $user = $this->user('normal@test.com', 'active', 'branch_manager');
+        $this->post(route('password.email'), ['email' => $user->email])->assertSessionHas('reset_requested', true);
+        Mail::assertNothingSent();
+        $token = $this->issueToken($user);
+        $this->post(route('password.update'), ['token' => $token, 'password' => 'newpassword1', 'confirm_password' => 'newpassword1'])
+            ->assertSessionHasErrors('token');
+        $this->assertTrue(Hash::check('oldpassword', $user->fresh()->password_hash));
     }
 
     public function test_unknown_and_inactive_accounts_get_the_same_response_without_mail(): void
@@ -187,7 +219,7 @@ class PasswordResetTest extends TestCase
     public function test_admin_reset_invalidates_outstanding_reset_tokens(): void
     {
         $owner = $this->user('owner@test.com', 'active', 'owner');
-        $target = $this->user('target@test.com');
+        $target = $this->user('target@test.com', 'active', 'branch_manager');
         $this->issueToken($target);
         $this->assertNotNull($target->fresh()->reset_token);
 

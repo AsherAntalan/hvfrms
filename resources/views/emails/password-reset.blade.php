@@ -39,7 +39,7 @@
                     <tr>
                         <td style="padding:0 32px 22px;">
                             <div style="background:#F3E7CC;border:1px solid #E7D7AE;border-radius:10px;padding:11px 14px;font-size:13px;color:#5C1010;">
-                                This link expires in {{ $expiresMinutes === 60 ? '1 hour' : $expiresMinutes.' minutes' }}.
+                                This link expires in {{ $expiresMinutes % 60 === 0 ? ($expiresMinutes / 60).' '.($expiresMinutes === 60 ? 'hour' : 'hours') : $expiresMinutes.' minutes' }}.
                             </div>
                             <p style="margin:14px 0 0;font-size:12px;color:#6E635C;line-height:1.6;">
                                 If you didn't request this, you can ignore this email. Your password will not change.

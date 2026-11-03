@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderProduction;
+use App\Models\ReceivingIssue;
 use App\Models\Role;
 use App\Models\StockBatch;
 use App\Models\StockTransaction;
@@ -55,6 +57,40 @@ class CommissaryWorkflowTest extends TestCase
     private function callApi(User $u, array $d)
     {
         return $this->actingAs($u)->postJson('/orders/api', $d);
+    }
+
+    public function test_production_records_show_ten_rows_per_page(): void
+    {
+        $scenario = $this->scenario();
+        for ($number = 1; $number <= 11; $number++) {
+            $orderId = DB::table('orders')->insertGetId([
+                'order_number' => 'PAGED-RECORD-'.$number,
+                'branch_id' => $scenario['silang']->id,
+                'status' => 'preparing',
+                'ordered_by' => $scenario['bm']->id,
+                'total_amount' => 10,
+            ]);
+            $lineId = DB::table('order_items')->insertGetId([
+                'order_id' => $orderId, 'item_id' => $scenario['item']->id,
+                'quantity' => 1, 'unit_price' => 10,
+            ]);
+            DB::table('order_productions')->insert([
+                'order_id' => $orderId, 'order_item_id' => $lineId,
+                'item_id' => $scenario['item']->id,
+                'destination_branch_id' => $scenario['silang']->id,
+                'produced_qty' => 1, 'qr_code' => 'PAGED-QR-'.$number,
+            ]);
+        }
+
+        $firstPage = $this->actingAs($scenario['owner'])->get('/inventory')->assertOk();
+        $firstPage->assertSee('11 records')->assertSee('PAGED-RECORD-11')
+            ->assertSee('PAGED-RECORD-2</a>', false)
+            ->assertDontSee('PAGED-RECORD-1</a>', false)
+            ->assertSee('production_page=2');
+        $this->get('/inventory?production_page=2')->assertOk()
+            ->assertSee('11 records')->assertSee('PAGED-RECORD-1</a>', false)
+            ->assertDontSee('PAGED-RECORD-2</a>', false)
+            ->assertSee('collapse show', false);
     }
 
     private function approve(array $s, User $u, ?string $expiry = null)
@@ -121,6 +157,139 @@ class CommissaryWorkflowTest extends TestCase
         foreach ($this->codes($s) as $code) {
             $this->callApi($s['mbs'], ['action' => 'dispatch_scan', 'qr' => $code])->assertOk();
         }
+    }
+
+    /** @return array<string, mixed> */
+    private function receivingReport(array $scenario, int $quantity, ?string $reason = null): array
+    {
+        return [
+            'action' => 'report_receiving_issue', 'id' => $scenario['orderId'],
+            'reason' => 'Receiving request failed after branch verified the goods.',
+            'branch_confirmed' => true,
+            'receipt' => [['order_item_id' => $scenario['oiId'], 'received_quantity' => $quantity, 'reason' => $reason]],
+        ];
+    }
+
+    private function resolutionAdmin(array $scenario): User
+    {
+        $admin = $scenario['owner'];
+        $admin->role_id = $this->role('admin')->id;
+        $admin->save();
+
+        return $admin->unsetRelation('role');
+    }
+
+    public function test_admin_reprocesses_branch_confirmed_receipt_once_without_general_receiving_rights(): void
+    {
+        $scenario = $this->scenario();
+        $this->approve($scenario, $scenario['mbm'])->assertOk();
+        $this->release($scenario);
+        $admin = $this->resolutionAdmin($scenario);
+        $report = $this->callApi($scenario['bm'], $this->receivingReport($scenario, 5))->assertOk();
+        $this->assertEquals(0, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $this->callApi($admin, ['action' => 'view', 'id' => $scenario['orderId']])->assertOk()
+            ->assertJsonPath('order.actions.can_receive', false)
+            ->assertJsonPath('order.actions.can_resolve_receiving_issue', true);
+        $payload = ['action' => 'resolve_receiving_issue', 'issue_id' => $report->json('issue_id'),
+            'reason' => 'Reviewed branch confirmation and receiving timeout evidence.', 'review_confirmed' => true];
+        $payload['receipt'] = [['order_item_id' => $scenario['oiId'], 'received_quantity' => 500]];
+        $this->callApi($admin, $payload)->assertOk();
+        $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $this->assertSame('settled', Order::findOrFail($scenario['orderId'])->status);
+        $this->callApi($admin, $payload)->assertOk()->assertJsonPath('already', true);
+        $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $issue = ReceivingIssue::findOrFail($report->json('issue_id'));
+        $this->assertSame($admin->id, $issue->resolved_by);
+        $this->assertSame($scenario['bm']->id, $issue->reported_by);
+        $this->assertDatabaseHas('audit_log', ['action' => 'receiving_issue_resolved', 'user_id' => $admin->id, 'record_id' => $issue->id]);
+        $this->assertSame(1, AuditLog::where('action', 'receiving_issue_resolved')->count());
+    }
+
+    public function test_receiving_assistance_requires_real_branch_authorization_confirmation_and_bounded_quantities(): void
+    {
+        $scenario = $this->scenario();
+        $this->approve($scenario, $scenario['mbm'])->assertOk();
+        $admin = $this->resolutionAdmin($scenario);
+        $payload = $this->receivingReport($scenario, 5);
+        $this->callApi($scenario['bm'], $payload)->assertUnprocessable();
+        $this->release($scenario);
+        $this->callApi($admin, $payload)->assertForbidden();
+        $this->callApi($scenario['mbs'], $payload)->assertForbidden();
+        $foreign = $this->user($this->role('branch_manager'), $scenario['main'], 'other-manager@hv.test');
+        $this->callApi($foreign, $payload)->assertForbidden();
+        $this->callApi($scenario['bm'], array_replace($payload, ['branch_confirmed' => false]))->assertUnprocessable();
+        $this->callApi($scenario['bm'], $this->receivingReport($scenario, 6))->assertUnprocessable();
+        $this->callApi($scenario['bm'], $this->receivingReport($scenario, 4))->assertUnprocessable();
+        $this->callApi($scenario['bm'], array_replace($payload, ['receipt' => []]))->assertUnprocessable();
+        $issue = $this->callApi($scenario['bm'], $payload)->assertOk()->json('issue_id');
+        $resolution = ['action' => 'resolve_receiving_issue', 'issue_id' => $issue, 'reason' => 'Verified the evidence.', 'review_confirmed' => true];
+        $this->callApi($scenario['bm'], $resolution)->assertForbidden();
+        $this->callApi($admin, array_replace($resolution, ['review_confirmed' => false]))->assertUnprocessable();
+        $this->callApi($admin, array_replace($resolution, ['reason' => '']))->assertUnprocessable();
+        $scenario['bm']->update(['status' => 'disabled']);
+        $this->callApi($admin, $resolution)->assertUnprocessable();
+        $this->assertEquals(0, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+    }
+
+    public function test_changed_receipts_need_a_fresh_branch_confirmation_before_admin_resolution(): void
+    {
+        $scenario = $this->scenario();
+        $this->approve($scenario, $scenario['mbm'])->assertOk();
+        $this->release($scenario);
+        $admin = $this->resolutionAdmin($scenario);
+        $issue = $this->callApi($scenario['bm'], $this->receivingReport($scenario, 5))->assertOk()->json('issue_id');
+        $qr = OrderProduction::where('order_id', $scenario['orderId'])->value('qr_code');
+        $this->actingAs($scenario['bm'])->postJson('/stock/api', ['action' => 'stock_in', 'qr' => $qr, 'quantity' => 1])->assertOk();
+        $resolution = ['action' => 'resolve_receiving_issue', 'issue_id' => $issue, 'reason' => 'Verified branch evidence.', 'review_confirmed' => true];
+        $this->callApi($admin, $resolution)->assertUnprocessable();
+        $this->assertEquals(1, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $replacement = $this->callApi($scenario['bm'], $this->receivingReport($scenario, 4))->assertOk()->json('issue_id');
+        $this->callApi($admin, $resolution)->assertUnprocessable();
+        $this->callApi($admin, array_replace($resolution, ['issue_id' => $replacement]))->assertOk();
+        $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+    }
+
+    public function test_admin_resolution_preserves_partial_receipts_and_records_missing_goods_as_discrepancies(): void
+    {
+        $scenario = $this->scenario();
+        $this->approve($scenario, $scenario['mbm'])->assertOk();
+        $this->release($scenario);
+        $admin = $this->resolutionAdmin($scenario);
+        $qr = OrderProduction::where('order_id', $scenario['orderId'])->value('qr_code');
+        $this->actingAs($scenario['bm'])->postJson('/stock/api', ['action' => 'stock_in', 'qr' => $qr, 'quantity' => 2])->assertOk();
+        $issue = $this->callApi($scenario['bm'], $this->receivingReport($scenario, 2, 'Missing Quantity'))->assertOk()->json('issue_id');
+        $this->callApi($admin, ['action' => 'resolve_receiving_issue', 'issue_id' => $issue,
+            'reason' => 'Branch verified two accepted units and one missing unit.', 'review_confirmed' => true])->assertOk();
+        $this->assertEquals(4, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $this->assertSame('delivered', Order::findOrFail($scenario['orderId'])->status);
+        $this->assertDatabaseHas('delivery_discrepancies', ['order_id' => $scenario['orderId'], 'expected_quantity' => 3, 'received_quantity' => 2]);
+    }
+
+    public function test_admin_can_monitor_but_cannot_receive_through_order_or_qr_flows(): void
+    {
+        $scenario = $this->scenario();
+        $this->approve($scenario, $scenario['mbm'])->assertOk();
+        $this->release($scenario);
+        $admin = $scenario['owner'];
+        $admin->role_id = $this->role('admin')->id;
+        $admin->save();
+        $admin->unsetRelation('role');
+        $production = OrderProduction::where('order_id', $scenario['orderId'])->firstOrFail();
+        $before = DB::table('stock_transactions')->count();
+        foreach (['receive_scan', 'branch_confirm', 'update_status'] as $action) {
+            $this->callApi($admin, ['action' => $action, 'status' => 'delivered', 'id' => $scenario['orderId']])->assertForbidden();
+        }
+        $this->callApi($admin, ['action' => 'receive_scan', 'qr' => $production->qr_code])->assertForbidden();
+        $this->actingAs($admin)->postJson('/stock/api', [
+            'action' => 'stock_in', 'qr' => $production->qr_code, 'quantity' => 1,
+        ])->assertForbidden();
+        $this->callApi($admin, ['action' => 'view', 'id' => $scenario['orderId']])
+            ->assertOk()->assertJsonPath('order.actions.can_receive', false);
+        $this->actingAs($admin)->get('/orders')->assertOk()->assertDontSee('Receive / Confirm');
+        $this->get('/delivery')->assertOk()->assertDontSee('Receive / Confirm');
+        $this->assertSame($before, DB::table('stock_transactions')->count());
+        $this->assertNull($production->fresh()->received_at);
+        $this->confirm($scenario, $scenario['bm'])->assertOk();
     }
 
     public function test_branch_confirmation_requires_physical_release_and_correct_destination(): void

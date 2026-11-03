@@ -187,6 +187,9 @@
                         @if($o->payment_reference && !$user->isCommissaryStaff())
                         <div class="small text-muted mt-1">Payment proof submitted; review in details.</div>
                         @endif
+                        @if($o->receiving_issue_count && $o->status === 'delivering')
+                        <div class="small text-warning-emphasis mt-1">Receiving assistance requested — review in details.</div>
+                        @endif
                         @if($organizeCommissaryOrders && $o->piece_outputs)
                         <div class="small text-muted mt-1">QR labels released: {{ $o->released_units }} / {{ $o->prepared_units }}</div>
                         @endif
@@ -238,6 +241,11 @@
                             @if($canArchiveOrders && ($showArchivedOrders || in_array($o->status, \App\Models\Order::HISTORY_STATUSES, true)))
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-order-archive="{{ $showArchivedOrders ? 'restore' : 'archive' }}" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="setOrderArchive(this)">
                                 <i class="ph {{ $showArchivedOrders ? 'ph-arrow-counter-clockwise' : 'ph-archive-box' }}"></i> {{ $showArchivedOrders ? 'Restore' : 'Archive' }}
+                            </button>
+                            @endif
+                            @if($showArchivedOrders && $user->isOwner() && ! $user->isAdmin())
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="deleteArchivedOrder(this)">
+                                <i class="ph ph-trash"></i> Delete
                             </button>
                             @endif
                             @endif
@@ -396,6 +404,7 @@
     </div>
 </div>
 
+@include('partials.receiving-issue-modal')
 @endsection
 
 @push('scripts')
@@ -601,6 +610,27 @@ async function setOrderArchive(button) {
     }
 }
 
+async function deleteArchivedOrder(button) {
+    const number = button.dataset.orderNumber;
+    const result = await window.hvModal.confirm({
+        title: 'Delete order ' + number + '?',
+        message: 'This permanently removes the order and all its items and production records. It cannot be undone.',
+        confirmText: 'Delete',
+        action: async function () {
+            const data = new FormData();
+            data.append('_token', CSRF);
+            data.append('action', 'delete_order');
+            data.append('id', button.dataset.orderId);
+            const response = await fetch(API, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}});
+            const json = await response.json();
+            if (!json.ok) { return { ok: false, error: json.error || json.message || 'Could not delete the order.' }; }
+            return { ok: true, redirect: json.redirect_url || '{{ route('orders', ['archived' => 1]) }}' };
+        },
+        success: { title: 'Deleted successfully', message: 'Order ' + number + ' has been permanently deleted.' },
+    });
+    if (result && result.ok) { location.assign(result.redirect); }
+}
+
 async function updateStatus(orderId, newStatus) {
     const labels = { approved: 'approve', preparing: 'start preparing', delivering: 'mark as delivering', delivered: 'mark as delivered (stock will be added to the branch)', settled: 'settle', cancelled: 'cancel' };
     if (!confirm('Are you sure you want to ' + (labels[newStatus] || newStatus) + ' this order?')) return;
@@ -726,11 +756,14 @@ function renderReviewFooter(o) {
         if (o.actions.labels_url) {
             html += '<button type="button" class="btn btn-outline-secondary" id="detailsPrintLabels">Print Labels</button>';
         }
+        @unless($user->isAdmin())
         if (o.actions.can_receive) {
             html += '<a class="btn btn-success" href="{{ route('delivery') }}">Receive / Confirm</a>';
         }
+        @endunless
     }
     footer.innerHTML = html;
+    window.HVReceivingIssue.addAction(footer, o);
     const labelsButton = document.getElementById('detailsPrintLabels');
     if (labelsButton) labelsButton.onclick = () => hvPrintLabelsUrl(o.actions.labels_url);
 }
@@ -898,7 +931,7 @@ function filterOrders() {
             release:'Prepared goods with quantities still to scan out, including partial releases.',
             transit:'Released orders awaiting destination receiving or confirmation.',
             history:'Received, closed, cancelled, and declined orders. Actual status remains shown.',
-            all:@json($showArchivedOrders ? 'Archived records are retained. Restore an order to return it to History.' : 'All unarchived orders across every stage.')
+            all:@json($showArchivedOrders ? ($canArchiveOrders ? 'Archived records are retained. Restore an order to return it to History.' : 'Archived records are retained for monitoring. Review each order and who archived it.') : 'All unarchived orders across every stage.')
         };
         hint.textContent = hints[activeOrderQueue] || hints.all;
     }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ResetCodeService;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -12,6 +13,7 @@ class User extends Authenticatable
     use Notifiable;
 
     protected $fillable = [
+        'must_change_password', 'temporary_password_expires_at',
         'full_name',
         'username',
         'email',
@@ -27,6 +29,8 @@ class User extends Authenticatable
     ];
 
     protected $hidden = [
+        'recovery_code',
+        'recovery_code_hash',
         'password_hash',
         'reset_token',
         'reset_token_expires',
@@ -37,9 +41,31 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'must_change_password' => 'boolean',
+            'temporary_password_expires_at' => 'datetime',
+            'recovery_code' => 'encrypted',
             'locked_until' => 'datetime',
             'reset_token_expires' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user): void {
+            if ($user->role?->role_name !== 'super_admin') {
+                $code = app(ResetCodeService::class)->generate();
+                $user->recovery_code = $code['plain'];
+                $user->recovery_code_hash = $code['hash'];
+            }
+        });
+    }
+
+    public function canViewRecoveryCodeFor(User $target): bool
+    {
+        return $this->id !== $target->id
+            && ! $target->isSuperAdmin()
+            && ($this->canRequestResetFor($target)
+                || ($this->canAuthorizeResets() && $this->roleRank() > $target->roleRank()));
     }
 
     /**
@@ -180,7 +206,7 @@ class User extends Authenticatable
      */
     public function canHandleInventory(): bool
     {
-        return $this->canManageInventory() && ! $this->isCommissaryManager();
+        return $this->canManageInventory() && ! $this->isCommissaryManager() && ! $this->isAdmin();
     }
 
     public function canManageCatalog(): bool
@@ -196,5 +222,109 @@ class User extends Authenticatable
     public function canAccessWarehouse(): bool
     {
         return $this->isOwner() || $this->isCommissaryRole();
+    }
+
+    // -------------------------------------------------------
+    // Password-recovery hierarchy
+    // -------------------------------------------------------
+
+    /**
+     * Branch/commissary managers — the tier that requests staff resets and is
+     * itself reset directly by an authorizing admin.
+     */
+    public function isManagerRole(): bool
+    {
+        return $this->isBranchManager() || $this->isCommissaryManager();
+    }
+
+    /**
+     * Operational staff — the tier whose resets must be requested by their
+     * same-branch manager and approved by an authorizing admin.
+     */
+    public function isStaffRole(): bool
+    {
+        return $this->isBranchStaff() || $this->isCommissaryStaff();
+    }
+
+    /**
+     * Recovery authority rank. A reset may only be approved, authorized, or
+     * initiated by an actor whose rank is strictly higher than the target's, so
+     * no one can reset an account of equal or higher authority.
+     */
+    public function roleRank(): int
+    {
+        return match ($this->role->role_name) {
+            'super_admin' => 4,
+            'owner', 'admin' => 3,
+            'branch_manager', 'commissary_manager' => 2,
+            'branch_staff', 'commissary_staff' => 1,
+            default => 0,
+        };
+    }
+
+    /**
+     * Owner-level accounts (owner, admin, super_admin) may approve staff reset
+     * requests and directly authorize manager resets.
+     */
+    public function canAuthorizeResets(): bool
+    {
+        return $this->isOwner();
+    }
+
+    /**
+     * A manager may request a reset for a staff member of the SAME branch whose
+     * role matches their own line (branch manager ⇄ branch staff, commissary
+     * manager ⇄ commissary staff).
+     */
+    public function canRequestResetFor(User $target): bool
+    {
+        if (! $this->isManagerRole() || ! $target->isStaffRole()) {
+            return false;
+        }
+        if ((int) $this->branch_id !== (int) $target->branch_id) {
+            return false;
+        }
+
+        return ($this->isBranchManager() && $target->isBranchStaff())
+            || ($this->isCommissaryManager() && $target->isCommissaryStaff());
+    }
+
+    /**
+     * Managers verify staff identity; only the admin tier approves resets.
+     * Managers require an admin; admin/owner accounts require a super admin.
+     */
+    public function canApproveResetFor(User $target): bool
+    {
+        if ($this->id === $target->id || $this->status !== 'active' || $target->status !== 'active') {
+            return false;
+        }
+        if ($target->isStaffRole()) {
+            return $this->canAuthorizeResets() && $this->roleRank() > $target->roleRank();
+        }
+
+        return $this->canAuthorizeResets() && ! $target->isSuperAdmin() && $this->roleRank() > $target->roleRank();
+    }
+
+    public function canVerifyResetFor(User $target): bool
+    {
+        return $this->id !== $target->id && $this->status === 'active' && $target->status === 'active'
+            && $this->canRequestResetFor($target);
+    }
+
+    /**
+     * Direct (no-approval) reset initiation: an admin-tier account initiates a
+     * manager reset; the super admin initiates an admin/owner reset. Staff never
+     * qualify here — they go through the manager-request + approval flow.
+     */
+    public function canDirectlyInitiateResetFor(User $target): bool
+    {
+        if ($target->isStaffRole()) {
+            return false;
+        }
+        if (! $this->canAuthorizeResets()) {
+            return false;
+        }
+
+        return $this->roleRank() > $target->roleRank();
     }
 }

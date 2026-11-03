@@ -38,9 +38,9 @@
                         </td>
                         <td>
                             @if($b->expiry_date)
-                                @if($b->expiry_date->isPast())
+                                @if(\App\Services\StockService::isExpired($b->expiry_date->format('Y-m-d')))
                                     <span class="badge bg-danger">EXPIRED {{ $b->expiry_date->format('Y-m-d') }}</span>
-                                @elseif($b->expiry_date->diffInDays(now()) <= 7)
+                                @elseif($b->expiry_date->toDateString() <= now()->addDays(max(1, (int) \App\Models\Setting::get('expiry_warning_days', '7')))->toDateString())
                                     <span class="text-warning fw-bold">{{ $b->expiry_date->format('Y-m-d') }}</span>
                                 @else
                                     {{ $b->expiry_date->format('Y-m-d') }}

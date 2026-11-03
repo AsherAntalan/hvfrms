@@ -18,20 +18,15 @@
 </script>
 
 {{-- Auth transition overlay: continues the login loader until this page is ready --}}
-<div id="hvAuthLoading" class="hv-auth-loading" role="status" aria-live="polite" aria-hidden="true" hidden>
-    <div class="hv-auth-loading-inner">
-        <div class="hv-auth-spinner" aria-hidden="true"></div>
-        <p class="hv-auth-loading-msg">Signing you in…</p>
-    </div>
-</div>
+@include('partials.auth-loading')
+@include('partials.confirm-modal')
 <script>
     /* Show the overlay immediately (before the dashboard renders) only when we
        arrived from a successful login, so the transition stays continuous. */
     (function () {
         try {
-            if (sessionStorage.getItem('hv-signing-in') === '1') {
-                var o = document.getElementById('hvAuthLoading');
-                if (o) { o.hidden = false; o.setAttribute('aria-hidden', 'false'); }
+            if (sessionStorage.getItem('hv-signing-in') === '1' && window.hvAuthLoader) {
+                window.hvAuthLoader.show('Signing you in', 'Please wait while we prepare your workspace.');
             }
         } catch (e) {}
     })();
@@ -115,12 +110,19 @@
             <i class="ph ph-chart-bar"></i> <span>Reports</span>
         </a>
 
+        <a href="{{ route('users') }}" class="hv-nav-link {{ request()->routeIs('users*','account-requests*') ? 'active' : '' }}"><i class="ph ph-users hv-nav-icon"></i> <span>Users</span></a>
+        {{-- Commissary managers request their staff's password resets here. --}}
+        <a href="{{ route('reset-requests') }}"
+           class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
+            <i class="ph ph-key"></i> <span>Reset Requests</span>
+        </a>
+
         <hr class="hv-sidebar-divider">
 
         {{-- Alerts --}}
         <a href="{{ route('alerts') }}"
            class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
-            <i class="ph ph-bell"></i> <span>Orders Notification</span>
+            <i class="ph ph-bell"></i> <span>Notifications</span>
             <span class="hv-sidebar-badge" id="sidebarBadgeAlerts" style="display:none;">0</span>
         </a>
 
@@ -192,6 +194,15 @@
             <span class="hv-sidebar-badge" id="sidebarBadgeOrders" style="display:none;">0</span>
         </a>
 
+        @if($u->isBranchManager())
+        {{-- Branch managers request staff password resets here. --}}
+        <a href="{{ route('users') }}" class="hv-nav-link {{ request()->routeIs('users*','account-requests*') ? 'active' : '' }}"><i class="ph ph-users hv-nav-icon"></i> <span>Users</span></a>
+        <a href="{{ route('reset-requests') }}"
+           class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
+            <i class="ph ph-key hv-nav-icon"></i> <span>Reset Requests</span>
+        </a>
+        @endif
+
         <hr class="hv-sidebar-divider">
 
         @if($canInv)
@@ -219,7 +230,7 @@
                 </a>
                 <a href="{{ route('alerts') }}"
                    class="hv-nav-link {{ request()->routeIs('alerts*') ? 'active' : '' }}">
-                    <span>Alerts</span>
+                    <span>{{ Auth::user()->canAuthorizeResets() || Auth::user()->isManagerRole() ? 'Notifications' : 'Alerts' }}</span>
                 </a>
             </div>
         </div>
@@ -229,7 +240,7 @@
         {{-- ── Management ▾ ─────────────────────────────── --}}
         @if($isOwner || $isSA)
         @php
-            $mgtActive = request()->routeIs('branches*','users*');
+            $mgtActive = request()->routeIs('branches*','users*','reset-requests*','account-requests*');
         @endphp
         <div class="hv-nav-group">
             <button class="hv-nav-group-toggle {{ $mgtActive ? 'active' : '' }}" onclick="toggleNav(this)">
@@ -245,6 +256,11 @@
                 <a href="{{ route('users') }}"
                    class="hv-nav-link {{ request()->routeIs('users*') ? 'active' : '' }}">
                     <span>Users</span>
+                </a>
+                <a href="{{ route('account-requests') }}" class="hv-nav-link {{ request()->routeIs('account-requests*') ? 'active' : '' }}"><span>Account Requests</span></a>
+                <a href="{{ route('reset-requests') }}"
+                   class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
+                    <span>Reset Requests</span>
                 </a>
             </div>
         </div>
@@ -352,7 +368,7 @@
                     </div>
                     <div class="px-3 py-2 border-top text-center">
                         <a href="{{ Auth::user()->isCommissaryStaff() ? route('delivery') : route('alerts') }}" class="text-decoration-none small" style="color:var(--maroon);">
-                            {{ Auth::user()->isCommissaryStaff() ? 'View Delivery Follow-ups' : (Auth::user()->isCommissaryManager() ? 'View Orders Notification' : 'View All Alerts') }} <i class="ph ph-arrow-right"></i>
+                            {{ Auth::user()->isCommissaryStaff() ? 'View Delivery Follow-ups' : (Auth::user()->canAuthorizeResets() || Auth::user()->isManagerRole() ? 'View All Notifications' : 'View All Alerts') }} <i class="ph ph-arrow-right"></i>
                         </a>
                     </div>
                 </div>
@@ -372,14 +388,17 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li>
-                        <div class="px-3 py-2">
+                        <div class="px-3 pt-2 pb-1">
                             <div class="fw-semibold" style="font-size:14px;">{{ Auth::user()->full_name }}</div>
-                            <div class="text-muted" style="font-size:12px;">
-                                {{ ucwords(str_replace('_', ' ', Auth::user()->role->role_name)) }}
-                                @if(Auth::user()->branch)
-                                    &middot; {{ Auth::user()->branch->branch_name }}
-                                @endif
-                            </div>
+                            @php($roleLabel = Auth::user()->role ? ucwords(str_replace('_', ' ', Auth::user()->role->role_name)) : '')
+                            @if($roleLabel !== '' || Auth::user()->branch)
+                                <div class="text-muted" style="font-size:12px;">
+                                    {{ $roleLabel }}
+                                    @if(Auth::user()->branch)
+                                        &middot; {{ Auth::user()->branch->branch_name }}
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                     </li>
                     <li><hr class="dropdown-divider"></li>
@@ -388,7 +407,7 @@
                     </a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
-                        <form method="POST" action="{{ route('logout') }}" data-confirm="Log out of Hidden Vietnam?">
+                        <form method="POST" action="{{ route('logout') }}" data-confirm="Log out of Hidden Vietnam?" data-loading="logout">
                             @csrf
                             <button type="submit" class="dropdown-item text-danger">
                                 <i class="ph ph-sign-out me-1"></i> Logout
@@ -406,12 +425,15 @@
     <div class="alert alert-warning small py-2 mb-3" role="status">Demo preview &middot; Simulated data for exploring the system.</div>
     @endif
 
-    <!-- Flash messages (success/error after redirect) -->
+    <!-- Flash success after redirect is shown once in the shared success modal. -->
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
-            {{ session('success') }}
-            <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
-        </div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.hvModal) {
+                window.hvModal.success({ title: 'Success', message: @json(session('success')) });
+            }
+        });
+        </script>
     @endif
 
     @if(session('error'))
@@ -598,15 +620,29 @@ function toggleNav(btn) {
                 list.innerHTML = '<div class="text-center text-muted small py-4"><i class="ph ph-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>All clear!</div>';
             } else {
                 var html = '';
-                data.items.forEach(function(n) {
+                var categories = [
+                    {key: 'recovery', label: 'Account Recovery'},
+                    {key: 'accounts', label: 'Account Requests'},
+                    {key: 'inventory', label: 'Inventory Alerts'},
+                    {key: 'orders', label: 'Orders'}
+                ];
+                categories.forEach(function(category) {
+                    var entries = data.items.filter(function(n) {
+                        var key = n.category || (n.type === 'recovery' ? 'recovery' : (n.type === 'delivery' || n.type === 'order_declined' ? 'orders' : 'inventory'));
+                        return key === category.key;
+                    });
+                    if (!entries.length) return;
+                    html += '<div class="px-3 py-2 small fw-bold border-bottom" style="background:var(--gold-soft);">' + category.label + '</div>';
+                    entries.forEach(function(n) {
                     var s = sevIcons[n.severity] || sevIcons.info;
-                    var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Delivery' : 'Alert');
                     html += '<a href="' + escHtml(notificationLink(n) || '#') + '" class="hv-notif-item">'
                         + '<i class="ph ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
                         + '<div class="hv-notif-text">'
                         + '<div>' + escHtml(n.message) + '</div>'
                         + '<div class="hv-notif-time">' + escHtml(n.context) + ' &middot; ' + escHtml(n.time) + '</div>'
+                        + (n.type === 'recovery' || n.type === 'account_request' ? '<div class="small fw-semibold mt-1">Review request &rarr;</div>' : '')
                         + '</div></a>';
+                    });
                 });
                 list.innerHTML = html;
             }
@@ -644,7 +680,7 @@ function toggleNav(btn) {
     function showToast(n) {
         if (toastBox.children.length >= 3) return;
         var s = sevIcons[n.severity] || sevIcons.info;
-        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : 'Alert');
+        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : (n.type === 'account_request' ? 'Account Requests' : (n.type === 'recovery' ? 'Account Recovery' : 'Alert')));
         var toast = document.createElement('div');
         toast.className = 'hv-toast severity-' + (sevIcons[n.severity] ? n.severity : 'info');
         toast.innerHTML = '<i class="ph ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
@@ -659,7 +695,7 @@ function toggleNav(btn) {
             var action = document.createElement('a');
             action.className = 'hv-toast-action';
             action.href = target;
-            action.textContent = 'Open details';
+            action.textContent = n.type === 'recovery' || n.type === 'account_request' ? 'Review request' : 'Open details';
             toast.querySelector('.hv-toast-body').appendChild(action);
         }
         var dismissTimer;
@@ -807,12 +843,12 @@ window.hvPrintNodes = function (bodyHtml, css) {
     function hide(fade) {
         var o = document.getElementById('hvAuthLoading');
         try { sessionStorage.removeItem('hv-signing-in'); } catch (e) {}
-        if (!o || o.hidden) { return; }
+        if (!o || o.hidden || !window.hvAuthLoader) { return; }
         if (fade) {
             o.classList.add('is-fading');
-            setTimeout(function () { o.hidden = true; o.setAttribute('aria-hidden', 'true'); o.classList.remove('is-fading'); }, 320);
+            setTimeout(function () { window.hvAuthLoader.hide(); }, 320);
         } else {
-            o.hidden = true; o.setAttribute('aria-hidden', 'true'); o.classList.remove('is-fading');
+            window.hvAuthLoader.hide();
         }
     }
     if (document.readyState === 'loading') {
@@ -822,6 +858,17 @@ window.hvPrintNodes = function (bodyHtml, css) {
     }
     // bfcache restore must never leave the overlay stuck.
     window.addEventListener('pageshow', function (e) { if (e.persisted) { hide(false); } });
+
+    // Sign-out: once the logout form is confirmed and actually submitting, show
+    // the loading modal over the current page until the POST navigates away.
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (form instanceof HTMLFormElement && form.matches('[data-loading="logout"]') && !e.defaultPrevented) {
+            if (window.hvAuthLoader) {
+                window.hvAuthLoader.show('Signing you out', 'Please wait while we securely end your session.');
+            }
+        }
+    }, false);
 })();
 </script>
 @stack('scripts')

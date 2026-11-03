@@ -218,4 +218,28 @@ class DeliveryWorkflowTest extends TestCase
         $this->callApi($s['bm'], ['action' => 'receive_scan', 'id' => $s['orderId']])->assertOk()->assertJson(['settled' => true]);
         $this->assertEquals(5, StockBatch::where('branch_id', $s['silang']->id)->sum('quantity_left'));
     }
+
+    public function test_admin_can_reprocess_a_branch_confirmed_legacy_receipt_without_duplicate_stock(): void
+    {
+        $scenario = $this->scenario();
+        $order = Order::findOrFail($scenario['orderId']);
+        DB::transaction(function () use ($scenario, $order): void {
+            $allocation = (new OrderWorkflowService)->allocate($order, $scenario['main']->id, $scenario['owner']->id, 'Silang');
+            $this->assertTrue($allocation['ok']);
+            $order->update(['status' => 'approved']);
+        });
+        $this->callApi($scenario['owner'], ['action' => 'confirm_delivery', 'id' => $order->id])->assertOk();
+        $report = $this->callApi($scenario['bm'], [
+            'action' => 'report_receiving_issue', 'id' => $order->id,
+            'reason' => 'Branch verified delivery; receiving request timed out.', 'branch_confirmed' => true,
+            'receipt' => [['order_item_id' => $order->orderItems()->firstOrFail()->id, 'received_quantity' => 5]],
+        ])->assertOk();
+        $admin = $this->user($this->role('admin'), $scenario['main'], 'resolver@hv.test');
+        $resolution = ['action' => 'resolve_receiving_issue', 'issue_id' => $report->json('issue_id'),
+            'reason' => 'Verified the legacy receipt and supporting branch confirmation.', 'review_confirmed' => true];
+        $this->callApi($admin, $resolution)->assertOk();
+        $this->callApi($admin, $resolution)->assertOk()->assertJsonPath('already', true);
+        $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+        $this->assertEquals(95, StockBatch::where('branch_id', $scenario['main']->id)->sum('quantity_left'));
+    }
 }

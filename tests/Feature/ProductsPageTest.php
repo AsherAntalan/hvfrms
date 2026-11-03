@@ -80,6 +80,39 @@ class ProductsPageTest extends TestCase
         }
     }
 
+    public function test_admin_can_delete_unused_product_with_confirmation_and_audit(): void
+    {
+        $world = $this->world();
+        $item = Item::where('item_name', 'Chicken')->firstOrFail();
+        $this->actingAs($world['users']['admin'])->get('/products')->assertOk()->assertSee('Delete product?');
+        $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('confirmed');
+        $this->assertDatabaseHas('items', ['id' => $item->id]);
+        $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id, 'confirmed' => 1])
+            ->assertOk()->assertJson(['ok' => true]);
+        $this->assertDatabaseMissing('items', ['id' => $item->id]);
+        $this->assertDatabaseHas('audit_log', ['action' => 'deleted product', 'record_id' => $item->id, 'user_id' => $world['users']['admin']->id]);
+        $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id, 'confirmed' => 1])->assertNotFound();
+    }
+
+    public function test_product_deletion_preserves_linked_history_and_rejects_managers(): void
+    {
+        $world = $this->world();
+        $this->actingAs($world['users']['admin'])->postJson('/warehouse/api', [
+            'action' => 'delete_product', 'id' => $world['item']->id, 'confirmed' => 1,
+        ])->assertUnprocessable()->assertJson(['ok' => false]);
+        $this->assertDatabaseHas('items', ['id' => $world['item']->id]);
+        $this->assertEquals(14, StockBatch::sum('quantity_left'));
+        $unusedItem = Item::where('item_name', 'Chicken')->firstOrFail();
+        foreach (['commissary_manager', 'branch_manager', 'branch_staff', 'commissary_staff'] as $role) {
+            $this->actingAs($world['users'][$role])->postJson('/warehouse/api', [
+                'action' => 'delete_product', 'id' => $unusedItem->id, 'confirmed' => 1,
+            ])->assertForbidden();
+        }
+        $this->assertDatabaseHas('items', ['id' => $unusedItem->id]);
+        $this->actingAs($world['users']['commissary_manager'])->get('/products')->assertOk()->assertDontSee('Delete product?');
+    }
+
     public function test_branch_accounts_and_commissary_staff_cannot_access_global_products(): void
     {
         $w = $this->world();
@@ -121,7 +154,8 @@ class ProductsPageTest extends TestCase
         $this->assertEquals(14, StockBatch::sum('quantity_left'));
         $this->assertDatabaseCount('stock_transactions', 0);
         $this->postJson($endpoint, array_replace($payload, ['price' => -1]))->assertStatus(422);
-        $this->get('/users')->assertForbidden();
+        $this->get('/users')->assertOk()->assertSee('Staff accounts in your branch.');
+        $this->postJson('/users/api', ['action' => 'save'])->assertForbidden();
         $this->get('/settings')->assertForbidden();
     }
 }

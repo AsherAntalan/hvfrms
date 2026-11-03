@@ -64,15 +64,19 @@ class BranchInventoryOverviewTest extends TestCase
                         && $silang['orders']->count() === 2 && $silang['disposal']->count() === 1 && $silang['low_stock'] === 1 && $empty['active']->isEmpty();
                 });
                 $response->assertViewHas('totalStock', 21)->assertViewHas('lowStockCount', 1);
+                // Flat All-Branches monitor: each tab has its own filter bar and
+                // shows branch rows directly (no click-to-expand branch groups).
                 foreach (['active', 'expired', 'orders', 'disposal'] as $kind) {
-                    $response->assertSee('id="inventory-'.$kind.'-branch-'.$w['silang']->id.'"', false)->assertSee('id="inventory-'.$kind.'-branch-'.$w['dasma']->id.'"', false);
+                    $response->assertSee('id="flt-'.$kind.'-branch"', false)
+                        ->assertDontSee('id="inventory-'.$kind.'-branch-'.$w['silang']->id.'"', false);
                 }
+                $response->assertSee($w['silang']->branch_name)->assertSee($w['dasma']->branch_name);
                 if ($folder = getenv('BRANCH_INVENTORY_BROWSER_ARTIFACTS')) {
                     if (! is_dir($folder)) {
                         mkdir($folder, 0777, true);
                     } file_put_contents($folder.'/'.$role.'.html', $response->getContent());
                 }
-                $response->assertSee('Manage in Delivery')->assertSee('ORD-INVENTORY-1')->assertDontSee('Receive Stock')
+                $response->assertSee('Manage in Orders')->assertDontSee('Manage in Delivery')->assertSee('ORD-INVENTORY-1')->assertDontSee('Receive Stock')
                     ->assertDontSee('id="createModal"', false)->assertDontSee('fulfillOrder(', false);
             }
         }
@@ -153,13 +157,16 @@ class BranchInventoryOverviewTest extends TestCase
         $this->assertSame(0, $xpath->query('//div[@id="tabProducts"]')->length);
         $this->assertSame(0, $xpath->query('//tr[contains(@class,"product-row")]')->length);
         $this->get('/products')->assertOk()->assertViewHas('allItems', fn ($items) => $items->count() === 1 && $items->first()->usable_stock == 21);
-        $detail = $xpath->query('//div[@id="inventory-active-branch-'.$w['silang']->id.'"]')->item(0);
-        $this->assertSame(1, $xpath->query('.//tr[contains(@class,"row-active")]', $detail)->length);
-        $this->assertSame(0, $xpath->query('.//button[contains(@onclick,"openAdjustModal") or contains(@onclick,"voidBatch")]', $detail)->length);
-        $expired = $xpath->query('//div[@id="inventory-expired-branch-'.$w['silang']->id.'"]')->item(0);
+        // Flat active table lists usable batch rows across branches (3 usable:
+        // Tanza 6, Silang 3, Dasma 12) plus one out-of-stock summary row for the
+        // branch holding no usable stock — and carries no stock-editing actions.
+        $activePane = $xpath->query('//div[@id="tabActive"]')->item(0);
+        $this->assertSame(4, $xpath->query('.//tr[contains(@class,"row-active")]', $activePane)->length);
+        $this->assertSame(0, $xpath->query('.//button[contains(@onclick,"openAdjustModal") or contains(@onclick,"voidBatch")]', $activePane)->length);
         // Owner/Admin may dispose or archive expired stock at any branch from the
-        // monitor (expired cleanup), while batch edit/void stays main-branch only.
-        $this->assertGreaterThanOrEqual(1, $xpath->query('.//button[contains(@onclick,"disposeBatch")]', $expired)->length);
+        // flat monitor (expired cleanup), while batch edit/void stays main-branch only.
+        $expiredPane = $xpath->query('//div[@id="tabExpired"]')->item(0);
+        $this->assertGreaterThanOrEqual(1, $xpath->query('.//button[contains(@onclick,"disposeBatch")]', $expiredPane)->length);
         // The Commissary Manager monitors inventory only: batch edit/adjust is refused (403).
         $this->actingAs($w['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'adjust_batch', 'batch_id' => StockBatch::where('branch_id', $w['silang']->id)->first()->id, 'quantity_left' => 20])->assertStatus(403);
     }

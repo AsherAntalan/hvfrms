@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Item;
 use App\Models\Setting;
+use App\Models\StockBatch;
 use App\Services\ForecastService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,6 +31,29 @@ class ForecastMetadataTest extends TestCase
     private function branch(string $name = 'Silang'): Branch
     {
         return Branch::create(['branch_name' => $name, 'branch_type' => 'franchise', 'is_active' => true]);
+    }
+
+    public function test_aggregate_forecast_excludes_commissary_consumption_and_stock(): void
+    {
+        $branch = $this->branch();
+        $commissary = Branch::create(['branch_name' => 'Commissary', 'branch_type' => 'commissary', 'is_active' => true]);
+        $item = $this->item();
+        $service = new ForecastService;
+        for ($week = 0; $week < $service->weeks(); $week++) {
+            $this->movement($item->id, $branch->id, $week, $service->weeks(), 10);
+            $this->movement($item->id, $commissary->id, $week, $service->weeks(), 100);
+        }
+        foreach ([[$branch, 5], [$commissary, 500]] as [$location, $quantity]) {
+            StockBatch::create([
+                'item_id' => $item->id, 'branch_id' => $location->id,
+                'quantity_in' => $quantity, 'quantity_left' => $quantity,
+                'condition' => 'good', 'expiry_date' => now()->addMonths(2),
+            ]);
+        }
+        $this->assertSame($service->weeklySales($branch->id), $service->weeklySales());
+        $row = collect($service->buildForecast())->firstWhere('item.id', $item->id);
+        $this->assertSame(5, $row['stock_on_hand']);
+        $this->assertSame([], $service->weeklySales($commissary->id));
     }
 
     /** Record an out movement of $qty inside completed week index $w (0 = oldest). */

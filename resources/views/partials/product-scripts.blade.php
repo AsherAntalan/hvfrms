@@ -146,6 +146,24 @@ async function toggleProduct(id, newStatus) {
 }
 @endif
 
+@if(auth()->user()->isOwner())
+function deleteProduct(id, name) {
+    window.hvModal.confirm({
+        title: 'Delete product?',
+        message: 'Permanently delete "' + name + '" from the catalog? This cannot be undone. Products with linked records cannot be deleted.',
+        confirmText: 'Delete',
+        action: async function () {
+            var result = await postAPI({ action: 'delete_product', id: id, confirmed: 1 });
+            if (!result.ok) { return result; }
+            try { await refreshCatalog(); }
+            catch (error) { catalogToast('error', 'Product deleted, but the list could not refresh. Please reload the page.'); }
+            return result;
+        },
+        success: { title: 'Product deleted', message: 'The product was deleted successfully.' }
+    });
+}
+@endif
+
 function filterProducts() {
     var search   = document.getElementById('searchProducts').value.toLowerCase();
     var category = document.getElementById('filterCategory').value;

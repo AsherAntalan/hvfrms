@@ -196,7 +196,7 @@
                         <div class="hv-input-icon">
                             <i class="ph ph-user" aria-hidden="true"></i>
                             <input id="loginUsername" type="text" name="login" class="form-control"
-                                   placeholder="Enter your username or password" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+                                   placeholder="Enter your username" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
                         </div>
                     </div>
                     <div>
@@ -216,8 +216,8 @@
             </div>
 
             <p class="hv-login-help">
-                <a href="{{ route('password.request') }}" class="hv-login-forgot">Forgot password?</a>
-                <br>Reset your password using your registered email.
+                <a href="{{ route('password.code.request') }}" class="hv-login-forgot">Forgot password?</a>
+                <br>Use your assigned recovery code after your manager or admin has arranged reset approval.
             </p>
         </div>
     </section>
@@ -238,17 +238,8 @@
 </div>
 @endif
 
-{{-- Full-screen loading overlay shown while authentication is processing --}}
-<div id="hvAuthLoading" class="hv-auth-loading" role="status" aria-live="polite" aria-hidden="true" hidden>
-    <div class="hv-auth-loading-inner">
-        <div class="hv-auth-spinner" aria-hidden="true"></div>
-        <p class="hv-auth-loading-msg">Signing you in…</p>
-        <button type="button" id="hvAuthRecover" class="hv-auth-loading-recover" hidden
-                onclick="window.location.href='{{ route('login') }}'">
-            Taking longer than expected — reload
-        </button>
-    </div>
-</div>
+{{-- Auth loading modal (sign-in) --}}
+@include('partials.auth-loading')
 @endsection
 
 @push('scripts')
@@ -308,48 +299,40 @@
 })();
 
 /* ── Login loading transition ───────────────────────────────────
-   On submit (after native validation passes) show the burgundy overlay,
-   block duplicate submits, and flag a one-time transition so the
-   destination page can keep the overlay visible until it is ready.
-   The normal POST is never cancelled, so JS-disabled login still works. */
+   On submit (after native validation passes) show the loading modal, block
+   duplicate submits, and flag a one-time transition so the destination page
+   keeps it visible until ready. The normal POST is never cancelled, so
+   JS-disabled login still works. */
 (function () {
     var form = document.getElementById('loginForm');
-    var overlay = document.getElementById('hvAuthLoading');
-    var recover = document.getElementById('hvAuthRecover');
-    var submitting = false, slowTimer = null;
+    if (!form) { return; }
+    var submitting = false;
 
-    // Arriving on the login page = clear any stale transition state (failed
+    // Arriving on the login page clears any stale transition state (failed
     // login reload, normal visit, or bfcache restore) so controls never stick.
     function reset() {
         submitting = false;
-        if (slowTimer) { clearTimeout(slowTimer); slowTimer = null; }
         try { sessionStorage.removeItem('hv-signing-in'); } catch (e) {}
-        if (overlay) { overlay.hidden = true; overlay.setAttribute('aria-hidden', 'true'); }
-        if (recover) { recover.hidden = true; }
-        if (form) {
-            form.removeAttribute('aria-busy');
-            var b = form.querySelector('[type=submit]');
-            if (b) { b.disabled = false; }
-        }
+        if (window.hvAuthLoader) { window.hvAuthLoader.hide(); }
+        form.removeAttribute('aria-busy');
+        var b = form.querySelector('[type=submit]');
+        if (b) { b.disabled = false; }
     }
     reset();
     window.addEventListener('pageshow', function (e) { if (e.persisted) { reset(); } });
 
-    if (form && overlay) {
-        form.addEventListener('submit', function () {
-            if (submitting) { return; }          // prevent duplicate submissions
-            submitting = true;
-            try { sessionStorage.setItem('hv-signing-in', '1'); } catch (e) {}
-            overlay.hidden = false;
-            overlay.setAttribute('aria-hidden', 'false');
-            form.setAttribute('aria-busy', 'true');
-            var btn = form.querySelector('[type=submit]');
-            if (btn) { btn.disabled = true; }
-            // Slow-request recovery after a reasonable threshold — never auto-resubmit.
-            slowTimer = setTimeout(function () { if (recover) { recover.hidden = false; } }, 15000);
-            // No preventDefault: the normal POST proceeds with all fields (password intact).
-        });
-    }
+    form.addEventListener('submit', function () {
+        if (submitting) { return; }              // prevent duplicate submissions
+        submitting = true;
+        try { sessionStorage.setItem('hv-signing-in', '1'); } catch (e) {}
+        if (window.hvAuthLoader) {
+            window.hvAuthLoader.show('Signing you in', 'Please wait while we prepare your workspace.');
+        }
+        form.setAttribute('aria-busy', 'true');
+        var btn = form.querySelector('[type=submit]');
+        if (btn) { btn.disabled = true; }
+        // No preventDefault: the normal POST proceeds with all fields intact.
+    });
 })();
 </script>
 @endpush

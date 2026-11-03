@@ -20,14 +20,17 @@ class ForecastController extends Controller
         // Get branches for the filter dropdown
         if ($user->isBranchScoped()) {
             $branches = Branch::where('id', $user->branch_id)
+                ->forecastDestinations()
                 ->where('is_active', true)
                 ->get();
             $selBranch = $user->branch_id;
         } else {
             $branches = Branch::where('is_active', true)
+                ->forecastDestinations()
                 ->orderBy('branch_name')
                 ->get();
             $selBranch = (int) $request->input('branch', 0);
+            abort_if($selBranch !== 0 && ! $branches->contains('id', $selBranch), 422, 'Select a receiving branch for forecasting.');
         }
 
         // Handle save action

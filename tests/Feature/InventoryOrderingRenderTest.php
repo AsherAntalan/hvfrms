@@ -122,7 +122,7 @@ class InventoryOrderingRenderTest extends TestCase
         $this->assertSame(1, $xpath->query('.//button[@disabled]', $card)->length);
     }
 
-    public function test_ordering_shows_forecast_suggested_quantity_clamped_to_limit(): void
+    public function test_ordering_forecast_suggestion_ignores_retired_quantity_limit(): void
     {
         $main = $this->branch('Tanza', 'main');
         $silang = $this->branch('Silang');
@@ -144,13 +144,13 @@ class InventoryOrderingRenderTest extends TestCase
         $suggested = $this->suggestedAttr($res->getContent(), $item->id);
         $this->assertGreaterThan(1, $suggested);
 
-        // Capped: the suggestion is clamped down to the per-line limit.
+        // A legacy setting must not cap the forecast suggestion.
         Setting::set('order_max_qty_per_line', '1');
         $capped = $this->suggestedAttr(
             $this->actingAs($manager)->get('/ordering')->assertOk()->getContent(),
             $item->id
         );
-        $this->assertSame(1, $capped);
+        $this->assertSame($suggested, $capped);
     }
 
     private function suggestedAttr(string $html, int $itemId): int
@@ -166,7 +166,7 @@ class InventoryOrderingRenderTest extends TestCase
         return (int) $card->getAttribute('data-suggested');
     }
 
-    public function test_ordering_uses_the_configured_quantity_limit(): void
+    public function test_ordering_has_no_configurable_quantity_limit(): void
     {
         $this->branch('Tanza', 'main');
         $silang = $this->branch('Silang');
@@ -174,10 +174,10 @@ class InventoryOrderingRenderTest extends TestCase
 
         Setting::set('order_max_qty_per_line', '3');
         $this->actingAs($manager)->get('/ordering')->assertOk()
-            ->assertViewHas('maxOrderQuantity', 3);
+            ->assertDontSee('MAX_ORDER_QUANTITY', false);
 
         Setting::set('order_max_qty_per_line', '0');
         $this->actingAs($manager)->get('/ordering')->assertOk()
-            ->assertViewHas('maxOrderQuantity', 0);
+            ->assertDontSee('MAX_ORDER_QUANTITY', false);
     }
 }

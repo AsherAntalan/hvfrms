@@ -72,16 +72,23 @@
             </a>
             @endif
 
-            {{-- In Transit — Commissary dashboard shows the Sales tile only --}}
-            @unless($user->isCommissaryManager())
-            <a href="{{ route('delivery') }}" class="hv-m">
+            @if($isOwner)
+            <a href="{{ route('users') }}" class="hv-m">
+                <span class="hv-m-head">
+                    <span class="hv-m-ico"><i class="ph ph-users" aria-hidden="true"></i></span>
+                    <span class="hv-m-label">Active Users</span>
+                </span>
+                <span class="hv-m-value">{{ $stats['users_active'] }}</span>
+            </a>
+            @elseif(!$user->isCommissaryManager())
+            <a href="{{ route('orders', ['queue' => 'active']) }}" class="hv-m">
                 <span class="hv-m-head">
                     <span class="hv-m-ico"><i class="ph ph-truck"></i></span>
                     <span class="hv-m-label">In Transit</span>
                 </span>
                 <span class="hv-m-value">{{ $stats['delivering'] }}</span>
             </a>
-            @endunless
+            @endif
 
         </div>
 
@@ -136,7 +143,7 @@
     if (($stats['preparing'] ?? 0) > 0 && ($isWarehouse || $isOwner))
         $attention[] = ['icon' => 'ph-package', 'text' => $stats['preparing'] . ' order' . ($stats['preparing'] > 1 ? 's' : '') . ' being prepared', 'link' => route('orders', ['queue' => 'all']), 'color' => '#2C6E8F'];
     if ($stats['delivering'] > 0)
-        $attention[] = ['icon' => 'ph-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('delivery'), 'color' => '#2C6E8F'];
+        $attention[] = ['icon' => 'ph-truck', 'text' => $stats['delivering'] . ' deliver' . ($stats['delivering'] > 1 ? 'ies' : 'y') . ' in progress', 'link' => route('orders', ['queue' => 'active']), 'color' => '#2C6E8F'];
     if ($stats['low_stock'] > 0)
         $attention[] = ['icon' => 'ph-warning', 'text' => $stats['low_stock'] . ' low-stock product' . ($stats['low_stock'] > 1 ? 's' : ''), 'link' => $isWarehouse ? route('warehouse') : route('reports'), 'color' => '#9A6B00'];
     if ($stats['alerts_critical'] > 0)

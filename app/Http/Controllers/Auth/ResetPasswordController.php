@@ -19,6 +19,7 @@ class ResetPasswordController extends Controller
     private function userForToken(string $rawToken): ?User
     {
         return User::where('reset_token', hash('sha256', $rawToken))
+            ->whereHas('role', fn ($query) => $query->where('role_name', 'super_admin'))
             ->where('reset_token_expires', '>', now())
             ->where('status', 'active')
             ->first();
@@ -47,6 +48,7 @@ class ResetPasswordController extends Controller
         // succeed: the first to clear reset_token for this row wins.
         $user = DB::transaction(function () use ($request) {
             $user = User::where('reset_token', hash('sha256', $request->token))
+                ->whereHas('role', fn ($query) => $query->where('role_name', 'super_admin'))
                 ->where('reset_token_expires', '>', now())
                 ->where('status', 'active')
                 ->lockForUpdate()

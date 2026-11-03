@@ -60,7 +60,7 @@
             <h1>Set a new password</h1>
             <p class="hv-recover-desc">Choose a new password for your HVFRMS account.</p>
 
-            <form method="POST" action="{{ route('password.update') }}" novalidate>
+            <form method="POST" action="{{ $resetAction ?? route('password.update') }}" novalidate>
                 @csrf
                 <input type="hidden" name="token" value="{{ $token }}">
 
@@ -104,7 +104,7 @@
             <div class="hv-recover-warn" aria-hidden="true"><i class="ph ph-warning-circle"></i></div>
             <h1>Link no longer valid</h1>
             <p class="hv-recover-desc">{{ $error ?? 'This reset link is invalid or has expired.' }}</p>
-            <a href="{{ route('password.request') }}" class="hv-recover-btn"><i class="ph ph-paper-plane-tilt"></i> Request a new link</a>
+            <a href="{{ $requestUrl ?? route('password.request') }}" class="hv-recover-btn"><i class="ph ph-paper-plane-tilt"></i> Request a new link</a>
             <a href="{{ route('login') }}" class="hv-recover-back">Back to sign in</a>
         @endif
     </div>

@@ -25,23 +25,30 @@
     $canDispatch      = $isOwner || $isMainRole; // scan-out
     $canManualDeliver = $isOwner || $isMBM;      // privileged scan-out fallback
 
-    $activeTab = in_array(request('tab'), ['history', 'archived'], true) ? request('tab') : 'active';
-    $canArchive = $isOwner || $isMBM || $isBM;
+    // Owner-level sees Active Shipments only; completed and archived records live
+    // in Orders History / Archived Orders. Other roles keep the history/archive tabs.
+    $activeTab = $isOwner ? 'active' : (in_array(request('tab'), ['history', 'archived'], true) ? request('tab') : 'active');
+    $canArchive = ! $user->isAdmin() && ($isOwner || $isMBM || $isBM);
 @endphp
 
-@include('partials.orders-navigation')
-
 <div class="hv-page-header flex-wrap gap-3">
-    <div>
-        <h1 class="h5 mb-1" style="color:var(--maroon);font-weight:700;">Delivery Status</h1>
-        <span class="text-muted small">
-            @if($isWarehouse)
-                Release prepared shipments and track deliveries to every branch.
-            @else
-                Confirm, track, and receive your branch's shipments.
-            @endif
-        </span>
+    <div class="d-flex align-items-start gap-3">
+        <a class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2 flex-shrink-0"
+           href="{{ route('orders') }}" aria-label="Back to Orders" title="Back to Orders">
+            <i class="ph ph-arrow-left" aria-hidden="true"></i> Back to Orders
+        </a>
+        <div>
+            <h1 class="h5 mb-1" style="color:var(--maroon);font-weight:700;">Active Shipments</h1>
+            <span class="text-muted small">
+                @if($isWarehouse)
+                    Release prepared shipments and track deliveries to every branch.
+                @else
+                    {{ $user->isAdmin() ? 'Monitor shipment progress and destination receipt status.' : "Confirm, track, and receive your branch's shipments." }}
+                @endif
+            </span>
+        </div>
     </div>
+    @unless($isOwner)
     <div class="d-flex flex-wrap gap-2" role="group" aria-label="Delivery view">
         <button type="button" class="btn btn-sm hv-tab-btn {{ $activeTab === 'active' ? 'active' : '' }}"
                 id="tabBtnActive" onclick="showDeliveryTab('active')">
@@ -58,6 +65,7 @@
             @if($archived->count() > 0)<span class="hv-tab-count">{{ $archived->count() }}</span>@endif
         </button>
     </div>
+    @endunless
 </div>
 
 <div class="hv-card p-3 mb-3 small">
@@ -162,6 +170,7 @@
 @endif
 </div>
 
+@unless($isOwner)
 {{-- ═══ DELIVERY HISTORY ════════════════════════════════════ --}}
 <div id="tabHistory" class="{{ $activeTab === 'history' ? '' : 'd-none' }}">
     <div class="hv-card p-3 mb-2">
@@ -289,7 +298,7 @@
                                 <button class="btn btn-sm btn-maroon" title="Restore to History"
                                         onclick="restoreOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-arrow-counter-clockwise"></i> Restore</button>
                                 @endif
-                                @if($isOwner)
+                                @if($isOwner && ! $user->isAdmin())
                                 <button class="btn btn-sm btn-outline-danger" title="Delete permanently"
                                         onclick="deleteOrder({{ $o->id }}, '{{ e($o->order_number) }}')"><i class="ph ph-trash"></i> Delete</button>
                                 @endif
@@ -306,6 +315,7 @@
     </div>
     @endif
 </div>
+@endunless
 
 {{-- ═══ VIEW ORDER MODAL ═══════════════════════════════ --}}
 <div class="modal fade" id="viewModal" tabindex="-1">
@@ -485,6 +495,7 @@
 </div>
 
 @include('partials.order-prepare')
+@include('partials.receiving-issue-modal')
 @endsection
 
 @push('styles')
@@ -632,12 +643,18 @@ async function restoreOrder(id, num) {
     } catch (e) { alert('Network error.'); }
 }
 async function deleteOrder(id, num) {
-    if (!confirm('Permanently DELETE order ' + num + '?\n\nThis removes the order and all its items and production records. It cannot be undone.')) return;
-    try {
-        var r = await postAPI({ action: 'delete_order', id: id });
-        if (r.ok) { alert(r.message || 'Deleted.'); location.href = '{{ route('delivery') }}?tab=archived'; }
-        else { alert(r.error || 'Could not delete.'); }
-    } catch (e) { alert('Network error.'); }
+    var result = await window.hvModal.confirm({
+        title: 'Delete order ' + num + '?',
+        message: 'This permanently removes the order and all its items and production records. It cannot be undone.',
+        confirmText: 'Delete',
+        action: async function () {
+            var r = await postAPI({ action: 'delete_order', id: id });
+            if (!r.ok) { return { ok: false, error: r.error || 'Could not delete.' }; }
+            return { ok: true };
+        },
+        success: { title: 'Deleted successfully', message: 'Order ' + num + ' has been permanently deleted.' },
+    });
+    if (result && result.ok) { location.href = '{{ route('delivery') }}?tab=archived'; }
 }
 
 // ── History client-side filter ──
@@ -880,6 +897,7 @@ async function viewOrder(orderId) {
             labels.onclick = () => hvPrintLabelsUrl(o.actions.labels_url);
             footer.appendChild(labels);
         }
+        @unless($user->isAdmin())
         if (o.actions?.can_receive) {
             const receive = document.createElement('button');
             receive.type = 'button'; receive.className = 'btn btn-success'; receive.textContent = 'Receive / Confirm';
@@ -889,7 +907,9 @@ async function viewOrder(orderId) {
             };
             footer.appendChild(receive);
         }
+        @endunless
         if (o.shipment_qr) renderShipQr(o.shipment_qr);
+        window.HVReceivingIssue.addAction(footer, o);
     } catch (e) { document.getElementById('vmBody').innerHTML = '<div class="text-danger">Network error.</div>'; }
 }
 

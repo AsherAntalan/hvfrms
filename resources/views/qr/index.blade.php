@@ -325,7 +325,7 @@
             h += '</select>';
 
             h += '<div class="alert alert-info py-2 small mb-3">' +
-                 '<i class="ph ph-info me-1"></i>' + (p._matched_batch ? 'Stock will be deducted only from the scanned batch.' : '<strong>FEFO:</strong> Stock with the earliest expiry will be used first.') + '</div>';
+                 '<i class="ph ph-info me-1"></i>' + (p._matched_batch ? '<strong>FEFO for Sold / Used:</strong> Scan the earliest-expiring usable batch first. A later batch is blocked while earlier usable stock remains. Only the scanned batch is deducted. Disposal applies to the affected batch.' : '<strong>FEFO:</strong> Stock with the earliest expiry will be used first.') + '</div>';
         }
 
         // Remarks

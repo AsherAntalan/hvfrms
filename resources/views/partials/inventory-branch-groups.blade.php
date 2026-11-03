@@ -28,7 +28,7 @@
             $branch=$summary['branch']; $records=$summary[$kind];
             $detailId='inventory-'.$kind.'-branch-'.$branch->id;
             $searchText=strtolower($branch->branch_name.' '.$records->map(fn($record)=>$record->item_name ?? $record->order_number)->implode(' '));
-            $typeLabel=match($branch->branch_type){'main'=>'Main Store','commissary'=>'Commissary',default=>'Franchise'};
+            $typeLabel=match($branch->branch_type){'main'=>'Main Branch','commissary'=>'Commissary',default=>'Franchise'};
             $isSource=in_array($branch->branch_type,['main','commissary'],true);
             $count=$records->count();
             $second=$kind==='orders'?$records->where('status','pending')->count():$records->pluck('item_id')->unique()->count();

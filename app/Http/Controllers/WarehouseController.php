@@ -17,6 +17,8 @@ use DateTime;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -26,26 +28,34 @@ class WarehouseController extends Controller
 {
     public function index(Request $request)
     {
-        return view('warehouse.index', $this->warehouseData($request));
+        $data = $this->warehouseData($request);
+        if ($data['monitorAllBranches']) {
+            $data = array_merge($data, $this->flatTabData($request, $data));
+        }
+
+        return view('warehouse.index', $data);
     }
 
     /**
      * JSON partial refresh for the inventory tabs. Re-runs the same data build
      * as index() and returns server-rendered tab bodies plus fresh counts, so
-     * mutations update in place without a full-page reload.
+     * mutations and server-side filtering/sorting/pagination update in place
+     * without a full-page reload.
      */
     public function panel(Request $request): JsonResponse
     {
         $data = $this->warehouseData($request);
         $grouped = $data['monitorAllBranches'];
 
-        $render = function (string $kind) use ($grouped, $data): string {
-            if ($grouped) {
-                return view('partials.inventory-branch-groups', array_merge($data, ['kind' => $kind]))->render();
-            }
+        if ($grouped) {
+            $flat = $this->flatTabData($request, $data);
+            $data = array_merge($data, $flat);
 
-            return view('partials.inventory-'.$kind.'-table', $data)->render();
-        };
+            $render = fn (string $kind): string => view('partials.inventory-flat-body',
+                array_merge($data, ['kind' => $kind]))->render();
+        } else {
+            $render = fn (string $kind): string => view('partials.inventory-'.$kind.'-table', $data)->render();
+        }
 
         return response()->json([
             'ok' => true,
@@ -56,6 +66,7 @@ class WarehouseController extends Controller
                 'orders' => $data['isWarehouseStaff'] ? null : $render('orders'),
             ],
             'counts' => [
+                // Tab badges always show the overall (unfiltered) totals.
                 'active' => $data['activeBatches']->count(),
                 'expired' => $data['expiredBatches']->count(),
                 'disposal' => $data['disposalRecords']->count(),
@@ -64,7 +75,275 @@ class WarehouseController extends Controller
                 'productCount' => $data['productCount'],
                 'lowStockCount' => $data['lowStockCount'],
             ],
+            // Per-tab matching-record counts after filtering, before pagination.
+            'filtered' => $grouped ? [
+                'active' => $flat['flatMeta']['active']['total'],
+                'expired' => $flat['flatMeta']['expired']['total'],
+                'disposal' => $flat['flatMeta']['disposal']['total'],
+                'orders' => $flat['flatMeta']['orders']['total'],
+            ] : null,
         ]);
+    }
+
+    /**
+     * Build per-tab paginators for the flat All-Branches monitor. Filters and
+     * sorting apply only to the tab named by the `tab` query parameter; the
+     * other tabs render their default first page so a full swap stays valid.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{paginators: array<string, LengthAwarePaginator>, flatMeta: array<string, array{total:int, unitNote:bool}>}
+     */
+    protected function flatTabData(Request $request, array $data): array
+    {
+        $kinds = ['active', 'expired', 'disposal', 'orders'];
+        $activeTab = in_array($request->query('tab'), $kinds, true) ? $request->query('tab') : 'active';
+
+        $paginators = [];
+        $flatMeta = [];
+        foreach ($kinds as $kind) {
+            $kindRequest = $kind === $activeTab ? $request : new Request;
+            $result = $this->applyInventoryFilters($this->flatRows($kind, $data), $kind, $kindRequest);
+            $paginators[$kind] = $result['paginator'];
+            $flatMeta[$kind] = ['total' => $result['total'], 'unitNote' => $result['unitNote']];
+        }
+
+        return ['paginators' => $paginators, 'flatMeta' => $flatMeta];
+    }
+
+    /**
+     * The flat (cross-branch) row collection backing a monitor tab.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    protected function flatRows(string $kind, array $data): Collection
+    {
+        return match ($kind) {
+            'active' => $this->flatActiveRows($data['activeBatches'], $data['branchSummaries'], $data['products']),
+            'expired' => collect($data['expiredBatches'])->values(),
+            'disposal' => collect($data['disposalRecords'])->values(),
+            default => collect($data['pendingOrders'])->values(),
+        };
+    }
+
+    /**
+     * Active-stock rows for the flat monitor: one row per usable batch, each
+     * tagged with a product-level stock status (computed from the branch+product
+     * usable total, never a single batch), plus one out-of-stock summary row per
+     * active product × monitored branch that currently holds no usable stock, so
+     * out-of-stock products stay discoverable without fabricating batches.
+     */
+    protected function flatActiveRows(Collection $activeBatches, Collection $branchSummaries, Collection $products): Collection
+    {
+        // Usable total and reorder level per "branchId:itemId".
+        $usableByKey = [];
+        $reorderByItem = [];
+        foreach ($activeBatches as $batch) {
+            $key = $batch->branch_id.':'.$batch->item_id;
+            $usableByKey[$key] = ($usableByKey[$key] ?? 0) + (int) $batch->quantity_left;
+            $reorderByItem[$batch->item_id] = (int) $batch->reorder_level;
+        }
+
+        $statusFor = function (int $usable, int $reorder): string {
+            if ($usable <= 0) {
+                return 'out';
+            }
+
+            return $usable <= $reorder ? 'low' : 'above';
+        };
+
+        $rows = collect($activeBatches)->map(function ($batch) use ($usableByKey, $reorderByItem, $statusFor) {
+            $row = clone $batch;
+            $usable = $usableByKey[$batch->branch_id.':'.$batch->item_id] ?? 0;
+            $row->stock_status = $statusFor($usable, $reorderByItem[$batch->item_id] ?? 0);
+            $row->is_summary = false;
+
+            return $row;
+        });
+
+        // Out-of-stock summary rows: active product × monitored branch with zero
+        // usable stock. Keyed against the usable map so products whose batches are
+        // all expired/damaged still surface here.
+        $branches = $branchSummaries->pluck('branch');
+        foreach ($products as $product) {
+            foreach ($branches as $branch) {
+                $key = $branch->id.':'.$product->id;
+                if (($usableByKey[$key] ?? 0) > 0) {
+                    continue;
+                }
+                $rows->push((object) [
+                    'id' => null,
+                    'branch_id' => $branch->id,
+                    'branch_name' => $branch->branch_name,
+                    'item_id' => $product->id,
+                    'item_name' => $product->item_name,
+                    'unit' => $product->unit,
+                    'reorder_level' => $reorderByItem[$product->id] ?? 0,
+                    'category_name' => null,
+                    'goods_type' => null,
+                    'quantity_in' => 0,
+                    'quantity_left' => 0,
+                    'expiry_date' => null,
+                    'condition' => null,
+                    'qr_code' => null,
+                    'received_at' => null,
+                    'full_name' => null,
+                    'stock_status' => 'out',
+                    'is_summary' => true,
+                ]);
+            }
+        }
+
+        return $rows->values();
+    }
+
+    /**
+     * Validate request filters against allowlists, apply search/filter/sort to a
+     * flat row collection, and paginate (10 per page). Returns the paginator, the
+     * matching-record total (before pagination), and whether a cross-unit quantity
+     * sort was grouped by unit.
+     *
+     * @return array{paginator: LengthAwarePaginator, total: int, unitNote: bool}
+     */
+    protected function applyInventoryFilters(Collection $rows, string $kind, Request $request): array
+    {
+        $search = trim((string) $request->query('q', ''));
+        $branch = $request->query('branch');
+        $product = $request->query('product');
+        $unit = $request->query('unit');
+        $status = $request->query('status');
+        $from = $request->query('from');
+        $to = $request->query('to');
+        $sort = (string) $request->query('sort', '');
+
+        // Branch / product filters are shared across tabs.
+        if ($branch !== null && $branch !== '') {
+            $rows = $rows->where('branch_id', (int) $branch);
+        }
+        if (in_array($kind, ['active', 'expired', 'disposal'], true) && $product !== null && $product !== '') {
+            $rows = $rows->where('item_id', (int) $product);
+        }
+        if (in_array($kind, ['active', 'expired'], true) && $unit !== null && $unit !== '') {
+            $rows = $rows->where('unit', $unit);
+        }
+
+        if ($kind === 'active' && in_array($status, ['low', 'out', 'above'], true)) {
+            $rows = $rows->where('stock_status', $status);
+        }
+
+        if ($kind === 'orders' && $status !== null && $status !== '' && in_array($status, ['pending', 'approved', 'preparing', 'delivering'], true)) {
+            $rows = $rows->where('status', $status);
+        }
+
+        if ($kind === 'disposal') {
+            if ($from) {
+                $rows = $rows->filter(fn ($r) => $r->created_at >= $from.' 00:00:00');
+            }
+            if ($to) {
+                $rows = $rows->filter(fn ($r) => $r->created_at <= $to.' 23:59:59');
+            }
+        }
+
+        if ($search !== '') {
+            $needle = strtolower($search);
+            $rows = $rows->filter(function ($r) use ($kind, $needle) {
+                $haystack = match ($kind) {
+                    'orders' => strtolower(($r->order_number ?? '').' '.($r->branch_name ?? '').' '.($r->ordered_by_name ?? '')),
+                    'disposal' => strtolower(($r->item_name ?? '').' '.($r->branch_name ?? '').' '.($r->reason ?? '')),
+                    default => strtolower(($r->item_name ?? '').' '.($r->branch_name ?? '').' '.($r->qr_code ?? '')),
+                };
+
+                return str_contains($haystack, $needle);
+            });
+        }
+
+        $total = $rows->count();
+
+        [$rows, $unitNote] = $this->sortInventoryRows($rows, $kind, $sort, $unit);
+
+        $perPage = 10;
+        $page = max(1, (int) $request->query('page', 1));
+        $items = $rows->forPage($page, $perPage)->values();
+
+        $paginator = new LengthAwarePaginator(
+            $items, $total, $perPage, $page,
+            ['path' => Paginator::resolveCurrentPath(), 'pageName' => 'page']
+        );
+
+        return ['paginator' => $paginator, 'total' => $total, 'unitNote' => $unitNote];
+    }
+
+    /**
+     * Apply an allowlisted sort for a tab. Quantity sorts across mixed units are
+     * grouped by unit (unit, then quantity) and flagged, so incompatible units are
+     * never ordered against each other; a specific unit filter sorts numerically.
+     *
+     * @return array{0: Collection, 1: bool}
+     */
+    protected function sortInventoryRows(Collection $rows, string $kind, string $sort, ?string $unit): array
+    {
+        $unitNote = false;
+        $groupByUnit = ($unit === null || $unit === '');
+
+        switch ($kind) {
+            case 'active':
+                $rows = match ($sort) {
+                    'product_desc' => $rows->sortByDesc(fn ($r) => strtolower($r->item_name)),
+                    'qty_desc' => $this->sortByQuantity($rows, 'quantity_left', true, $groupByUnit, $unitNote),
+                    'qty_asc' => $this->sortByQuantity($rows, 'quantity_left', false, $groupByUnit, $unitNote),
+                    'expiry_near' => $rows->sortBy(fn ($r) => $r->expiry_date ?? '9999-12-31'),
+                    default => $rows->sortBy(fn ($r) => strtolower($r->item_name)),
+                };
+                break;
+            case 'expired':
+                $rows = match ($sort) {
+                    'expiry_oldest' => $rows->sortBy(fn ($r) => $r->expiry_date),
+                    'qty_desc' => $this->sortByQuantity($rows, 'quantity_left', true, $groupByUnit, $unitNote),
+                    'qty_asc' => $this->sortByQuantity($rows, 'quantity_left', false, $groupByUnit, $unitNote),
+                    default => $rows->sortByDesc(fn ($r) => $r->expiry_date),
+                };
+                break;
+            case 'disposal':
+                $rows = $sort === 'oldest'
+                    ? $rows->sortBy(fn ($r) => $r->created_at)
+                    : $rows->sortByDesc(fn ($r) => $r->created_at);
+                break;
+            case 'orders':
+                $rows = match ($sort) {
+                    'oldest' => $rows->sortBy(fn ($r) => $r->created_at),
+                    'value_desc' => $rows->sortByDesc(fn ($r) => (float) ($r->fulfilled_amount ?? $r->total_amount)),
+                    'value_asc' => $rows->sortBy(fn ($r) => (float) ($r->fulfilled_amount ?? $r->total_amount)),
+                    default => $rows->sortByDesc(fn ($r) => $r->created_at),
+                };
+                break;
+        }
+
+        return [$rows->values(), $unitNote];
+    }
+
+    /**
+     * Sort by a quantity field. When units are mixed (no unit filter) the rows are
+     * ordered within each unit so incompatible units never compare; this sets the
+     * passed $unitNote flag by reference.
+     */
+    protected function sortByQuantity(Collection $rows, string $field, bool $desc, bool $groupByUnit, bool &$unitNote): Collection
+    {
+        if ($groupByUnit && $rows->pluck('unit')->unique()->count() > 1) {
+            $unitNote = true;
+
+            return $rows->sort(function ($a, $b) use ($field, $desc) {
+                $unitCmp = strcmp((string) $a->unit, (string) $b->unit);
+                if ($unitCmp !== 0) {
+                    return $unitCmp;
+                }
+                $cmp = (int) $a->{$field} <=> (int) $b->{$field};
+
+                return $desc ? -$cmp : $cmp;
+            });
+        }
+
+        return $desc
+            ? $rows->sortByDesc(fn ($r) => (int) $r->{$field})
+            : $rows->sortBy(fn ($r) => (int) $r->{$field});
     }
 
     /**
@@ -159,11 +438,18 @@ class WarehouseController extends Controller
         $canFulfillOrders = $user->isOwner() || $user->isMainBranchManager();
         $canDisposeBatches = $user->canHandleInventory();
         $canArchiveBatches = $user->canHandleInventory();
-        $inventoryReadOnly = $user->isCommissaryManager();
+        $inventoryReadOnly = $user->isCommissaryManager() || $user->isAdmin();
+
+        // Option lists for the flat All-Branches monitor filter bars.
+        $filterBranches = $inventoryBranches;
+        $filterProducts = $products;
+        $filterUnits = $products->pluck('unit')->filter()->unique()->sort()->values();
+        $orderStatuses = ['pending' => 'Pending', 'approved' => 'Approved', 'preparing' => 'Preparing', 'delivering' => 'Delivering'];
 
         return compact('products', 'categories', 'allItems', 'items', 'activeBatches', 'expiredBatches', 'pendingOrders', 'orderItems', 'disposalRecords',
             'totalStock', 'productCount', 'lowStockCount', 'mainBid', 'isWarehouseStaff', 'isWarehouseAdmin', 'canManageProducts', 'canManageAvailability', 'canEditBatches',
-            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'inventoryReadOnly', 'monitorAllBranches', 'branchSummaries', 'scopeLabel');
+            'canFulfillOrders', 'canDisposeBatches', 'canArchiveBatches', 'inventoryReadOnly', 'monitorAllBranches', 'branchSummaries', 'scopeLabel',
+            'filterBranches', 'filterProducts', 'filterUnits', 'orderStatuses');
     }
 
     public function products(): View
@@ -229,7 +515,7 @@ class WarehouseController extends Controller
 
         // The Commissary Manager monitors inventory but may not handle it:
         // disposal and batch edit/void/delete are refused before any write.
-        if ($user->isCommissaryManager()
+        if (($user->isCommissaryManager() || $user->isAdmin())
             && in_array($action, ['dispose_batch', 'adjust_batch', 'edit_batch', 'void_batch', 'delete_batch'], true)) {
             return response()->json([
                 'ok' => false,
@@ -274,6 +560,10 @@ class WarehouseController extends Controller
 
         if ($action === 'toggle_product') {
             return $this->toggleProduct($request, $user);
+        }
+
+        if ($action === 'delete_product') {
+            return $this->deleteProduct($request, $user);
         }
 
         if ($action === 'dispose_batch') {
@@ -675,6 +965,41 @@ class WarehouseController extends Controller
                 'ok' => true,
                 'message' => $isActive ? 'Product is now available for orders.' : 'Product marked unavailable for orders.',
             ]);
+        });
+    }
+
+    protected function deleteProduct(Request $request, User $user): JsonResponse
+    {
+        abort_unless($user->isOwner(), 403);
+
+        $data = $request->validate([
+            'id' => ['required', 'integer', 'min:1'],
+            'confirmed' => ['required', 'accepted'],
+        ]);
+
+        return DB::transaction(function () use ($data, $user): JsonResponse {
+            $item = Item::whereKey($data['id'])->lockForUpdate()->first();
+
+            if (! $item) {
+                return response()->json(['ok' => false, 'error' => 'Product not found.'], 404);
+            }
+
+            foreach (['stock_batches', 'stock_transactions', 'order_items', 'order_productions', 'sales_records', 'alerts', 'forecast_recommendations'] as $table) {
+                if (DB::table($table)->where('item_id', $item->id)->exists()) {
+                    return response()->json(['ok' => false, 'error' => 'This product has linked stock, orders, or history. Mark it unavailable instead to preserve these records.'], 422);
+                }
+            }
+
+            AuditLog::create([
+                'user_id' => $user->id,
+                'action' => 'deleted product',
+                'table_name' => 'items',
+                'record_id' => $item->id,
+                'details' => 'Deleted unused catalog product: '.$item->item_name,
+            ]);
+            $item->delete();
+
+            return response()->json(['ok' => true, 'message' => 'Product deleted successfully.']);
         });
     }
 

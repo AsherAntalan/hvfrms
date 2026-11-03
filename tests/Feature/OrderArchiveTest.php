@@ -60,6 +60,21 @@ class OrderArchiveTest extends TestCase
         return compact('commissary', 'branch', 'otherBranch', 'users', 'item', 'history', 'active', 'foreign', 'batch');
     }
 
+    public function test_admin_can_inspect_archived_orders_but_cannot_change_them(): void
+    {
+        $world = $this->world();
+        $this->changeArchive($world['users']['commissary_manager'], $world['history'])->assertOk();
+        $admin = $world['users']['admin'];
+        $this->actingAs($admin)->get('/orders?archived=1')->assertOk()
+            ->assertSee('ORD-HISTORY')
+            ->assertSee('commissary_manager')
+            ->assertViewHas('canArchiveOrders', false)
+            ->assertDontSee('data-order-archive=', false)
+            ->assertDontSee('> Delete</button>', false);
+        $this->postJson('/orders/api', ['action' => 'delete_order', 'id' => $world['history']->id])->assertForbidden();
+        $this->assertNotNull($world['history']->fresh()->archived_at);
+    }
+
     private function changeArchive(User $user, Order $order, bool $restore = false)
     {
         return $this->actingAs($user)->postJson('/orders/api', ['action' => $restore ? 'restore_order' : 'archive_order', 'id' => $order->id]);
@@ -105,15 +120,15 @@ class OrderArchiveTest extends TestCase
         $this->assertDatabaseCount('audit_log', 0);
     }
 
-    public function test_owner_admin_super_admin_commissary_manager_and_own_branch_manager_can_manage_archives(): void
+    public function test_operational_roles_can_manage_archives_but_admin_monitors_only(): void
     {
         $world = $this->world();
-        foreach (['owner', 'admin', 'super_admin', 'commissary_manager', 'branch_manager'] as $role) {
+        foreach (['owner', 'super_admin', 'commissary_manager', 'branch_manager'] as $role) {
             $this->changeArchive($world['users'][$role], $world['history'])->assertOk();
             $this->assertSame($world['users'][$role]->id, $world['history']->fresh()->archived_by);
             $this->changeArchive($world['users'][$role], $world['history'], true)->assertOk();
         }
-        foreach (['commissary_staff', 'branch_staff'] as $role) {
+        foreach (['admin', 'commissary_staff', 'branch_staff'] as $role) {
             $this->changeArchive($world['users'][$role], $world['history'])->assertForbidden();
             $this->changeArchive($world['users'][$role], $world['history'], true)->assertForbidden();
         }
@@ -155,14 +170,14 @@ class OrderArchiveTest extends TestCase
         $world = $this->world();
         $this->changeArchive($world['users']['owner'], $world['history'])->assertOk();
         $archivedAt = $world['history']->fresh()->archived_at->toISOString();
-        $this->changeArchive($world['users']['admin'], $world['history'])->assertOk()->assertJson(['already' => true]);
+        $this->changeArchive($world['users']['super_admin'], $world['history'])->assertOk()->assertJson(['already' => true]);
         $this->assertSame($world['users']['owner']->id, $world['history']->fresh()->archived_by);
         $this->assertSame($archivedAt, $world['history']->fresh()->archived_at->toISOString());
         $this->assertSame(1, AuditLog::where('action', 'order archived')->count());
-        $this->changeArchive($world['users']['admin'], $world['history'], true)->assertOk();
+        $this->changeArchive($world['users']['super_admin'], $world['history'], true)->assertOk();
         $this->changeArchive($world['users']['owner'], $world['history'], true)->assertOk()->assertJson(['already' => true]);
         $this->assertSame(1, AuditLog::where('action', 'order restored from archive')->count());
-        $this->assertSame($world['users']['admin']->id, AuditLog::where('action', 'order restored from archive')->first()->user_id);
+        $this->assertSame($world['users']['super_admin']->id, AuditLog::where('action', 'order restored from archive')->first()->user_id);
     }
 
     public function test_archived_order_details_proforma_payment_proof_and_reporting_remain_available(): void
@@ -175,7 +190,8 @@ class OrderArchiveTest extends TestCase
         $this->get(route('orders.proforma', $world['history']))->assertOk()->assertSee('PROFORMA INVOICE')->assertSee('40.00');
         $this->get(route('orders.payment-screenshot', $world['history']))->assertOk()->assertHeader('Content-Type', 'image/png');
         $this->assertSame($before, $this->get('/reports')->assertOk()->viewData('orderGrand'));
-        $this->get('/delivery')->assertOk()->assertSee('ORD-HISTORY');
+        // Archived records now live in Orders Archived, not a delivery archive tab.
+        $this->get('/orders?archived=1')->assertOk()->assertSee('ORD-HISTORY');
     }
 
     public function test_commissary_staff_can_read_archives_without_management_actions_and_branch_staff_cannot_access_orders(): void

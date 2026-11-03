@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', auth()->user()->isCommissaryManager() ? 'Orders Notification' : 'Alerts')
+@section('title', $isNotificationCenter ? 'Notifications' : 'Alerts')
 
 @section('content')
 
@@ -8,19 +8,24 @@
 <p class="small text-muted mb-3">Branch requests, preparation, and dispatch follow-ups. Expiry warnings apply only to remaining order-linked goods awaiting dispatch.</p>
 @endif
 
+<p class="small text-muted mb-3">Marking an alert as reviewed acknowledges it. Stock and order issues must still be addressed separately.</p>
+
 <div class="hv-page-header">
     <div>
         @if($countOpen > 0)
-            <span class="hv-badge hv-badge-danger">{{ $countOpen }} open</span>
+            <span class="hv-badge hv-badge-danger">{{ $countOpen }} unreviewed</span>
         @endif
     </div>
     @if($countOpen > 0)
     <form method="POST" action="{{ route('alerts.action') }}" class="d-inline"
-          onsubmit="return confirm('Resolve all {{ $countOpen }} open alert(s)?');">
+          onsubmit="return confirm('Mark all {{ $countOpen }} unreviewed alert(s) as reviewed? This does not fix stock or order issues.');">
         @csrf
         <input type="hidden" name="post_action" value="resolve_all">
+        <input type="hidden" name="category" value="{{ $category }}">
+        <input type="hidden" name="branch" value="{{ $filterBranch }}">
+        <input type="hidden" name="type" value="{{ $filterType }}">
         <button type="submit" class="btn btn-sm btn-outline-success">
-            <i class="ph ph-checks me-1"></i> Resolve All
+            <i class="ph ph-checks me-1"></i> Mark all as reviewed
         </button>
     </form>
     @endif
@@ -43,7 +48,7 @@
         'chipAllValue' => '',
         'chipAllowAll' => $allowAllBranches,
         'chipMainId'   => $mainBranch?->id,
-        'chipPreserve' => request()->only(['type', 'resolved']),
+        'chipPreserve' => request()->only($isNotificationCenter ? ['category'] : ['type', 'resolved', 'category']),
         'chipCounts'   => $branchCounts,
     ])
 </div>
@@ -56,30 +61,69 @@
             <input type="hidden" name="branch" value="{{ $filterBranch }}">
         @endif
         <div class="col-md-3">
+            @if($isNotificationCenter)
+            <select class="form-select form-select-sm" name="category" aria-label="Notification category">
+                @foreach(['all' => 'All', 'recovery' => 'Account Recovery', 'accounts' => 'Account Requests', 'inventory' => 'Inventory Alerts', 'orders' => 'Orders'] as $key => $label)
+                    <option value="{{ $key }}" @selected($category === $key)>{{ $label }}</option>
+                @endforeach
+            </select>
+            @else
             <select class="form-select form-select-sm" name="type">
                 <option value="">All Types</option>
                 @foreach($typeBadges as $type => $badge)
                 <option value="{{ $type }}" {{ $filterType === $type ? 'selected' : '' }}>{{ $badge[2] }}</option>
                 @endforeach
             </select>
+            @endif
         </div>
+        @unless($isNotificationCenter)
         <div class="col-md-3">
             <select class="form-select form-select-sm" name="resolved">
-                <option value="0" {{ $filterResolved === '0' ? 'selected' : '' }}>Open Only</option>
-                <option value="1" {{ $filterResolved === '1' ? 'selected' : '' }}>Resolved Only</option>
+                <option value="0" {{ $filterResolved === '0' ? 'selected' : '' }}>Unreviewed Only</option>
+                <option value="1" {{ $filterResolved === '1' ? 'selected' : '' }}>Reviewed Only</option>
                 <option value="all" {{ $filterResolved === 'all' ? 'selected' : '' }}>All</option>
             </select>
         </div>
+        @endunless
         <div class="col-md-3">
             <button type="submit" class="btn btn-maroon btn-sm">
                 <i class="ph ph-funnel me-1"></i> Filter
             </button>
         </div>
         <div class="col-md-3 text-end">
-            <span class="text-muted small">{{ $alerts->count() }} alert(s)</span>
+            <span class="text-muted small">{{ $alerts->count() + $recoveryRequests->count() + $operationalOrderCount + count($accountNotices) }} {{ $isNotificationCenter ? 'notification(s)' : 'alert(s)' }}</span>
         </div>
     </form>
 </div>
+
+@if(count($accountNotices))
+<section class="hv-card p-3 mb-3" aria-label="Account requests">
+    <h6>Account Requests</h6>
+    @foreach($accountNotices as $notice)
+        <div class="d-flex justify-content-between align-items-center gap-3 border-top py-2">
+            <div><strong>{{ $notice['message'] }}</strong><div class="small text-muted">{{ $notice['context'] }} · {{ $notice['time'] }}</div></div>
+            <a href="{{ $notice['link'] }}" class="btn btn-sm btn-outline-secondary text-nowrap">Review request</a>
+        </div>
+    @endforeach
+</section>
+@endif
+
+@if($recoveryRequests->isNotEmpty())
+<section class="hv-card p-3 mb-3" aria-label="Account recovery requests">
+    <h6>Account Recovery <span class="text-muted">({{ $recoveryRequests->count() }})</span></h6>
+    <p class="small text-muted">Staff requests need manager identity verification before admin approval. Managers are verified and approved by admin.</p>
+    @foreach($recoveryRequests as $recovery)
+        <div class="d-flex justify-content-between align-items-center gap-3 border-top py-2">
+            <div>
+                <strong>{{ $recovery->user->full_name }}</strong>
+                <span class="hv-badge hv-badge-warning">{{ $recovery->user->isStaffRole() && !$recovery->hasValidManagerVerification() ? 'Awaiting manager verification' : 'Awaiting admin approval' }}</span>
+                <div class="small text-muted">{{ $recovery->user->branch?->branch_name }} · {{ $recovery->email_verified_at->format('M j, Y g:i A') }}</div>
+            </div>
+            <a href="{{ route('reset-requests', ['request' => $recovery->id]) }}" class="btn btn-sm btn-outline-secondary text-nowrap">Review request</a>
+        </div>
+    @endforeach
+</section>
+@endif
 
 @if($operationalOrderCount > 0)
 <section class="hv-card p-3 mb-3">
@@ -111,10 +155,10 @@
 @endif
 
 <!-- Alerts List -->
-@if($alerts->isEmpty())
+@if($alerts->isEmpty() && $recoveryRequests->isEmpty() && $operationalOrders->isEmpty() && !count($accountNotices))
     <div class="hv-card p-4 text-center text-muted">
         <i class="ph ph-bell-slash fs-3 d-block mb-2"></i>
-        No alerts found matching your filters.
+        {{ $isNotificationCenter ? 'No notifications found matching your filters.' : 'No alerts found matching your filters.' }}
     </div>
 @else
     @foreach($alerts as $a)
@@ -137,25 +181,28 @@
                             </span>
                         @endif
                         @if($a->is_resolved)
-                            <span class="hv-badge hv-badge-success"><i class="ph ph-check me-1"></i>Resolved</span>
+                            <span class="hv-badge hv-badge-success"><i class="ph ph-check me-1"></i>Reviewed</span>
                         @endif
                     </div>
                     <p class="mb-1 small">{{ $a->message }}</p>
                     <div class="text-muted" style="font-size:11px;">
                         {{ $a->created_at->format('M j, Y g:i A') }}
                         @if($a->is_resolved && $a->resolvedByUser)
-                            &middot; Resolved by {{ $a->resolvedByUser->full_name }} on {{ $a->resolved_at ? \Carbon\Carbon::parse($a->resolved_at)->format('M j, g:i A') : '' }}
+                            &middot; Reviewed by {{ $a->resolvedByUser->full_name }} on {{ $a->resolved_at ? \Carbon\Carbon::parse($a->resolved_at)->format('M j, g:i A') : '' }}
                         @endif
                     </div>
                 </div>
                 @if(!$a->is_resolved)
                 <div class="ms-2 flex-shrink-0">
+                    @if($a->order_id)
+                        <a href="{{ route('orders', ['order' => $a->order_id, 'queue' => 'all']) }}" class="btn btn-sm btn-outline-secondary">Review order</a>
+                    @endif
                     <form method="POST" action="{{ route('alerts.action') }}" class="d-inline">
                         @csrf
                         <input type="hidden" name="post_action" value="resolve">
                         <input type="hidden" name="resolve_id" value="{{ $a->id }}">
-                        <button type="submit" class="btn btn-sm btn-outline-success" title="Mark as resolved">
-                            <i class="ph ph-check"></i> Resolve
+                        <button type="submit" class="btn btn-sm btn-outline-success" title="Mark as reviewed">
+                            <i class="ph ph-check"></i> Mark as reviewed
                         </button>
                     </form>
                 </div>

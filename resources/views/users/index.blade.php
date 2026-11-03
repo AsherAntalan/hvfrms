@@ -5,7 +5,7 @@
 @section('content')
 
 <div class="hv-page-header">
-    <div></div>
+    <a href="{{ route('account-requests') }}" class="btn btn-sm btn-outline-secondary">Account Requests</a>
     <button class="btn btn-maroon btn-sm" onclick="openModal()">
         <i class="ph ph-plus me-1"></i> Add User
     </button>
@@ -18,7 +18,8 @@
             <thead>
                 <tr>
                     <th class="ps-3">Name</th>
-                    <th>Email</th>
+                    <th>Username</th>
+                    <th>Recovery code</th>
                     <th>Role</th>
                     <th>Branch</th>
                     <th class="text-center">Status</th>
@@ -28,7 +29,7 @@
             <tbody>
             @if($users->isEmpty())
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="7" class="text-center text-muted py-4">
                         No users found. Click "Add User" to create one.
                     </td>
                 </tr>
@@ -36,7 +37,14 @@
                 @foreach($users as $u)
                 <tr class="{{ $u->status === 'active' ? '' : 'table-secondary' }}">
                     <td class="ps-3 fw-semibold">{{ $u->full_name }}</td>
-                    <td class="text-muted small">{{ $u->email }}</td>
+                    <td class="small">{{ $u->username ?? '—' }}</td>
+                                        <td class="small">
+                        @if(Auth::user()->canViewRecoveryCodeFor($u))
+                            <code class="text-dark">{{ $recoveryCodes[$u->id] }}</code>
+                        @else
+                            <span class="text-muted">Restricted</span>
+                        @endif
+                    </td>
                     <td>
                         @php
                             $role_badges = [
@@ -50,6 +58,7 @@
                             ];
                             $badge_class = $role_badges[$u->role_name] ?? 'hv-badge-info';
                             $role_label  = ucwords(str_replace('_', ' ', $u->role_name));
+
                         @endphp
                         <span class="hv-badge {{ $badge_class }}">{{ $role_label }}</span>
                     </td>
@@ -65,12 +74,7 @@
                     </td>
                     <td class="text-center">
                         <div class="d-flex gap-1 justify-content-center">
-                            {{-- View --}}
-                            <button class="btn btn-sm btn-outline-secondary"
-                                    title="View Details"
-                                    onclick="viewUser({!! htmlspecialchars(json_encode($u), ENT_QUOTES, 'UTF-8') !!})">
-                                <i class="ph ph-eye"></i>
-                            </button>
+
                             {{-- Edit --}}
                             <button class="btn btn-sm btn-outline-secondary"
                                     title="Edit"
@@ -136,11 +140,20 @@
                                required maxlength="100" placeholder="Juan Dela Cruz">
                     </div>
 
-                    {{-- Email --}}
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                        <label for="f_username" class="form-label fw-semibold">Username <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="username" id="f_username"
+                               required maxlength="50" pattern="[A-Za-z0-9_.\-]+" placeholder="juan.delacruz"
+                               autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="usernameHint">
+                        <div class="form-text" id="usernameHint">Use letters, numbers, dots, underscores, or hyphens. Users can sign in with their username or email.</div>
+                    </div>
+
+                    {{-- Email (optional — required only for a super admin account) --}}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Email <span class="text-muted small fw-normal">(optional)</span></label>
                         <input type="email" class="form-control" name="email" id="f_email"
-                               required maxlength="150" placeholder="user@hiddenvietnam.com">
+                               maxlength="150" placeholder="user@hiddenvietnam.com">
+                        <div class="form-text">Leave blank for accounts that recover with a reset code. A super admin still needs an email.</div>
                     </div>
 
                     {{-- Password (only for new users) --}}
@@ -245,28 +258,20 @@
     </div>
 </div>
 
-{{-- ═══ VIEW USER DETAIL MODAL ═════════════════════════════ --}}
-<div class="modal fade" id="viewModal" tabindex="-1">
-    <div class="modal-dialog">
+{{-- ═══ ONE-TIME RESET CODE MODAL ═══════════════════════════ --}}
+<div class="modal fade" id="codeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
             <div class="modal-header" style="background:var(--gold-soft);">
-                <h5 class="modal-title" style="color:var(--maroon);font-weight:700;">
-                    <i class="ph ph-identification-badge me-1"></i> User Details
-                </h5>
+                <h5 class="modal-title" style="color:var(--maroon);font-weight:700;"><i class="ph ph-password me-1"></i> Reset Code</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
-                <table class="table table-sm mb-0" style="font-size:14px;">
-                    <tr><th class="text-muted" style="width:35%;">Full Name</th><td id="v_name" class="fw-semibold"></td></tr>
-                    <tr><th class="text-muted">Email</th><td id="v_email"></td></tr>
-                    <tr><th class="text-muted">Role</th><td id="v_role"></td></tr>
-                    <tr><th class="text-muted">Branch</th><td id="v_branch"></td></tr>
-                    <tr><th class="text-muted">Status</th><td id="v_status"></td></tr>
-                    <tr><th class="text-muted">Account ID</th><td id="v_id" class="text-muted small"></td></tr>
-                </table>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            <div class="modal-body text-center">
+                <p class="small text-muted mb-1">Account recovery code for <strong id="code_name"></strong></p>
+                <p class="small text-muted mb-2">Give this with their username and initial password. It remains valid until used; admin approval is required before resetting.</p>
+                <div id="code_value" class="fw-bold" style="font-size:26px;letter-spacing:.14em;color:var(--maroon);"></div>
+                <button type="button" class="btn btn-sm btn-outline-maroon mt-3" onclick="copyResetCode(this)"><i class="ph ph-copy me-1"></i> Copy code</button>
+                <p class="small text-muted mt-3 mb-0">You can view this code again. A new code replaces it after a successful reset.</p>
             </div>
         </div>
     </div>
@@ -278,12 +283,12 @@
 <script>
 const API  = '{{ route("users.api") }}';
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-let modal, resetModalEl, viewModalEl;
+let modal, resetModalEl, codeModalEl;
 
 document.addEventListener('DOMContentLoaded', function () {
     modal        = new bootstrap.Modal(document.getElementById('userModal'));
     resetModalEl = new bootstrap.Modal(document.getElementById('resetModal'));
-    viewModalEl  = new bootstrap.Modal(document.getElementById('viewModal'));
+    codeModalEl  = new bootstrap.Modal(document.getElementById('codeModal'));
 });
 
 function togglePwVis(inputId, btn) {
@@ -296,30 +301,6 @@ function togglePwVis(inputId, btn) {
         inp.type = 'password';
         icon.className = 'ph ph-eye';
     }
-}
-
-function viewUser(data) {
-    var roleBadges = {
-        'super_admin': 'hv-badge-warning',
-        'owner': 'hv-badge-success',
-        'admin': 'hv-badge-success',
-        'branch_manager': 'hv-badge-info',
-        'branch_staff': 'hv-badge-secondary',
-        'commissary_manager': 'hv-badge-info',
-        'commissary_staff': 'hv-badge-secondary'
-    };
-    var roleLabel = (data.role_name || '').replace(/_/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
-    var badgeClass = roleBadges[data.role_name] || 'hv-badge-info';
-
-    document.getElementById('v_name').textContent = data.full_name;
-    document.getElementById('v_email').textContent = data.email;
-    document.getElementById('v_role').innerHTML = '<span class="hv-badge ' + badgeClass + '">' + roleLabel + '</span>';
-    document.getElementById('v_branch').textContent = data.branch_name || '—';
-    document.getElementById('v_status').innerHTML = data.status === 'active'
-        ? '<span class="hv-badge hv-badge-success">Active</span>'
-        : '<span class="hv-badge hv-badge-danger">Disabled</span>';
-    document.getElementById('v_id').textContent = '#' + data.id;
-    viewModalEl.show();
 }
 
 /**
@@ -338,6 +319,7 @@ function openModal(data) {
         document.getElementById('f_id').value        = data.id;
         document.getElementById('f_full_name').value  = data.full_name;
         document.getElementById('f_email').value      = data.email;
+        document.getElementById('f_username').value   = data.username || '';
         document.getElementById('f_role_id').value    = data.role_id;
         document.getElementById('f_branch_id').value  = data.branch_id;
         // Password optional when editing
@@ -380,7 +362,14 @@ async function saveUser(e) {
 
         if (json.ok) {
             modal.hide();
-            location.reload();
+            if (json.recovery_code) {
+                document.getElementById('code_name').textContent = data.get('username');
+                document.getElementById('code_value').textContent = json.recovery_code;
+                codeModalEl.show();
+                document.getElementById('codeModal').addEventListener('hidden.bs.modal', function () { location.reload(); }, { once: true });
+            } else {
+                location.reload();
+            }
         } else {
             alert(json.error || 'Something went wrong.');
         }
@@ -470,8 +459,11 @@ async function doReset(e) {
         const json = await res.json();
 
         if (json.ok) {
+            // Close the form modal fully, then show the shared success modal (no stacking).
+            document.getElementById('resetModal').addEventListener('hidden.bs.modal', function () {
+                window.hvModal.success({ title: 'Password reset', message: 'The password has been reset successfully.' });
+            }, { once: true });
             resetModalEl.hide();
-            alert('Password has been reset successfully.');
         } else {
             alert(json.error || 'Something went wrong.');
         }
@@ -480,6 +472,46 @@ async function doReset(e) {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="ph ph-key me-1"></i> Reset';
+    }
+}
+
+/**
+ * View the assigned recovery code without authorizing a password reset.
+ */
+async function getResetCode(id, name) {
+    if (!confirm('View the assigned recovery code for ' + name + '? Viewing does not approve a password reset.')) {
+        return;
+    }
+    const data = new FormData();
+    data.append('action', 'reset_code');
+    data.append('id', id);
+    data.append('_token', CSRF);
+    try {
+        const res = await fetch(API, {
+            method: 'POST',
+            body: data,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' }
+        });
+        const json = await res.json();
+        if (json.ok && json.code) {
+            document.getElementById('code_name').textContent = name;
+            document.getElementById('code_value').textContent = json.code;
+            codeModalEl.show();
+        } else {
+            alert(json.error || 'Could not generate a reset code.');
+        }
+    } catch (err) {
+        alert('Network error. Please check your connection.');
+    }
+}
+
+function copyResetCode(btn) {
+    const code = document.getElementById('code_value').textContent;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(function () {
+            btn.innerHTML = '<i class="ph ph-check me-1"></i> Copied';
+            setTimeout(function () { btn.innerHTML = '<i class="ph ph-copy me-1"></i> Copy code'; }, 1500);
+        });
     }
 }
 </script>

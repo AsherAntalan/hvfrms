@@ -410,7 +410,6 @@
 <script>
 const API  = '{{ route("ordering.api") }}';
 const CSRF = '{{ csrf_token() }}';
-const MAX_ORDER_QUANTITY = @json($maxOrderQuantity);
 
 let cart = [];
 let addModal, cartOffcanvas;
@@ -486,16 +485,10 @@ function openAddModal(button) {
     var suggested = Number(card.dataset.suggested) || 0;
     document.getElementById('addModalLimit').textContent = suggested > 0
         ? 'Forecast suggests ' + suggested + ' ' + unit + '. Adjust as needed.'
-        : (MAX_ORDER_QUANTITY > 0
-            ? 'Maximum ' + MAX_ORDER_QUANTITY + ' ' + unit + ' per product in each order.'
-            : 'Prepared after your order is confirmed.');
+        : 'Prepared after your order is confirmed.';
     document.getElementById('addModalUnitPrice').value = price;
     document.getElementById('addModalUnit').value = unit;
-    if (MAX_ORDER_QUANTITY > 0) {
-        input.max = MAX_ORDER_QUANTITY;
-    } else {
-        input.removeAttribute('max');
-    }
+    input.removeAttribute('max');
 
     var imgDiv = document.getElementById('addModalImg');
     imgDiv.replaceChildren();
@@ -511,7 +504,6 @@ function openAddModal(button) {
 
     var existing = cart.find(c => c.item_id === id);
     var defaultQty = suggested > 0 ? suggested : 1;
-    if (MAX_ORDER_QUANTITY > 0) defaultQty = Math.min(defaultQty, MAX_ORDER_QUANTITY);
     input.value = existing ? existing.quantity : defaultQty;
     updateModalQtyControls();
     addModal.show();
@@ -520,7 +512,7 @@ function openAddModal(button) {
 function updateModalQtyControls() {
     var qty = Number(document.getElementById('addModalQty').value);
     document.getElementById('btnModalMinus').disabled = qty <= 1;
-    document.getElementById('btnModalPlus').disabled = MAX_ORDER_QUANTITY > 0 && qty >= MAX_ORDER_QUANTITY;
+    document.getElementById('btnModalPlus').disabled = false;
 }
 
 function adjustModalQty(delta) {
@@ -528,7 +520,6 @@ function adjustModalQty(delta) {
     var qty = Number(input.value);
     if (!Number.isSafeInteger(qty)) qty = 1;
     qty = Math.max(1, qty + delta);
-    if (MAX_ORDER_QUANTITY > 0) qty = Math.min(MAX_ORDER_QUANTITY, qty);
     input.value = qty;
     updateModalQtyControls();
 }
@@ -543,10 +534,6 @@ function confirmAddToCart() {
     var imgUrl = imgEl ? imgEl.src : '';
 
     if (!Number.isSafeInteger(qty) || qty < 1) { alert('Please enter a positive whole-number quantity.'); return; }
-    if (MAX_ORDER_QUANTITY > 0 && qty > MAX_ORDER_QUANTITY) {
-        alert('Maximum ' + MAX_ORDER_QUANTITY + ' ' + unit + ' per product in each order.');
-        return;
-    }
 
     var existing = cart.find(c => c.item_id === itemId);
     if (existing) {
@@ -630,8 +617,7 @@ function renderCartSidebar() {
         html += '<div class="d-flex align-items-center gap-1">';
         html += '<button class="btn btn-outline-secondary cart-qty-btn" onclick="changeCartQty(' + c.item_id + ',-1)"><i class="ph ph-minus"></i></button>';
         html += '<span class="fw-bold" style="min-width:24px; text-align:center;">' + c.quantity + '</span>';
-        var atLimit = MAX_ORDER_QUANTITY > 0 && c.quantity >= MAX_ORDER_QUANTITY;
-        html += '<button class="btn btn-outline-secondary cart-qty-btn" aria-label="Increase quantity" ' + (atLimit ? 'disabled ' : '') + 'onclick="changeCartQty(' + c.item_id + ',1)"><i class="ph ph-plus"></i></button>';
+        html += '<button class="btn btn-outline-secondary cart-qty-btn" aria-label="Increase quantity" onclick="changeCartQty(' + c.item_id + ',1)"><i class="ph ph-plus"></i></button>';
         html += '</div>';
         html += '<button class="btn btn-outline-danger btn-sm px-1 py-0" onclick="removeFromCart(' + c.item_id + ')" title="Remove"><i class="ph ph-trash"></i></button>';
         html += '</div>';
@@ -657,7 +643,7 @@ function changeCartQty(itemId, delta) {
         removeFromCart(itemId);
         return;
     }
-    item.quantity = MAX_ORDER_QUANTITY > 0 ? Math.min(MAX_ORDER_QUANTITY, qty) : qty;
+    item.quantity = qty;
     updateCartUI();
 }
 

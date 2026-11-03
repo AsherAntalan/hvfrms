@@ -181,7 +181,8 @@ class CommissaryRolesLocationTest extends TestCase
 
         $this->actingAs($manager)->get('/inventory')->assertOk();
         $this->get('/reports')->assertOk();
-        $this->get('/users')->assertForbidden();
+        $this->get('/users')->assertOk()->assertSee('Staff accounts in your branch.');
+        $this->postJson('/users/api', ['action' => 'save'])->assertForbidden();
         $this->actingAs($staff)->get('/stock')->assertOk();
         $this->get('/warehouse')->assertOk();
         $this->get('/users')->assertForbidden();
@@ -201,7 +202,7 @@ class CommissaryRolesLocationTest extends TestCase
         ]);
 
         $res = $this->actingAs($owner)->get('/orders')->assertOk();
-        $res->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'history', 'all']);
+        $res->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'all', 'history']);
         $res->assertViewHas('orderQueueCounts', fn ($c) => $c['active'] === 1 && $c['history'] === 1 && $c['all'] === 2);
         $res->assertViewHas('defaultOrderQueue', 'active');   // opens on Active
     }

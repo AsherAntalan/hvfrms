@@ -6,7 +6,9 @@ use App\Models\Alert;
 use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Order;
+use App\Services\AccountRequestService;
 use App\Services\AlertService;
+use App\Services\RecoveryApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -42,6 +44,11 @@ class AlertController extends Controller
         $filterType = $request->input('type', '');
         $filterResolved = $request->input('resolved', '0');
         $filterBranch = $request->input('branch', '');
+        $isNotificationCenter = $user->canAuthorizeResets() || $user->isManagerRole();
+        $category = $isNotificationCenter ? $request->query('category', 'all') : 'all';
+        if (! in_array($category, ['all', 'recovery', 'inventory', 'orders', 'accounts'], true)) {
+            $category = 'all';
+        }
 
         // Per-branch alert counts (for the branch filter chips)
         $branchCounts = collect();
@@ -74,6 +81,13 @@ class AlertController extends Controller
         if ($filterType !== '') {
             $query->where('alert_type', $filterType);
         }
+        if ($category === 'inventory') {
+            $query->whereNull('order_id');
+        } elseif ($category === 'orders') {
+            $query->whereNotNull('order_id');
+        } elseif (in_array($category, ['recovery', 'accounts'], true)) {
+            $query->whereRaw('1 = 0');
+        }
 
         if ($filterResolved === '0') {
             $query->where('is_resolved', false);
@@ -94,7 +108,7 @@ class AlertController extends Controller
             'low_stock' => ['hv-badge-warning', 'ph-warning', 'Low Stock'],
             'expiring_soon' => ['hv-badge-warning', 'ph-clock-counter-clockwise',        'Expiring Soon'],
             'expired' => ['hv-badge-danger',  'ph-x-circle',            'Expired'],
-            'unusual_sales' => ['hv-badge-info',    'ph-pulse',             'Unusual Sales'],
+            'unusual_sales' => ['hv-badge-info',    'ph-pulse',             'Unusual Stock Consumption'],
             'operational' => ['hv-badge-info',    'ph-gear',                 'Operational'],
         ];
 
@@ -103,8 +117,13 @@ class AlertController extends Controller
         }
         $operationalOrders = collect();
         $operationalOrderCount = 0;
-        if ($user->isCommissaryManager() && $filterResolved !== '1' && in_array($filterType, ['', 'operational'], true)) {
+        if ($isNotificationCenter && in_array($category, ['all', 'orders'], true) && $filterResolved !== '1' && in_array($filterType, ['', 'operational'], true)) {
             $orders = Order::with('branch')->whereIn('status', ['pending', 'approved', 'preparing', 'delivering']);
+            if ($user->isBranchScoped() && ! $user->isCommissaryManager()) {
+                $orders->where('branch_id', $user->branch_id);
+            } elseif ($filterBranch !== '') {
+                $orders->where('branch_id', (int) $filterBranch);
+            }
             $operationalOrderCount = (clone $orders)->count();
             $operationalOrders = $orders->latest('updated_at')->limit(20)->get();
         }
@@ -114,6 +133,22 @@ class AlertController extends Controller
             'warning' => 'hv-badge-warning',
             'info' => 'hv-badge-info',
         ];
+
+        $recoveryRequests = collect();
+        if ($isNotificationCenter && in_array($category, ['all', 'recovery'], true) && $filterResolved !== '1') {
+            $recoveryRequests = app(RecoveryApprovalService::class)->actionableFor($user);
+            if ($filterBranch !== '' && ! $user->isBranchScoped()) {
+                $recoveryRequests = $recoveryRequests->filter(fn ($reset) => (int) $reset->user->branch_id === (int) $filterBranch);
+            }
+        }
+
+        $accountNotices = [];
+        if ($isNotificationCenter && in_array($category, ['all', 'accounts'], true) && $filterResolved !== '1') {
+            $accountNotices = app(AccountRequestService::class)->notificationItemsFor($user);
+            if ($filterBranch !== '') {
+                $accountNotices = array_values(array_filter($accountNotices, fn ($notice) => (int) $notice['branch_id'] === (int) $filterBranch));
+            }
+        }
 
         return view('alerts.index', compact(
             'alerts',
@@ -129,7 +164,11 @@ class AlertController extends Controller
             'typeBadges',
             'sevBadges',
             'operationalOrders',
-            'operationalOrderCount'
+            'operationalOrderCount',
+            'recoveryRequests',
+            'isNotificationCenter',
+            'category',
+            'accountNotices'
         ));
     }
 
@@ -160,6 +199,15 @@ class AlertController extends Controller
     {
         $user = Auth::user();
         $items = [];
+
+        // Pending recovery approvals the viewer is authorized to act on. Derived
+        // live, so an approval/rejection/supersede/delete by anyone, or a branch
+        // or role change, updates every approver's bell on the next poll. Payloads
+        // never carry codes, tokens, emails, contact numbers, or approval links.
+        $recoveryItems = app(RecoveryApprovalService::class)->notificationItemsFor($user);
+        $recoveryTotal = count($recoveryItems);
+        $accountItems = app(AccountRequestService::class)->notificationItemsFor($user);
+
         // Commissary roles (like Owner/Admin) oversee every branch's orders, so
         // their order notifications are NOT scoped to their own location — a new
         // order for any branch reaches the Commissary bell.
@@ -187,6 +235,7 @@ class AlertController extends Controller
             $items[] = [
                 'id' => 'alert-'.$a->id,
                 'type' => $declinedOrder ? 'order_declined' : 'alert',
+                'category' => $a->order_id ? 'orders' : 'inventory',
                 'severity' => $a->severity,
                 'message' => $declinedOrder ? 'Order '.$declinedOrder->order_number.' was declined. Reason: '.$declinedOrder->decline_reason : $a->message,
                 'context' => $a->branch_name ?? '',
@@ -221,7 +270,7 @@ class AlertController extends Controller
                 'message' => $msg,
                 'context' => $o->branch_name,
                 'time' => $o->updated_at->diffForHumans(),
-                'link' => $user->isCommissaryManager() ? route('orders', ['order' => $o->id]) : route('delivery'),
+                'link' => $user->isCommissaryManager() || $user->isOwner() ? route('orders', ['order' => $o->id, 'queue' => 'active']) : route('delivery'),
             ];
         }
 
@@ -239,6 +288,9 @@ class AlertController extends Controller
         $alertTotal = $alertCount->count();
         $orderTotal = $orderCount->count();
 
+        // Surface recovery approvals first — they are the most time-bound.
+        $items = array_merge($accountItems, $recoveryItems, $items);
+
         $pendingDeliveryCount = Order::whereIn('status', ['pending', 'approved', 'preparing', 'delivering']);
         if ($scopeOrders) {
             $pendingDeliveryCount->where('branch_id', $user->branch_id);
@@ -246,13 +298,13 @@ class AlertController extends Controller
 
         return response()->json([
             'ok' => true,
-            'total' => $alertTotal + $orderTotal,
+            'total' => $alertTotal + $orderTotal + $recoveryTotal + count($accountItems),
             'items' => $items,
             'sidebar' => [
                 'orders' => $pendingDeliveryCount->count(),
                 'alerts' => $alertTotal,
             ],
-        ]);
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     /**
@@ -278,12 +330,12 @@ class AlertController extends Controller
         if ($updated > 0) {
             AuditLog::create([
                 'user_id' => $user->id,
-                'action' => 'alert resolved',
+                'action' => 'alert reviewed',
                 'table_name' => 'alerts',
                 'record_id' => $resolveId,
             ]);
 
-            return redirect()->back()->with('success', 'Alert marked as resolved.');
+            return redirect()->back()->with('success', 'Alert marked as reviewed.');
         }
 
         return redirect()->back();
@@ -300,6 +352,18 @@ class AlertController extends Controller
 
         if ($user->isBranchScoped()) {
             $query->where('branch_id', $user->branch_id);
+        } elseif ($request->filled('branch')) {
+            $query->where('branch_id', (int) $request->input('branch'));
+        }
+        if ($request->input('category') === 'inventory') {
+            $query->whereNull('order_id');
+        } elseif ($request->input('category') === 'orders') {
+            $query->whereNotNull('order_id');
+        } elseif (in_array($request->input('category'), ['recovery', 'accounts'], true)) {
+            $query->whereRaw('1 = 0');
+        }
+        if ($request->filled('type')) {
+            $query->where('alert_type', $request->input('type'));
         }
 
         $count = $query->update([
@@ -311,13 +375,13 @@ class AlertController extends Controller
         if ($count > 0) {
             AuditLog::create([
                 'user_id' => $user->id,
-                'action' => 'resolved all alerts',
+                'action' => 'reviewed all alerts',
                 'table_name' => 'alerts',
                 'record_id' => 0,
-                'details' => "{$count} alert(s) resolved.",
+                'details' => "{$count} alert(s) marked as reviewed.",
             ]);
         }
 
-        return redirect()->back()->with('success', "{$count} alert(s) resolved.");
+        return redirect()->back()->with('success', "{$count} alert(s) marked as reviewed.");
     }
 }

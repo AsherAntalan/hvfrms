@@ -29,8 +29,8 @@ class OrderGroupLabelService
 
     private function canReceive(Order $order, User $user): bool
     {
-        return $user->isOwner()
-            || (($user->isBranchManager() || $user->isBranchStaff()) && (int) $user->branch_id === (int) $order->branch_id);
+        return ! $user->isAdmin() && ($user->isOwner()
+            || (($user->isBranchManager() || $user->isBranchStaff()) && (int) $user->branch_id === (int) $order->branch_id));
     }
 
     private function pendingReceipt(OrderProduction $production): Builder

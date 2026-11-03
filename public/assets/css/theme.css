@@ -552,6 +552,14 @@ body.hv-app {
     background: var(--gold-soft);
     border-color: var(--gold);
 }
+.hv-topbar-user ~ .dropdown-menu,
+.hv-topbar-user ~ .dropdown-menu .dropdown-item:not(.text-danger) {
+  color: #000;
+}
+.hv-topbar-user ~ .dropdown-menu .text-muted {
+  color: #000 !important;
+}
+
 .hv-topbar-user::after {
     /* Bootstrap dropdown caret */
     margin-left: 4px;
@@ -977,7 +985,7 @@ a.hv-stat-link:hover {
 /* Pagination */
 .hv-main .page-link{ color: var(--maroon); border-color: var(--border); }
 .hv-main .page-link:hover{ background: var(--gold-soft); color: var(--maroon-dark); }
-.hv-main .page-item.active .page-link{ background: var(--maroon); border-color: var(--maroon); }
+.hv-main .page-item.active .page-link{ background: var(--maroon); border-color: var(--maroon); color: #fff; }
 
 /* Alerts (flash): brand tint, hairline, no slab border */
 .hv-main .alert{ border: var(--hair); border-radius: 11px; }
@@ -1198,33 +1206,54 @@ body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
    Solid brand burgundy, centered white segmented spinner, Arial.
    Shared by the login page and the authenticated shell.
    ════════════════════════════════════════════════════════════ */
+/* Auth loading modal: blurred translucent backdrop + centered cream card. */
 .hv-auth-loading{
   position: fixed; inset: 0; z-index: 2000;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--maroon);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: color-mix(in srgb, #5C1010 44%, transparent);
+  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
   font-family: Arial, Helvetica, sans-serif;
   opacity: 1; transition: opacity .3s ease;
 }
 .hv-auth-loading[hidden]{ display: none; }
 .hv-auth-loading.is-fading{ opacity: 0; }
-.hv-auth-loading-inner{ display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; text-align: center; }
+.hv-auth-loading-card{
+  width: 100%; max-width: 400px; background: #FBF7F0;
+  border: 1px solid #D4A94A; border-radius: 20px;
+  padding: 34px 30px 24px; text-align: center;
+  box-shadow: 0 26px 70px -22px rgba(0,0,0,.5), 0 4px 16px -8px rgba(92,16,16,.3);
+}
+.hv-auth-loading-card:focus{ outline: none; }
+.hv-auth-loading-logo{
+  width: 78px; height: 78px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 18px;
+  border: 3px solid #D4A94A; box-shadow: 0 8px 20px rgba(92,16,16,.2);
+}
 .hv-auth-spinner{
-  width: 54px; height: 54px; border-radius: 50%;
-  background: repeating-conic-gradient(#fff 0 10deg, rgba(255,255,255,.18) 10deg 30deg);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
-          mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
-  animation: hvAuthSpin 1s steps(12) infinite;
+  width: 46px; height: 46px; margin: 0 auto 18px; border-radius: 50%;
+  background: conic-gradient(from 0deg, #D4A94A, #7A1717 60%, transparent 60%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  animation: hvAuthSpin .9s linear infinite;
 }
 @keyframes hvAuthSpin{ to{ transform: rotate(360deg); } }
-.hv-auth-loading-msg{ margin: 0; color: #fff; font-size: 16px; font-weight: 600; letter-spacing: .01em; }
+.hv-auth-loading-title{ margin: 0 0 6px; color: #7A1717; font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.hv-auth-loading-msg{ margin: 0 0 18px; color: #6E635C; font-size: 14px; line-height: 1.5; }
+.hv-auth-progress{ height: 4px; width: 100%; max-width: 220px; margin: 0 auto; background: #F3E7CC; border-radius: 99px; overflow: hidden; }
+.hv-auth-progress::after{ content: ""; display: block; height: 100%; width: 40%; border-radius: 99px;
+  background: linear-gradient(90deg, #D4A94A, #7A1717); animation: hvAuthBar 1.2s ease-in-out infinite; }
+@keyframes hvAuthBar{ 0%{ transform: translateX(-120%); } 100%{ transform: translateX(320%); } }
 .hv-auth-loading-recover{
-  margin-top: 4px; background: transparent; border: 1px solid rgba(255,255,255,.55);
-  color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
-  font-family: inherit;
+  margin-top: 16px; background: transparent; border: 1px solid #E7E0D4;
+  color: #7A1717; border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
 }
-.hv-auth-loading-recover:hover{ background: rgba(255,255,255,.12); }
-.hv-auth-loading-recover:focus-visible{ outline: 2px solid #fff; outline-offset: 2px; }
+.hv-auth-loading-recover:hover{ background: #F3E7CC; }
+.hv-auth-loading-recover:focus-visible{ outline: 2px solid #D4A94A; outline-offset: 2px; }
+.hv-auth-loading-brand{ margin: 16px 0 0; color: #B08A2E; font-size: 11px; font-weight: 800; letter-spacing: .18em; }
 @media (prefers-reduced-motion: reduce){
-  .hv-auth-spinner{ animation: none; }
+  .hv-auth-spinner, .hv-auth-progress::after{ animation: none; }
   .hv-auth-loading{ transition: none; }
+  .hv-auth-progress::after{ width: 100%; }
+}
+@media (max-width: 480px){
+  .hv-auth-loading-card{ padding: 28px 22px 20px; border-radius: 16px; }
 }

@@ -35,7 +35,7 @@ class ForgotPasswordController extends Controller
 
         // Only eligible active accounts receive a token + email; every outcome
         // returns the same generic confirmation below.
-        if ($user && $user->status === 'active') {
+        if ($user && $user->status === 'active' && $user->isSuperAdmin()) {
             $rawToken = bin2hex(random_bytes(32));
 
             // A new request invalidates any previous reset link: the stored hash

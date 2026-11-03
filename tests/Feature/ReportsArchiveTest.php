@@ -400,13 +400,13 @@ class ReportsArchiveTest extends TestCase
 
         // Main has no consumption → Insufficient Data for this item.
         $main = $this->actingAs($owner)->get('/forecast?branch='.$main->id);
-        $main->assertOk();
-        $main->assertSee('Insufficient Data');
+        $main->assertStatus(422);
 
         // The "other" branch has demand → it is NOT flagged insufficient there
         // (a real trend/forecast is produced from that branch's own inputs).
         $otherRes = $this->actingAs($owner)->get('/forecast?branch='.$other->id);
         $otherRes->assertOk();
         $otherRes->assertSee('Branch Scoped Item');
+        $otherRes->assertDontSee('<select', false);
     }
 }

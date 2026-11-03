@@ -82,4 +82,32 @@ class FefoStockOutTest extends TestCase
         $this->stockOut($later->id, 'Lost / Missing')->assertOk();
         $this->assertEquals(3, $later->fresh()->quantity_left);
     }
+
+    public function test_qr_scanner_blocks_later_batch_and_allows_earliest_usable_batch(): void
+    {
+        $expired = $this->batch(now()->subDay()->toDateString(), 8);
+        $soon = $this->batch(now()->toDateString(), 5);
+        $later = $this->batch(now()->addDays(9)->toDateString(), 4);
+        $payload = ['action' => 'stock_out', 'item_id' => $this->item->id, 'batch_id' => $later->id, 'quantity' => 1, 'reason' => 'Sold / Used'];
+        $this->actingAs($this->manager)->postJson('/qr/api', $payload)->assertUnprocessable()
+            ->assertJsonPath('suggest_batch_id', $soon->id);
+        $this->assertEquals(4, $later->fresh()->quantity_left);
+        $this->postJson('/qr/api', array_replace($payload, ['batch_id' => $soon->id]))->assertOk();
+        $this->assertEquals(4, $soon->fresh()->quantity_left);
+        $this->assertEquals(8, $expired->fresh()->quantity_left);
+        $this->get('/qr')->assertOk()->assertSee('FEFO for Sold / Used');
+    }
+
+    public function test_history_and_batch_detail_do_not_mark_today_as_already_expired(): void
+    {
+        $this->travelTo(now()->setTime(12, 0));
+        $batch = $this->batch(now()->toDateString(), 5);
+        $this->actingAs($this->manager)->get('/stock/history/'.$this->item->id)->assertOk()
+            ->assertDontSee('EXPIRED '.$batch->expiry_date->format('Y-m-d'));
+        $this->get('/stock/batch/'.$batch->id)->assertOk()
+            ->assertDontSee('EXPIRED '.$batch->expiry_date->format('Y-m-d'));
+        $batch->update(['expiry_date' => now()->subDay()->toDateString()]);
+        $this->get('/stock/history/'.$this->item->id)->assertOk()
+            ->assertSee('EXPIRED '.$batch->expiry_date->format('Y-m-d'));
+    }
 }

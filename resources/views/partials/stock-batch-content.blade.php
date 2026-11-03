@@ -37,7 +37,7 @@
                         <th>Expiry Date</th>
                         <td>
                             @if($batch->expiry_date)
-                                @if($batch->expiry_date->isPast())
+                                @if(\App\Services\StockService::isExpired($batch->expiry_date->format('Y-m-d')))
                                     <span class="badge bg-danger">EXPIRED {{ $batch->expiry_date->format('Y-m-d') }}</span>
                                 @elseif($batch->expiry_date->diffInDays(now()) <= 7)
                                     <span class="text-warning fw-bold">{{ $batch->expiry_date->format('Y-m-d') }} ({{ $batch->expiry_date->diffInDays(now()) }} day(s) left)</span>

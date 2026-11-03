@@ -3,11 +3,13 @@
 use App\Http\Middleware\BranchScope;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\IdleTimeout;
+use App\Http\Middleware\RequireInitialPasswordChange;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             SecurityHeaders::class,
+            RequireInitialPasswordChange::class,
         ]);
 
         $middleware->alias([
@@ -45,6 +48,15 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash(['confirm_password', 'code', 'token', 'current_password']);
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
+            if ($response->getStatusCode() === 419 && $request->routeIs('login.submit') && ! $request->expectsJson()) {
+                return redirect()->route('login')->with('warning', 'Your sign-in session expired. Please enter your credentials again.');
+            }
+
+            return $response;
+        });
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

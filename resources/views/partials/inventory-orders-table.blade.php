@@ -1,3 +1,7 @@
+@php
+    $rows = $rows ?? $pendingOrders;
+    $showBranch = $showBranch ?? false;
+@endphp
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
@@ -15,7 +19,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @forelse($pendingOrders as $o)
+                    @forelse($rows as $o)
                         <tr>
                             <td class="ps-3 fw-bold" style="color:var(--maroon);">{{ $o->order_number }}</td>
                             <td>{{ $o->branch_name }}</td>
@@ -45,14 +49,14 @@
                             @if($canFulfillOrders)
                             <td class="text-center">
                                 <div class="d-flex gap-1 justify-content-center flex-wrap">
-                                    <a class="btn btn-sm btn-outline-secondary" href="{{ route('delivery') }}#branch{{ $o->branch_id }}">Manage in Delivery</a>
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['queue' => 'all', 'order' => $o->id]) }}">Manage in Orders</a>
 
                                 </div>
                             </td>
                             @endif
                         </tr>
                     @empty
-                        <tr><td colspan="{{ $canFulfillOrders ? 8 : 7 }}" class="text-center text-muted py-4">No pending orders from branches.</td></tr>
+                        <tr><td colspan="{{ $canFulfillOrders ? 8 : 7 }}" class="text-center text-muted py-4">{{ $showBranch ? 'No pending orders match these filters. Try clearing them.' : 'No pending orders from branches.' }}</td></tr>
                     @endforelse
                     </tbody>
                 </table>

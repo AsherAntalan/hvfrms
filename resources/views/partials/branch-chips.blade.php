@@ -42,7 +42,7 @@
            class="hv-branch-chip {{ $active ? 'active' : '' }}"
            @if($active) aria-current="true" @endif>
             @if($isMain)<i class="ph-fill ph-buildings me-1"></i>@endif
-            {{ $br->branch_name }}@if($isMain) · Main Store @endif
+            {{ $br->branch_name }}@if($isMain) · Main Branch @endif
             @if($chipCounts !== null)
                 @php $c = $chipCounts->get($br->id, 0); @endphp
                 @if($c > 0)<span class="badge bg-secondary ms-1" style="font-size:10px;">{{ $c }}</span>@endif
