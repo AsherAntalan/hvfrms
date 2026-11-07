@@ -203,17 +203,13 @@ class PasswordRecoveryHierarchyTest extends TestCase
         $this->actingAs($this->w['bs'])->get('/reset-requests')->assertForbidden();
     }
 
-    public function test_manager_reset_requires_admin_and_admin_reset_requires_super_admin(): void
+    public function test_manager_reset_requires_admin_approval(): void
     {
         [$manager, $verification] = $this->issueRequest($this->w['bm']);
         $this->verifyRequest($verification);
         $this->api($this->w['bm'], ['action' => 'approve', 'id' => $manager->id, 'identity_verified' => true])->assertForbidden();
         $this->api($this->w['cm'], ['action' => 'approve', 'id' => $manager->id, 'identity_verified' => true])->assertForbidden();
         $this->approveRequest($manager, $this->w['admin']);
-        [$admin, $verification] = $this->issueRequest($this->w['admin']);
-        $this->verifyRequest($verification);
-        $this->api($this->w['owner'], ['action' => 'approve', 'id' => $admin->id, 'identity_verified' => true])->assertForbidden();
-        $this->approveRequest($admin, $this->w['super']);
     }
 
     public function test_unknown_invalid_disabled_and_super_admin_requests_have_identical_public_responses(): void
@@ -431,5 +427,30 @@ class PasswordRecoveryHierarchyTest extends TestCase
         $this->api($this->w['admin'], ['action' => 'approve', 'id' => $reset->id, 'identity_verified' => true])->assertUnprocessable();
         $this->assertFalse($reset->fresh()->hasValidManagerVerification());
         Mail::assertNotSent(PasswordResetMail::class);
+    }
+
+    /**
+     * The emailed verification link must work from a browser that is already
+     * signed into a different account. It confirms inbox access only; a signed-in
+     * session must not bounce it to the dashboard, and verifying grants no login.
+     */
+    public function test_email_verification_works_while_another_account_is_signed_in(): void
+    {
+        $user = $this->w['bm'];
+        [$reset, $verification] = $this->issueRequest($user);
+
+        // A different, unrelated account is signed in when the link is opened.
+        $this->actingAs($this->w['bs2']);
+        $this->get(route('password.code.verify', $verification))->assertOk()->assertSee('Confirm my recovery email');
+
+        $this->post(route('password.code.verify-confirm', $verification))
+            ->assertRedirect(route('password.code.request'))
+            ->assertSessionHas('email_verified');
+
+        // Email is verified (request advances), and the account is not reset or approved.
+        $this->assertSame('pending', $reset->fresh()->status);
+        $this->assertNotNull($reset->fresh()->email_verified_at);
+        $this->assertNull($reset->fresh()->code_expires_at);
+        $this->assertTrue(Hash::check('original-pass-1', $user->fresh()->password_hash));
     }
 }

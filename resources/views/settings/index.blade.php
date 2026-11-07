@@ -12,7 +12,7 @@
 
             {{-- App Name --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-storefront me-1"></i>General</h6>
+                <h6 style="color:var(--maroon);" class="mb-3">General</h6>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Application Name</label>
                     <input type="text" class="form-control" name="app_name"
@@ -23,7 +23,7 @@
 
             {{-- Forecast Settings --}}
             <div class="hv-card p-3 mb-3">
-                <h6 style="color:var(--maroon);" class="mb-3"><i class="ph ph-trend-up me-1"></i>Forecast & DSS</h6>
+                <h6 style="color:var(--maroon);" class="mb-3">Forecast & DSS</h6>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Forecast Weeks</label>

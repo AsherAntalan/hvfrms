@@ -269,6 +269,7 @@ class QrController extends Controller
                 'qr_code' => $product->qr_code,
                 'reorder_level' => (int) $product->reorder_level,
                 'shelf_life_days' => $product->shelf_life_days,
+                'shelf_life_months' => $product->shelfLifeMonths(),
                 'stock' => $stock->map(fn ($s) => [
                     'branch_id' => (int) $s->branch_id,
                     'branch_name' => $s->branch_name,

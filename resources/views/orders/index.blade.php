@@ -53,9 +53,15 @@
     <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['archived' => 1]) }}"><i class="ph ph-archive-box me-1"></i> Archived Orders <span class="badge rounded-pill bg-secondary ms-1">{{ $archivedOrderCount }}</span></a>
     @if(!$user->isCommissaryStaff())
+    @if($isBM)
+    <a href="{{ route('ordering') }}" class="btn btn-maroon btn-sm">
+        <i class="ph ph-plus me-1"></i> New Order
+    </a>
+    @else
     <button class="btn btn-maroon btn-sm" onclick="openOrderModal()">
         <i class="ph ph-plus me-1"></i> New Order
     </button>
+    @endif
     @endif
     </div>
     @endif
@@ -63,8 +69,8 @@
 
 @if(!$showArchivedOrders)
 <div class="hv-card p-3 mb-3 small">
-    <strong>Commissary order flow:</strong> Branch requests &rarr; Commissary reviews &rarr; Prepare / Pick &rarr; Print labels &rarr; Scan out for delivery &rarr; Branch receives.
-    <div class="text-muted mt-1">Preparing records actual quantities. Release changes Commissary inventory; receiving adds accepted goods to the destination. Printing alone does not release goods.</div>
+    <strong>Order flow:</strong> Request &rarr; Review &rarr; Prepare &rarr; Print labels &rarr; Dispatch &rarr; Receive
+    <div class="text-muted mt-1">Preparation records actual quantities. Printing labels does not dispatch goods. Receiving adds only accepted quantities to destination inventory.</div>
 </div>
 
 @endif
@@ -243,7 +249,7 @@
                                 <i class="ph {{ $showArchivedOrders ? 'ph-arrow-counter-clockwise' : 'ph-archive-box' }}"></i> {{ $showArchivedOrders ? 'Restore' : 'Archive' }}
                             </button>
                             @endif
-                            @if($showArchivedOrders && $user->isOwner() && ! $user->isAdmin())
+                            @if($showArchivedOrders && $user->isOwner())
                             <button type="button" class="btn btn-sm btn-outline-danger" data-order-id="{{ $o->id }}" data-order-number="{{ $o->order_number }}" onclick="deleteArchivedOrder(this)">
                                 <i class="ph ph-trash"></i> Delete
                             </button>
@@ -270,6 +276,7 @@
 @include('partials.order-prepare')
 
 <!-- New Order Modal -->
+@unless($isBM)
 <div class="modal fade" id="orderModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -288,14 +295,14 @@
                         <select class="form-select" name="destination_branch_id" id="o_branch_id" required>
                             @php $canEncodeAny = $user->isOwner() || $user->isCommissaryManager(); @endphp
                             @if(! $canEncodeAny)
-                                @foreach($branches as $br)
+                                @foreach($branches->where('branch_type', '!=', 'commissary') as $br)
                                     @if($br->id === $user->branch_id)
                                         <option value="{{ $br->id }}" selected>{{ $br->branch_name }}</option>
                                     @endif
                                 @endforeach
                             @else
                                 <option value="">Select branch</option>
-                                @foreach($branches as $br)
+                                @foreach($branches->where('branch_type', '!=', 'commissary') as $br)
                                     <option value="{{ $br->id }}">{{ $br->branch_name }}</option>
                                 @endforeach
                             @endif
@@ -351,6 +358,7 @@
 </div>
 
 <!-- View Order Modal -->
+@endunless
 <div class="modal fade" id="viewModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -422,7 +430,10 @@ let lineCounter = 0;
 let currentReviewOrder = null;
 
 document.addEventListener('DOMContentLoaded', function () {
-    orderModal = new bootstrap.Modal(document.getElementById('orderModal'));
+    const orderModalElement = document.getElementById('orderModal');
+    if (orderModalElement) {
+        orderModal = new bootstrap.Modal(orderModalElement);
+    }
     viewModal  = new bootstrap.Modal(document.getElementById('viewModal'));
     declineModal = new bootstrap.Modal(document.getElementById('declineModal'));
     filterOrders();
@@ -583,31 +594,26 @@ async function submitOrder(e) {
 
 async function setOrderArchive(button) {
     const restore = button.dataset.orderArchive === 'restore';
-    const message = restore
-        ? 'Restore ' + button.dataset.orderNumber + ' to Order History?'
-        : 'Archive ' + button.dataset.orderNumber + '? It will move to Archived Orders. Its records will be retained, and it can be restored.';
-    if (!confirm(message)) return;
-    const original = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span> ' + (restore ? 'Restoring...' : 'Archiving...');
-    const data = new FormData();
-    data.append('_token', CSRF);
-    data.append('action', restore ? 'restore_order' : 'archive_order');
-    data.append('id', button.dataset.orderId);
-    try {
-        const response = await fetch(API, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}});
-        const json = await response.json();
-        if (json.ok) {
-            location.assign(json.redirect_url);
-        } else {
-            alert(json.error || (json.errors ? Object.values(json.errors).flat().join(' ') : json.message) || 'Could not update the order archive.');
-        }
-    } catch (error) {
-        alert('Could not update the order archive. Check your connection and try again.');
-    } finally {
-        button.disabled = false;
-        button.innerHTML = original;
-    }
+    const number = button.dataset.orderNumber;
+    const result = await window.hvModal.confirm({
+        title: (restore ? 'Restore order ' : 'Archive order ') + number + '?',
+        message: restore
+            ? 'This returns ' + number + ' to Order History. You can archive it again anytime.'
+            : 'This moves ' + number + ' to Archived Orders. Its order, payment, and inventory records are retained, and it can be restored.',
+        confirmText: restore ? 'Restore' : 'Archive',
+        action: async function () {
+            const data = new FormData();
+            data.append('_token', CSRF);
+            data.append('action', restore ? 'restore_order' : 'archive_order');
+            data.append('id', button.dataset.orderId);
+            const response = await fetch(API, {method: 'POST', body: data, headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}});
+            const json = await response.json();
+            if (!json.ok) { return { ok: false, error: json.error || (json.errors ? Object.values(json.errors).flat().join(' ') : json.message) || 'Could not update the order archive.' }; }
+            return { ok: true, redirect: json.redirect_url };
+        },
+        success: { title: restore ? 'Restored to History' : 'Moved to Archived Orders', message: 'Order ' + number + (restore ? ' is back in Order History.' : ' has been archived.') },
+    });
+    if (result && result.ok) { location.assign(result.redirect); }
 }
 
 async function deleteArchivedOrder(button) {
@@ -930,10 +936,11 @@ function filterOrders() {
             prepare:'Reviewed requests that still need preparation or picking.',
             release:'Prepared goods with quantities still to scan out, including partial releases.',
             transit:'Released orders awaiting destination receiving or confirmation.',
-            history:'Received, closed, cancelled, and declined orders. Actual status remains shown.',
+            history:'',
             all:@json($showArchivedOrders ? ($canArchiveOrders ? 'Archived records are retained. Restore an order to return it to History.' : 'Archived records are retained for monitoring. Review each order and who archived it.') : 'All unarchived orders across every stage.')
         };
-        hint.textContent = hints[activeOrderQueue] || hints.all;
+        hint.textContent = hints[activeOrderQueue] ?? hints.all;
+        hint.hidden = !hint.textContent;
     }
     const sort = document.getElementById('orderSort');
     if (sort) {

@@ -40,7 +40,7 @@
 </div>
 
 <div class="hv-card p-3 mb-3 small">
-    <strong>How it works:</strong> The account holder verifies their request email. For staff, their manager verifies identity before admin approval. For managers, admin verifies identity and approves. Approval emails a one-time reset link valid for 12 hours. Recovery codes remain in Users; the registered account email is unchanged.
+    <strong>How it works:</strong> The account holder verifies their request email. For staff, their manager verifies identity before admin approval. For managers, admin verifies identity and approves. Approval emails a one-time reset link valid for 12 hours. Admin accounts use their recovery code to receive a reset link at their registered email without approval. Recovery codes remain in Users.
 </div>
 
 {{-- Request list --}}

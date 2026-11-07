@@ -77,7 +77,7 @@
                     <td class="small">{{ e($item->unit) }}</td>
                     <td class="text-end fw-semibold">&#8369;{{ number_format($item->price, 2) }}</td>
                     <td class="text-center">{{ (int)$item->reorder_level }}</td>
-                    <td class="text-center">{{ $item->shelf_life_days ? $item->shelf_life_days . 'd' : '—' }}</td>
+                    <td class="text-center">{{ $item->shelfLifeMonths() ? $item->shelfLifeMonths() . ' months' : ($item->shelf_life_days ? $item->shelf_life_days . ' days' : '—') }}</td>
 
                     <td class="text-center">
                         @if($item->is_active)
@@ -108,9 +108,9 @@
                             @endif
                             @endif
                             @if(auth()->user()->isOwner())
-                            <button type="button" class="btn btn-sm btn-outline-danger" title="Delete product"
-                                    onclick="deleteProduct({{ $item->id }}, {{ Illuminate\Support\Js::from($item->item_name) }})">
-                                <i class="ph ph-trash" aria-hidden="true"></i> Delete
+                            <button type="button" class="btn btn-sm btn-outline-secondary" title="Archive product"
+                                    onclick="archiveProduct({{ $item->id }}, {{ Illuminate\Support\Js::from($item->item_name) }})">
+                                <i class="ph ph-archive" aria-hidden="true"></i> Archive
                             </button>
                             @endif
                         </div>

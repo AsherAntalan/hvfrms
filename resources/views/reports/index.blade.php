@@ -12,7 +12,7 @@
         $activeReport = 'stock';
     }
     $dateFilterDescriptions = [
-        'stock' => 'Filter by batch received date. Quantities are the current remaining stock of those batches; older batches are excluded.',
+        'stock' => 'Shows current stock from batches received within the selected dates.',
         'movements' => 'Filter by stock movement date. Only transactions within the selected dates are included.',
         'sales' => 'Filter by item release date. Legacy outputs use their recorded release date; older completed lines without production records use their completion date.',
         'expiry' => 'Filter by batch expiry date. Remaining quantities and expiry status are current.',
@@ -345,10 +345,8 @@
     </div>
     <div class="text-muted small mt-2">{{ count($moveRows) }} row(s).</div>
     <div class="alert alert-light border small py-2 mt-2 mb-0">
-        <strong>How to read this:</strong> <strong>Net = Stock In − Stock Out.</strong>
-        Stock Out includes everything that left the shelf — sales/usage, disposals, expiry, and damage.
-        A <span class="text-danger">negative Net</span> means stock decreased over the period;
-        a <span class="text-success">positive Net</span> means it grew.
+        <strong>Net = Stock In minus Stock Out.</strong>
+        A negative net means more stock went out than came in during the selected dates.
     </div>
     @endif
 </div>

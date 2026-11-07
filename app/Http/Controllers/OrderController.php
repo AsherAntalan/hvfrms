@@ -41,7 +41,7 @@ class OrderController extends Controller
         $isWS = $user->isWarehouseStaff();
         $isBM = $user->isBranchManager();
         $showArchivedOrders = $request->boolean('archived');
-        $canArchiveOrders = ! $user->isAdmin() && ($user->isOwner() || $user->isCommissaryManager() || $isBM);
+        $canArchiveOrders = $user->isOwner() || $user->isCommissaryManager() || $isBM;
 
         // Fetch orders with branch and user names
         $ordersQuery = Order::select('orders.*', 'branches.branch_name',
@@ -61,6 +61,9 @@ class OrderController extends Controller
         }
 
         $archivedOrderCount = (clone $ordersQuery)->whereNotNull('orders.archived_at')->count();
+        if ($request->boolean('receiving_issues') && $user->isAdmin()) {
+            $ordersQuery->where('orders.status', 'delivering')->whereIn('orders.id', ReceivingIssue::where('status', 'pending')->select('order_id'));
+        }
         if ($showArchivedOrders) {
             $ordersQuery->whereNotNull('orders.archived_at');
         } else {
@@ -207,7 +210,7 @@ class OrderController extends Controller
 
     private function setOrderArchive(Request $request, User $user, bool $restore): JsonResponse
     {
-        abort_unless(! $user->isAdmin() && ($user->isOwner() || $user->isCommissaryManager() || $user->isBranchManager()), 403);
+        abort_unless($user->isOwner() || $user->isCommissaryManager() || $user->isBranchManager(), 403);
         $data = $request->validate(['id' => ['required', 'integer', 'min:1']]);
 
         return DB::transaction(function () use ($data, $request, $user, $restore): JsonResponse {
@@ -248,7 +251,7 @@ class OrderController extends Controller
      */
     private function deleteArchivedOrder(Request $request, User $user): JsonResponse
     {
-        abort_unless($user->isOwner() && ! $user->isAdmin(), 403);
+        abort_unless($user->isOwner(), 403);
         $data = $request->validate(['id' => ['required', 'integer', 'min:1']]);
 
         return DB::transaction(function () use ($data, $request, $user): JsonResponse {
@@ -337,6 +340,7 @@ class OrderController extends Controller
 
             return response()->json(['ok' => true, 'lines' => $order->orderItems->map(fn ($line) => [
                 'order_item_id' => $line->id, 'available' => (new StockService)->eligibleAvailable($line->item_id, $main->id),
+                'suggested_expiry' => $line->item->expiryFromProduction(OrderProduction::where('order_item_id', $line->id)->value('production_at') ?? now()),
             ])]);
         }
         if ($action === 'review_order' || ($action === 'update_status' && $request->input('status') === 'approved')) {
@@ -387,6 +391,9 @@ class OrderController extends Controller
             }
 
             $branch = Branch::where('id', $branchId)->where('is_active', true)->first();
+            if ($branch && $branch->branch_type === 'commissary') {
+                return response()->json(['ok' => false, 'error' => 'Commissary cannot be selected as an order destination.'], 422);
+            }
             if (! $branch) {
                 return response()->json(['ok' => false, 'error' => 'Branch not found or is inactive.'], 422);
             }

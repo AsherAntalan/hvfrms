@@ -5,12 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\Category;
 use App\Models\Item;
+use App\Models\Order;
+use App\Models\StockTransaction;
+use App\Models\User;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class InventoryController extends Controller
 {
@@ -76,7 +82,128 @@ class InventoryController extends Controller
 
         $categories = Category::orderBy('name')->get();
 
-        return view('inventory.index', compact('items', 'categories', 'isMgr', 'scopeLabel', 'canManageProducts', 'canManageAvailability'));
+        // Branch Managers get a second "Movement History" tab: all stock
+        // movements for their own branch, filtered and paginated server-side.
+        $showMovements = $user->isBranchManager();
+        $tab = ($showMovements && request()->query('tab') === 'movements') ? 'movements' : 'inventory';
+        $movements = null;
+        $movementFilters = ['search' => '', 'from' => '', 'to' => '', 'type' => '', 'category' => ''];
+        $movementOrderRefs = [];
+        if ($tab === 'movements') {
+            [$movements, $movementFilters, $movementOrderRefs] = $this->branchMovements(request(), $user);
+        }
+
+        return view('inventory.index', compact(
+            'items', 'categories', 'isMgr', 'scopeLabel', 'canManageProducts', 'canManageAvailability',
+            'showMovements', 'tab', 'movements', 'movementFilters', 'movementOrderRefs'
+        ));
+    }
+
+    /**
+     * Build the branch-scoped, filtered, paginated movement history.
+     *
+     * Access is hard-scoped to the authenticated Branch Manager's own branch;
+     * any branch identifier in the request is ignored. Quantities keep their
+     * stored sign, so no sign is recomputed here.
+     *
+     * @return array{0: LengthAwarePaginator, 1: array<string, string>, 2: array<int, array{number: string, id: int}>}
+     */
+    private function branchMovements(Request $request, User $user): array
+    {
+        $validated = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'type' => ['nullable', Rule::in(['in', 'out', 'adjustment', 'expired', 'damaged'])],
+            'category' => ['nullable', 'integer', 'exists:categories,id'],
+        ]);
+
+        $timezone = config('app.timezone');
+
+        $query = StockTransaction::query()
+            ->where('stock_transactions.branch_id', $user->branch_id)
+            ->with(['item:id,item_name,unit,category_id,is_active', 'performer:id,full_name']);
+
+        if (! empty($validated['type'])) {
+            $query->where('stock_transactions.type', $validated['type']);
+        }
+        if (! empty($validated['category'])) {
+            $query->whereHas('item', fn ($item) => $item->where('category_id', (int) $validated['category']));
+        }
+        if (! empty($validated['from'])) {
+            $query->where('stock_transactions.created_at', '>=', Carbon::parse($validated['from'], $timezone)->startOfDay());
+        }
+        if (! empty($validated['to'])) {
+            // Include the full selected end date in the application timezone.
+            $query->where('stock_transactions.created_at', '<=', Carbon::parse($validated['to'], $timezone)->endOfDay());
+        }
+        if (! empty($validated['search'])) {
+            $term = trim($validated['search']);
+            $like = '%'.$term.'%';
+            $batchId = ctype_digit(ltrim($term, '#')) ? (int) ltrim($term, '#') : null;
+            $query->where(function ($outer) use ($like, $batchId) {
+                $outer->whereHas('item', fn ($item) => $item->where('item_name', 'like', $like))
+                    ->orWhere('stock_transactions.reason', 'like', $like)
+                    ->orWhereHas('batch', fn ($batch) => $batch->where('qr_code', 'like', $like));
+                if ($batchId !== null) {
+                    $outer->orWhere('stock_transactions.batch_id', $batchId);
+                }
+            });
+        }
+
+        $movements = $query
+            ->orderByDesc('stock_transactions.created_at')
+            ->orderByDesc('stock_transactions.id')
+            ->paginate(10)
+            ->withQueryString();
+
+        $orderRefs = $this->resolveOrderReferences($movements->getCollection(), (int) $user->branch_id);
+
+        $filters = [
+            'search' => $validated['search'] ?? '',
+            'from' => $validated['from'] ?? '',
+            'to' => $validated['to'] ?? '',
+            'type' => $validated['type'] ?? '',
+            'category' => $validated['category'] ?? '',
+        ];
+
+        return [$movements, $filters, $orderRefs];
+    }
+
+    /**
+     * Resolve reliable order references for the visible movements only.
+     *
+     * An order number embedded in a transaction reason is shown and linked only
+     * when a real order with that exact number exists in the same branch, so an
+     * unreliable text match is never turned into a fabricated link.
+     *
+     * @param  Collection<int, StockTransaction>  $transactions
+     * @return array<int, array{number: string, id: int}>
+     */
+    private function resolveOrderReferences(Collection $transactions, int $branchId): array
+    {
+        $candidates = [];
+        foreach ($transactions as $transaction) {
+            if ($transaction->reason && preg_match('/ORD-[A-Za-z0-9-]+/', $transaction->reason, $matches)) {
+                $candidates[$transaction->id] = $matches[0];
+            }
+        }
+        if ($candidates === []) {
+            return [];
+        }
+
+        $orders = Order::whereIn('order_number', array_unique(array_values($candidates)))
+            ->where('branch_id', $branchId)
+            ->pluck('id', 'order_number');
+
+        $references = [];
+        foreach ($candidates as $transactionId => $orderNumber) {
+            if ($orders->has($orderNumber)) {
+                $references[$transactionId] = ['number' => $orderNumber, 'id' => (int) $orders[$orderNumber]];
+            }
+        }
+
+        return $references;
     }
 
     /**
@@ -107,6 +234,9 @@ class InventoryController extends Controller
     protected function saveItem(Request $request): JsonResponse
     {
         $id = (int) $request->input('id', 0);
+        if (Item::whereKey($id)->whereNotNull('archived_at')->exists()) {
+            return response()->json(['ok' => false, 'error' => 'Restore the archived product before editing it.'], 422);
+        }
         $itemName = trim($request->input('item_name', ''));
         $categoryId = (int) $request->input('category_id', 0);
         $unit = trim($request->input('unit', 'pack'));
@@ -114,6 +244,7 @@ class InventoryController extends Controller
         $price = (float) $request->input('price', 0);
         $reorderLevel = (int) $request->input('reorder_level', 10);
         $shelfLifeDays = $request->input('shelf_life_days', '');
+        $request->validate(['shelf_life_months' => ['nullable', 'integer', 'min:1', 'max:120']]);
         $remarks = trim($request->input('remarks', ''));
 
         // Validation
@@ -167,6 +298,7 @@ class InventoryController extends Controller
                     'price' => $price,
                     'reorder_level' => $reorderLevel,
                     'shelf_life_days' => $shelfLifeInt,
+                    'shelf_life_months' => $request->input('shelf_life_months') ?: null,
                     'remarks' => $remarks ?: null,
                 ];
 
@@ -197,6 +329,7 @@ class InventoryController extends Controller
                     'image_path' => $imagePath,
                     'reorder_level' => $reorderLevel,
                     'shelf_life_days' => $shelfLifeInt,
+                    'shelf_life_months' => $request->input('shelf_life_months') ?: null,
                     'remarks' => $remarks ?: null,
                     'is_active' => true,
                 ]);
@@ -242,7 +375,7 @@ class InventoryController extends Controller
         $isActive = (bool) $data['is_active'];
 
         return DB::transaction(function () use ($data, $isActive) {
-            $item = Item::whereKey($data['id'])->lockForUpdate()->first();
+            $item = Item::whereKey($data['id'])->whereNull('archived_at')->lockForUpdate()->first();
 
             if (! $item) {
                 return response()->json(['ok' => false, 'error' => 'Product not found.'], 404);

@@ -50,15 +50,26 @@
 
         <!-- Info Card -->
         <div class="hv-card p-4 mb-3">
-            <h6 class="fw-bold mb-3"><i class="ph ph-info me-2"></i>Account Information</h6>
+            <h6 class="fw-bold mb-3">Account Information</h6>
+            @php
+                $nextNameUpdate = $user->name_updated_at?->copy()->addDays(30);
+                $nextEmailUpdate = $user->email_updated_at?->copy()->addDays(30);
+                $nameLocked = $nextNameUpdate && now()->lt($nextNameUpdate);
+                $emailLocked = $nextEmailUpdate && now()->lt($nextEmailUpdate);
+                $profileLocked = $nameLocked && $emailLocked;
+            @endphp
+            <form method="POST" action="{{ route('profile.information') }}">
+            @csrf
             <div class="row g-3">
                 <div class="col-sm-6">
-                    <div class="small text-muted mb-1">Full Name</div>
-                    <div class="fw-semibold">{{ $user->full_name }}</div>
+                    <label class="small text-muted mb-1" for="profileFullName">Full Name</label>
+                    <input id="profileFullName" name="full_name" class="form-control" value="{{ $nameLocked ? $user->full_name : old('full_name', $user->full_name) }}" maxlength="100" required @readonly($nameLocked)>
+                    @if($nameLocked)<div class="form-text">Name can be changed again on {{ $nextNameUpdate->format('M j, Y g:i A') }}.</div>@endif
                 </div>
                 <div class="col-sm-6">
-                    <div class="small text-muted mb-1">Email Address</div>
-                    <div class="fw-semibold">{{ $user->email }}</div>
+                    <label class="small text-muted mb-1" for="profileEmail">Email Address</label>
+                    <input id="profileEmail" type="email" name="email" class="form-control" value="{{ $emailLocked ? $user->email : old('email', $user->email) }}" maxlength="150" required @readonly($emailLocked)>
+                    @if($emailLocked)<div class="form-text">Email can be changed again on {{ $nextEmailUpdate->format('M j, Y g:i A') }}.</div>@endif
                 </div>
                 <div class="col-sm-6">
                     <div class="small text-muted mb-1">Role</div>
@@ -83,11 +94,25 @@
                     <div class="fw-semibold">{{ $user->created_at ? $user->created_at->format('M j, Y') : 'N/A' }}</div>
                 </div>
             </div>
+            @if($errors->profileInformation->any())
+                <div class="alert alert-danger mt-3" role="alert">{{ $errors->profileInformation->first() }}</div>
+            @endif
+            @if($profileLocked)
+                <p class="small text-muted mt-3 mb-0">Name and email each have their own 30-day waiting period.</p>
+            @else
+                <div class="mt-3">
+                    <label class="form-label small fw-semibold" for="profileCurrentPassword">Confirm Current Password</label>
+                    <input id="profileCurrentPassword" type="password" class="form-control" name="current_password" autocomplete="current-password" required>
+                    <div class="form-text">Only the field you change is locked for 30 days. The other field remains available.</div>
+                </div>
+                <button type="submit" class="btn btn-maroon mt-3">Save Account Information</button>
+            @endif
+            </form>
         </div>
 
         <!-- Change Password Card -->
         <div class="hv-card p-4">
-            <h6 class="fw-bold mb-3"><i class="ph ph-shield-check me-2"></i>Change Password</h6>
+            <h6 class="fw-bold mb-3">Change Password</h6>
             <form method="POST" action="{{ route('profile.password') }}">
                 @csrf
                 <div class="mb-3">
@@ -104,7 +129,7 @@
                     <input type="password" class="form-control" name="new_password_confirmation" required minlength="8">
                 </div>
                 <button type="submit" class="btn btn-maroon">
-                    <i class="ph ph-check me-1"></i> Update Password
+                    Update Password
                 </button>
             </form>
         </div>

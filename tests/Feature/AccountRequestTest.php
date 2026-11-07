@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -65,6 +66,26 @@ class AccountRequestTest extends TestCase
     {
         $this->action($this->people['admin'], $entry, 'approve')->assertOk()->assertJsonMissingPath('temporary_password');
         $entry->refresh();
+    }
+
+    public function test_dashboard_shows_account_requests_requiring_the_viewers_attention(): void
+    {
+        DB::connection()->getPdo()->sqliteCreateFunction('CURDATE', fn (): string => now()->toDateString());
+        $entry = $this->submit();
+        $this->actingAs($this->people['admin'])->get('/dashboard')->assertOk()
+            ->assertViewHas('stats', fn (array $stats): bool => $stats['account_requests'] === 1)
+            ->assertSee('1 account request awaiting approval')
+            ->assertSee(route('account-requests'));
+        $this->actingAs($this->people['other'])->get('/dashboard')->assertOk()
+            ->assertViewHas('stats', fn (array $stats): bool => $stats['account_requests'] === 0);
+        $this->approve($entry);
+        $this->actingAs($this->people['admin'])->get('/dashboard')->assertOk()
+            ->assertViewHas('stats', fn (array $stats): bool => $stats['account_requests'] === 0);
+        $this->actingAs($this->people['manager'])->get('/dashboard')->assertOk()
+            ->assertSee('1 account request ready for credential delivery');
+        $this->reveal($entry);
+        $this->get('/dashboard')->assertOk()
+            ->assertViewHas('stats', fn (array $stats): bool => $stats['account_requests'] === 0);
     }
 
     private function reveal(AccountRequest $entry): string

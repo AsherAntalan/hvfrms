@@ -59,7 +59,18 @@ Route::middleware('guest')->group(function () {
     Route::post('reset-password', [ResetPasswordController::class, 'reset'])
         ->middleware('throttle:password-reset')
         ->name('password.update');
+});
 
+// -------------------------------------------------------------------------
+// Hierarchical account recovery — token/code gated, open to any visitor.
+// These must work even when a different account is signed in (for example,
+// recovering one account from a browser already logged into another). The
+// emailed token/one-time code is the authorization, so these are deliberately
+// NOT behind the 'guest' gate: a signed-in session grants no extra power here.
+// Email verification only confirms inbox access; a separate authorizer still
+// approves, and the final password change still requires the emailed reset link.
+// -------------------------------------------------------------------------
+Route::group([], function () {
     // Hierarchical recovery: public entry with a username + one-time code.
     Route::get('account-recovery', [CodeResetController::class, 'showForm'])
         ->name('password.code.request');
@@ -259,6 +270,8 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
     // ---------------------------------------------------------------
     Route::get('profile', [ProfileController::class, 'index'])
         ->name('profile');
+    Route::post('profile/information', [ProfileController::class, 'updateInformation'])
+        ->middleware('throttle:10,1')->name('profile.information');
     Route::post('profile/photo', [ProfileController::class, 'updatePhoto'])
         ->name('profile.photo');
     Route::post('profile/password', [ProfileController::class, 'changePassword'])

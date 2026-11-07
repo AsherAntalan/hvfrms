@@ -77,6 +77,34 @@ class OrderEligibilityDeclineTest extends TestCase
         ];
     }
 
+    public function test_commissary_is_not_an_order_destination_but_remains_a_history_filter(): void
+    {
+        $world = $this->world();
+        $commissary = $this->branch('Commissary', 'commissary');
+        $response = $this->actingAs($world['owner'])->get('/orders')->assertOk();
+        $document = new \DOMDocument;
+        @$document->loadHTML($response->getContent());
+        $xpath = new \DOMXPath($document);
+        $this->assertSame(0, $xpath->query('//select[@id="o_branch_id"]/option[@value="'.$commissary->id.'"]')->length);
+        $this->assertSame(1, $xpath->query('//select[@id="o_branch_id"]/option[@value="'.$world['silang']->id.'"]')->length);
+        $item = $this->item();
+        $this->createViaOrders($world['owner'], $commissary->id, [['item_id' => $item->id, 'quantity' => 1]])
+            ->assertUnprocessable()->assertJson(['ok' => false, 'error' => 'Commissary cannot be selected as an order destination.']);
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_branch_manager_new_order_links_to_order_supplies_instead_of_modal(): void
+    {
+        $world = $this->world();
+        $response = $this->actingAs($world['bm'])->get('/orders')->assertOk()
+            ->assertDontSee('id="orderModal"', false)->assertDontSee('onclick="openOrderModal()"', false);
+        $document = new \DOMDocument;
+        @$document->loadHTML($response->getContent());
+        $xpath = new \DOMXPath($document);
+        $this->assertSame(1, $xpath->query('//a[@href="'.route('ordering').'" and contains(normalize-space(.), "New Order")]')->length);
+        $this->actingAs($world['owner'])->get('/orders')->assertOk()->assertSee('id="orderModal"', false);
+    }
+
     private function placeViaOrdering(User $bm, array $cart)
     {
         return $this->actingAs($bm)->postJson('/ordering/api', [...$this->paymentProof(), 'action' => 'place_order', 'cart' => json_encode($cart)]);

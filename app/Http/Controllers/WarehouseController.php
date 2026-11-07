@@ -460,6 +460,7 @@ class WarehouseController extends Controller
         return view('products.index', array_merge($this->catalogData(), [
             'canManageProducts' => $user->canManageCatalog(),
             'canManageAvailability' => $user->canManageProductAvailability(),
+            'archivedProducts' => $user->isOwner() ? Item::with('category')->whereNotNull('archived_at')->orderByDesc('archived_at')->get() : collect(),
         ]));
     }
 
@@ -475,7 +476,8 @@ class WarehouseController extends Controller
              SUM(CASE WHEN quantity_left > 0 AND `condition` = ? THEN quantity_left ELSE 0 END) AS damaged_stock',
             ['damaged', $today, $today, 'damaged']
         )->groupBy('item_id');
-        $allItems = DB::table('items as i')->leftJoin('categories as c', 'c.id', '=', 'i.category_id')
+        $allItems = Item::query()->from('items as i')->with('category')->leftJoin('categories as c', 'c.id', '=', 'i.category_id')
+            ->whereNull('i.archived_at')
             ->leftJoinSub($stockBreakdown, 's', 's.item_id', '=', 'i.id')
             ->select('i.*', 'c.name as category_name', 'c.goods_type',
                 DB::raw('COALESCE(s.physical_stock,0) AS physical_stock'), DB::raw('COALESCE(s.physical_stock,0) AS total_stock'),
@@ -566,6 +568,10 @@ class WarehouseController extends Controller
             return $this->deleteProduct($request, $user);
         }
 
+        if (in_array($action, ['archive_product', 'restore_product'], true)) {
+            return $this->archiveProduct($request, $user, $action === 'restore_product');
+        }
+
         if ($action === 'dispose_batch') {
             return $this->disposeBatch($request, $mainBid, $user);
         }
@@ -592,17 +598,19 @@ class WarehouseController extends Controller
             return response()->json(['ok' => false, 'error' => 'Product not found.'], 422);
         }
 
+        $request->validate(['production_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today']]);
         $parsedExpiry = null;
         if ($expiryDate !== '') {
             $parsed = DateTime::createFromFormat('Y-m-d', $expiryDate);
-            if (! $parsed) {
+            if (! $parsed || $parsed->format('Y-m-d') !== $expiryDate) {
                 return response()->json(['ok' => false, 'error' => 'Invalid expiry date.'], 422);
             }
             $parsedExpiry = $parsed->format('Y-m-d');
-        } elseif ($item->shelf_life_days) {
-            $d = new DateTime;
-            $d->modify('+'.(int) $item->shelf_life_days.' days');
-            $parsedExpiry = $d->format('Y-m-d');
+        } elseif ($item->shelfLifeMonths() || $item->shelf_life_days) {
+            if (! $request->filled('production_date')) {
+                return response()->json(['ok' => false, 'error' => 'Enter the production date to calculate expiry, or enter the printed expiry date.'], 422);
+            }
+            $parsedExpiry = $item->expiryFromProduction($request->string('production_date')->toString());
         }
 
         $stockService = new StockService;
@@ -821,6 +829,9 @@ class WarehouseController extends Controller
     protected function saveProduct(Request $request, $user): JsonResponse
     {
         $id = (int) $request->input('id', 0);
+        if (Item::whereKey($id)->whereNotNull('archived_at')->exists()) {
+            return response()->json(['ok' => false, 'error' => 'Restore the archived product before editing it.'], 422);
+        }
         $itemName = trim($request->input('item_name', ''));
         $categoryId = (int) $request->input('category_id', 0);
         $unit = trim($request->input('unit', 'pack'));
@@ -828,6 +839,7 @@ class WarehouseController extends Controller
         $price = (float) $request->input('price', 0);
         $reorderLevel = (int) $request->input('reorder_level', 10);
         $shelfLifeDays = $request->input('shelf_life_days', '');
+        $request->validate(['shelf_life_months' => ['nullable', 'integer', 'min:1', 'max:120']]);
         $remarks = trim($request->input('remarks', ''));
 
         if ($itemName === '') {
@@ -876,6 +888,7 @@ class WarehouseController extends Controller
                     'price' => $price,
                     'reorder_level' => $reorderLevel,
                     'shelf_life_days' => $shelfLifeInt,
+                    'shelf_life_months' => $request->input('shelf_life_months') ?: null,
                     'remarks' => $remarks ?: null,
                 ];
                 if ($imagePath !== null) {
@@ -902,6 +915,7 @@ class WarehouseController extends Controller
                     'image_path' => $imagePath,
                     'reorder_level' => $reorderLevel,
                     'shelf_life_days' => $shelfLifeInt,
+                    'shelf_life_months' => $request->input('shelf_life_months') ?: null,
                     'remarks' => $remarks ?: null,
                     'is_active' => true,
                 ]);
@@ -943,7 +957,7 @@ class WarehouseController extends Controller
         $isActive = (bool) $data['is_active'];
 
         return DB::transaction(function () use ($data, $isActive, $user) {
-            $item = Item::whereKey($data['id'])->lockForUpdate()->first();
+            $item = Item::whereKey($data['id'])->whereNull('archived_at')->lockForUpdate()->first();
 
             if (! $item) {
                 return response()->json(['ok' => false, 'error' => 'Product not found.'], 404);
@@ -968,6 +982,26 @@ class WarehouseController extends Controller
         });
     }
 
+    protected function archiveProduct(Request $request, User $user, bool $restore): JsonResponse
+    {
+        abort_unless($user->isOwner(), 403);
+        $data = $request->validate(['id' => ['required', 'integer', 'min:1'], 'confirmed' => ['required', 'accepted']]);
+
+        return DB::transaction(function () use ($data, $user, $restore): JsonResponse {
+            $item = Item::whereKey($data['id'])->lockForUpdate()->firstOrFail();
+            if (($restore && $item->archived_at === null) || (! $restore && $item->archived_at !== null)) {
+                return response()->json(['ok' => true, 'message' => $restore ? 'Product already restored.' : 'Product already archived.']);
+            }
+            $item->archived_at = $restore ? null : now();
+            $item->is_active = false;
+            $item->save();
+            AuditLog::create(['user_id' => $user->id, 'action' => $restore ? 'restored product' : 'archived product',
+                'table_name' => 'items', 'record_id' => $item->id, 'details' => $item->item_name]);
+
+            return response()->json(['ok' => true, 'message' => $restore ? 'Product restored as unavailable. Make it available when ready for orders.' : 'Product archived. Existing stock and history are preserved.']);
+        });
+    }
+
     protected function deleteProduct(Request $request, User $user): JsonResponse
     {
         abort_unless($user->isOwner(), 403);
@@ -984,9 +1018,13 @@ class WarehouseController extends Controller
                 return response()->json(['ok' => false, 'error' => 'Product not found.'], 404);
             }
 
+            if ($item->archived_at === null) {
+                return response()->json(['ok' => false, 'error' => 'Archive the product before permanently deleting it.'], 422);
+            }
+
             foreach (['stock_batches', 'stock_transactions', 'order_items', 'order_productions', 'sales_records', 'alerts', 'forecast_recommendations'] as $table) {
                 if (DB::table($table)->where('item_id', $item->id)->exists()) {
-                    return response()->json(['ok' => false, 'error' => 'This product has linked stock, orders, or history. Mark it unavailable instead to preserve these records.'], 422);
+                    return response()->json(['ok' => false, 'error' => 'This product has linked stock, orders, or history and must remain archived to preserve these records.'], 422);
                 }
             }
 

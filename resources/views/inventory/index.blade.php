@@ -21,6 +21,17 @@
     </div>
 </div>
 
+{{-- ═══ TABS (Branch Manager only) ════════════════════════ --}}
+@if($showMovements)
+<div class="d-flex flex-wrap gap-2 mb-3" role="tablist" aria-label="Inventory views">
+    <a class="btn btn-sm hv-tab-btn {{ $tab === 'inventory' ? 'active' : '' }}"
+       href="{{ route('inventory') }}" aria-current="{{ $tab === 'inventory' ? 'page' : 'false' }}">Inventory</a>
+    <a class="btn btn-sm hv-tab-btn {{ $tab === 'movements' ? 'active' : '' }}"
+       href="{{ route('inventory', ['tab' => 'movements']) }}" aria-current="{{ $tab === 'movements' ? 'page' : 'false' }}">Movement History</a>
+</div>
+@endif
+
+@if($tab === 'inventory')
 {{-- ═══ FILTER BAR ════════════════════════════════════════ --}}
 <div class="hv-card p-2 mb-3">
     <div class="row g-2 align-items-center">
@@ -162,6 +173,133 @@
         </table>
     </div>
 </div>
+@endif
+
+{{-- ═══ MOVEMENT HISTORY TAB ══════════════════════════════ --}}
+@if($tab === 'movements')
+@php
+    $mvTypes = ['in' => 'IN', 'out' => 'OUT', 'adjustment' => 'Adjustment', 'expired' => 'Expired', 'damaged' => 'Damaged'];
+    $mvHasFilters = ($movementFilters['search'] ?? '') !== '' || ($movementFilters['from'] ?? '') !== ''
+        || ($movementFilters['to'] ?? '') !== '' || ($movementFilters['type'] ?? '') !== '' || ($movementFilters['category'] ?? '') !== '';
+@endphp
+<div class="hv-card p-2 mb-3">
+    <form method="GET" action="{{ route('inventory') }}" class="row g-2 align-items-end">
+        <input type="hidden" name="tab" value="movements">
+        <div class="col-12 col-md-4">
+            <label class="form-label small mb-1" for="mvSearch">Search</label>
+            <input type="text" class="form-control form-control-sm" id="mvSearch" name="search"
+                   maxlength="100" value="{{ $movementFilters['search'] }}"
+                   placeholder="Product, batch #, QR, or order…">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1" for="mvFrom">Date from</label>
+            <input type="date" class="form-control form-control-sm" id="mvFrom" name="from" value="{{ $movementFilters['from'] }}">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1" for="mvTo">Date to</label>
+            <input type="date" class="form-control form-control-sm" id="mvTo" name="to" value="{{ $movementFilters['to'] }}">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1" for="mvType">Movement type</label>
+            <select class="form-select form-select-sm" id="mvType" name="type">
+                <option value="">All types</option>
+                @foreach($mvTypes as $value => $label)
+                    <option value="{{ $value }}" @selected($movementFilters['type'] === $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1" for="mvCategory">Category</label>
+            <select class="form-select form-select-sm" id="mvCategory" name="category">
+                <option value="">All categories</option>
+                @foreach($categories as $cat)
+                    <option value="{{ $cat->id }}" @selected((string) $movementFilters['category'] === (string) $cat->id)>{{ e($cat->name) }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-maroon"><i class="ph ph-funnel me-1"></i> Apply filters</button>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ route('inventory', ['tab' => 'movements']) }}">Clear</a>
+        </div>
+    </form>
+</div>
+
+<div class="hv-card p-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-3">Date/Time</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th class="text-end">Quantity</th>
+                    <th>Batch</th>
+                    <th>Order</th>
+                    <th>Reason</th>
+                    <th>By</th>
+                </tr>
+            </thead>
+            <tbody>
+            @forelse($movements as $tx)
+                @php
+                    $mvColors = ['in' => 'success', 'out' => 'danger', 'adjustment' => 'warning', 'expired' => 'dark', 'damaged' => 'secondary'];
+                    // Quantity is stored signed; show the stored sign, never add a second one.
+                    $qty = (int) $tx->quantity;
+                    $qtySign = $qty > 0 ? '+' : '';
+                    $qtyClass = $qty > 0 ? 'text-success' : ($qty < 0 ? 'text-danger' : 'text-muted');
+                    $ref = $movementOrderRefs[$tx->id] ?? null;
+                @endphp
+                <tr>
+                    <td class="ps-3 small text-nowrap">{{ $tx->created_at?->timezone(config('app.timezone'))->format('M j, Y g:i A') }}</td>
+                    <td>
+                        {{ e($tx->item->item_name ?? '—') }}
+                        @if($tx->item && ! $tx->item->is_active)
+                            <span class="hv-badge hv-badge-danger ms-1">Inactive</span>
+                        @endif
+                    </td>
+                    <td><span class="badge bg-{{ $mvColors[$tx->type] ?? 'secondary' }}">{{ strtoupper($tx->type) }}</span></td>
+                    <td class="text-end fw-bold {{ $qtyClass }} text-nowrap">
+                        {{ $qtySign }}{{ $qty }} <span class="text-muted fw-normal small">{{ e($tx->item->unit ?? '') }}</span>
+                    </td>
+                    <td>
+                        @if($tx->batch_id)
+                            <a href="{{ route('stock.batch', $tx->batch_id) }}">#{{ $tx->batch_id }}</a>
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td>
+                        @if($ref)
+                            <a href="{{ route('orders', ['order' => $ref['id']]) }}">{{ e($ref['number']) }}</a>
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td class="small">{{ e($tx->reason) ?: '—' }}</td>
+                    <td class="small text-nowrap">{{ e($tx->performer->full_name ?? '—') }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        {{ $mvHasFilters ? 'No movements match your filters.' : 'No inventory movements recorded yet.' }}
+                    </td>
+                </tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-2 border-top">
+        <span class="text-muted small">
+            @if($movements->total() > 0)
+                Showing {{ $movements->firstItem() }}–{{ $movements->lastItem() }} of {{ $movements->total() }} record{{ $movements->total() !== 1 ? 's' : '' }}
+            @else
+                0 records
+            @endif
+        </span>
+        <div>{{ $movements->onEachSide(1)->links() }}</div>
+    </div>
+</div>
+@endif
 
 {{-- ═══ ADD / EDIT PRODUCT MODAL ══════════════════════════ --}}
 @if($canManageProducts)
@@ -276,6 +414,13 @@
 </div>
 
 @endsection
+
+@push('styles')
+<style>
+.hv-tab-btn { border:1px solid var(--line, #e7e0d4); background:#fff; color:var(--maroon); font-weight:600; text-decoration:none; }
+.hv-tab-btn.active { background:var(--maroon); color:#fff; border-color:var(--maroon); }
+</style>
+@endpush
 
 @push('scripts')
 <script>

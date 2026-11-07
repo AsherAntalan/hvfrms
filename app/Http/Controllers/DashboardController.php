@@ -4,11 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\Alert;
 use App\Models\Branch;
+use App\Models\ExpiredBatchArchive;
 use App\Models\Item;
 use App\Models\Order;
+use App\Models\ReceivingIssue;
+use App\Models\StockBatch;
 use App\Models\User;
+use App\Services\AccountRequestService;
 use App\Services\CommissarySalesService;
 use App\Services\DemoSalesService;
+use App\Services\RecoveryApprovalService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +36,11 @@ class DashboardController extends Controller
         $mainBid = $mainBranch ? $mainBranch->id : 0;
 
         $stats = [];
+        $stats['account_requests'] = count(app(AccountRequestService::class)->notificationItemsFor($user));
+        $stats['recovery_requests'] = app(RecoveryApprovalService::class)->countFor($user);
+        $stats['receiving_issues'] = $user->isAdmin()
+            ? ReceivingIssue::where('status', 'pending')->whereIn('order_id', Order::where('status', 'delivering')->whereNull('archived_at')->select('id'))->count()
+            : 0;
 
         $stats['items'] = Item::where('is_active', true)->count();
         $stats['branches'] = Branch::where('is_active', true)->count();
@@ -120,15 +130,10 @@ class DashboardController extends Controller
 
         // Expired stock count (warehouse roles)
         if ($isWarehouse || $isOwner) {
-            $expiredFilter = $isWarehouse ? 'AND sb.branch_id = '.intval($mainBid) : '';
-            $expiredCount = DB::selectOne("
-                SELECT COUNT(*) AS cnt FROM stock_batches sb
-                WHERE sb.quantity_left > 0
-                  AND sb.expiry_date IS NOT NULL
-                  AND sb.expiry_date < CURDATE()
-                  {$expiredFilter}
-            ");
-            $stats['expired'] = $expiredCount->cnt ?? 0;
+            $stats['expired'] = StockBatch::where('quantity_left', '>', 0)
+                ->whereDate('expiry_date', '<', today())
+                ->whereNotIn('id', ExpiredBatchArchive::visible()->select('batch_id'))
+                ->when($isWarehouse, fn ($query) => $query->where('branch_id', $mainBid))->count();
         }
 
         // Recent orders

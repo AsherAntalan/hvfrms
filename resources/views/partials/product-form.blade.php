@@ -56,10 +56,16 @@
                                 <div class="form-text">Alert when stock falls below this number.</div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label fw-semibold">Shelf Life (days)</label>
+                                <label class="form-label fw-semibold">Shelf Life (calendar months)</label>
+                                <input type="number" class="form-control" name="shelf_life_months" id="p_shelf_life_months"
+                                       min="1" max="120" placeholder="Category default">
+                                <div class="form-text">Juice: 12 months. Sauces, bread, frozen food: 6 months. Enter a product-specific override if needed.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Custom Shelf Life (days)</label>
                                 <input type="number" class="form-control" name="shelf_life_days" id="p_shelf_life_days"
                                        min="1" placeholder="e.g. 30">
-                                <div class="form-text">Used for FIFO expiry tracking.</div>
+                                <div class="form-text">For exceptions only. Calendar months take priority. Used for FEFO expiry tracking.</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold">Product Image</label>

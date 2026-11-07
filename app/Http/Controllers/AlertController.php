@@ -303,6 +303,7 @@ class AlertController extends Controller
             'sidebar' => [
                 'orders' => $pendingDeliveryCount->count(),
                 'alerts' => $alertTotal,
+                'recovery' => $recoveryTotal,
             ],
         ])->header('Cache-Control', 'no-store, private');
     }

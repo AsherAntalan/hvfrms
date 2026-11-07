@@ -27,11 +27,26 @@ class OrderPaymentController extends Controller
     {
         $this->authorizeOrder($request, $order);
         abort_unless($order->isProformaAvailable(), 403, 'Proforma printing is available only after order confirmation by the Owner, Admin, or Commissary Manager.');
-        $order->loadMissing('approvedByUser');
+        $order->loadMissing('approvedByUser', 'branch');
+
+        $receivingQrPath = Setting::get('gcash_receiving_qr_path');
 
         return response()->view('orders.proforma', [
             'order' => $order,
             'invoice' => $order->proforma_snapshot ?? $payments->snapshot($order),
+            // Current, approved payment configuration (never the sample's banking details).
+            'payment' => [
+                'account_name' => Setting::get('gcash_account_name'),
+                'account_number' => Setting::get('gcash_account_number'),
+                'qr_url' => $receivingQrPath && Storage::disk('local')->exists($receivingQrPath)
+                    ? route('payments.gcash-qr')
+                    : null,
+            ],
+            // Destination identity shown only when the branch records it; never invented.
+            'destination' => [
+                'address' => $order->branch?->address,
+                'contact' => $order->branch?->contact_number,
+            ],
         ])->header('Cache-Control', 'private, no-store');
     }
 

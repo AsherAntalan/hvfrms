@@ -57,10 +57,10 @@
 
         <h1>Request a password reset</h1>
         <p class="hv-recover-desc">Enter your username, recovery code, and an email you can access to begin your reset request.</p>
-        <p class="hv-recover-hint mb-3">Staff: manager verifies identity, then admin approves. Manager: admin. Admin/Owner: super admin.</p>
+        <p class="hv-recover-hint mb-3">Staff: manager verifies identity, then admin approves. Manager: admin approves. Admin: enter your registered email to get the reset link there automatically.</p>
 
         @if(session('recovery_requested'))
-            <noscript><div class="alert alert-info small" role="status">Check your email. If your username and recovery code are valid, a verification email will be sent. Check your inbox and spam folder. If nothing arrives, retry later or contact your manager/admin.</div></noscript>
+            <noscript><div class="alert alert-info small" role="status">Check your inbox and spam folder. Eligible admins receive a reset link at their registered email. Other accounts receive an email verification link before approval.</div></noscript>
         @endif
         @if(session('email_verified'))
             <div class="alert alert-success small" role="status">Email verified. Staff must have their identity verified by their manager before admin approval. Managers contact admin for identity verification and approval. The reset link will be sent after approval.</div>
@@ -74,7 +74,6 @@
 
         <form method="POST" action="{{ route('password.code.update') }}" novalidate>
             @csrf
-
             <div class="hv-recover-field">
                 <label for="username">Username</label>
                 <div class="hv-recover-input">
@@ -95,7 +94,7 @@
                 <p class="hv-recover-hint">12 characters. Case and dashes do not matter.</p>
             </div>
 
-            <div class="hv-recover-field">
+            <div class="hv-recover-field" id="recoveryEmailField">
                 <label for="email">Personal email for this request</label>
                 <div class="hv-recover-input">
                     <input type="email" id="email" name="email" value="{{ old('email') }}" required maxlength="254" autocomplete="email">
@@ -103,7 +102,7 @@
                 </div>
                 <p class="hv-recover-hint">Used only for this recovery request. Your registered account email will not change.</p>
             </div>
-            <div class="hv-recover-field">
+            <div class="hv-recover-field" id="recoveryContactField">
                 <label for="contact_number">Contact number for this request (optional)</label>
                 <div class="hv-recover-input">
                     <input type="tel" id="contact_number" name="contact_number" value="{{ old('contact_number') }}" maxlength="30" autocomplete="tel" placeholder="09XX XXX XXXX">
@@ -125,7 +124,7 @@
         <script>
             window.hvModal.success({
                 title: 'Check your email',
-                message: 'If your username and recovery code are valid, a verification email will be sent. Check your Inbox and Spam folder, then open the link to verify your email. If nothing arrives, retry later or contact your manager/admin.',
+                message: 'Check your Inbox and Spam folder. Eligible Admin accounts receive a password-reset link at their registered email. Other accounts receive a verification link before approval. If nothing arrives, retry later or contact support.',
                 doneText: 'Got it'
             });
         </script>

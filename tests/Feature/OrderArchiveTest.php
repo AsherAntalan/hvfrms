@@ -60,19 +60,24 @@ class OrderArchiveTest extends TestCase
         return compact('commissary', 'branch', 'otherBranch', 'users', 'item', 'history', 'active', 'foreign', 'batch');
     }
 
-    public function test_admin_can_inspect_archived_orders_but_cannot_change_them(): void
+    public function test_admin_can_archive_restore_and_delete_orders(): void
     {
         $world = $this->world();
-        $this->changeArchive($world['users']['commissary_manager'], $world['history'])->assertOk();
         $admin = $world['users']['admin'];
+        $this->actingAs($admin)->get('/orders?queue=history')->assertOk()
+            ->assertViewHas('canArchiveOrders', true)
+            ->assertSee('data-order-archive="archive"', false);
+        $this->changeArchive($admin, $world['history'])->assertOk();
+        $this->assertSame($admin->id, $world['history']->fresh()->archived_by);
         $this->actingAs($admin)->get('/orders?archived=1')->assertOk()
             ->assertSee('ORD-HISTORY')
-            ->assertSee('commissary_manager')
-            ->assertViewHas('canArchiveOrders', false)
-            ->assertDontSee('data-order-archive=', false)
-            ->assertDontSee('> Delete</button>', false);
-        $this->postJson('/orders/api', ['action' => 'delete_order', 'id' => $world['history']->id])->assertForbidden();
-        $this->assertNotNull($world['history']->fresh()->archived_at);
+            ->assertSee('data-order-archive="restore"', false)
+            ->assertSee('onclick="deleteArchivedOrder(this)"', false);
+        $this->changeArchive($admin, $world['history'], true)->assertOk();
+        $this->assertNull($world['history']->fresh()->archived_at);
+        $this->changeArchive($admin, $world['history'])->assertOk();
+        $this->postJson('/orders/api', ['action' => 'delete_order', 'id' => $world['history']->id])->assertOk();
+        $this->assertDatabaseMissing('orders', ['id' => $world['history']->id]);
     }
 
     private function changeArchive(User $user, Order $order, bool $restore = false)
@@ -120,15 +125,15 @@ class OrderArchiveTest extends TestCase
         $this->assertDatabaseCount('audit_log', 0);
     }
 
-    public function test_operational_roles_can_manage_archives_but_admin_monitors_only(): void
+    public function test_operational_roles_and_admin_can_manage_archives_but_staff_cannot(): void
     {
         $world = $this->world();
-        foreach (['owner', 'super_admin', 'commissary_manager', 'branch_manager'] as $role) {
+        foreach (['owner', 'super_admin', 'admin', 'commissary_manager', 'branch_manager'] as $role) {
             $this->changeArchive($world['users'][$role], $world['history'])->assertOk();
             $this->assertSame($world['users'][$role]->id, $world['history']->fresh()->archived_by);
             $this->changeArchive($world['users'][$role], $world['history'], true)->assertOk();
         }
-        foreach (['admin', 'commissary_staff', 'branch_staff'] as $role) {
+        foreach (['commissary_staff', 'branch_staff'] as $role) {
             $this->changeArchive($world['users'][$role], $world['history'])->assertForbidden();
             $this->changeArchive($world['users'][$role], $world['history'], true)->assertForbidden();
         }

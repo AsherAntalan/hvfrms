@@ -20,7 +20,7 @@ class EmailRecoveryService
 {
     public function __construct(private ResetCodeService $codes) {}
 
-    public function request(string $username, string $code, string $email, ?string $contactNumber = null): void
+    public function request(string $username, string $code, ?string $email = null, ?string $contactNumber = null): void
     {
         $key = 'email-recovery:'.hash('sha256', strtolower($username));
         if (RateLimiter::tooManyAttempts($key, 3)) {
@@ -33,7 +33,21 @@ class EmailRecoveryService
         }
         DB::transaction(function () use ($username, $normalized, $email, $contactNumber): void {
             $user = User::with('role')->where('username', $username)->where('status', 'active')->lockForUpdate()->first();
-            if (! $user || $user->isSuperAdmin() || ! hash_equals($user->recovery_code_hash ?? '', $this->codes->hash($normalized))) {
+            if (! $user || $user->retired_at || $user->isSuperAdmin() || ! hash_equals($user->recovery_code_hash ?? '', $this->codes->hash($normalized))) {
+                return;
+            }
+            if ($user->isAdmin()) {
+                // Auto self-service only when the submitted personal email matches the
+                // admin's own registered email. The link is always sent to the
+                // registered email; a non-matching email triggers nothing.
+                if ($email !== null && $user->email !== null
+                    && hash_equals(strtolower($user->email), strtolower(trim($email)))) {
+                    $this->requestAdminReset($user);
+                }
+
+                return;
+            }
+            if (! $email) {
                 return;
             }
             $this->revokeOthers($user, null, [PasswordResetRequest::STATUS_AWAITING_EMAIL]);
@@ -54,6 +68,37 @@ class EmailRecoveryService
             }
             $this->audit($user, $reset, 'recovery_email_requested');
         });
+    }
+
+    private function requestAdminReset(User $user): void
+    {
+        if (! filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        $this->revokeOthers($user, null);
+        $token = bin2hex(random_bytes(32));
+        $reset = PasswordResetRequest::create([
+            'user_id' => $user->id, 'requested_by' => $user->id,
+            'status' => PasswordResetRequest::STATUS_APPROVED, 'is_admin_self_service' => true,
+            'request_email' => $user->email, 'code_hash' => $user->recovery_code_hash,
+            'code_generated_at' => now(), 'code_generated_by' => $user->id,
+            'code_expires_at' => now()->addHours(12), 'reset_token_hash' => hash('sha256', $token),
+        ]);
+        try {
+            Mail::to($user->email)->send(new PasswordResetMail($user->full_name, route('password.code.link', $token), 720));
+        } catch (\Throwable $exception) {
+            Log::warning('Admin recovery link delivery failed.', ['user_id' => $user->id, 'exception_type' => get_class($exception)]);
+            throw ValidationException::withMessages(['delivery' => 'Reset email delivery failed.']);
+        }
+        $this->audit($user, $reset, 'admin_self_service_recovery_requested');
+    }
+
+    private function validAdminSelfService(PasswordResetRequest $reset, User $user): bool
+    {
+        return $reset->is_admin_self_service && $user->isAdmin() && $user->status === 'active' && ! $user->retired_at
+            && $reset->requested_by === $user->id && $reset->approved_by === null
+            && $user->email !== null && hash_equals(strtolower($user->email), strtolower($reset->request_email ?? ''))
+            && hash_equals($user->recovery_code_hash ?? '', $reset->code_hash ?? '');
     }
 
     public function verificationForToken(string $token): ?PasswordResetRequest
@@ -153,9 +198,13 @@ class EmailRecoveryService
 
     public function resetForToken(string $token): ?PasswordResetRequest
     {
-        return PasswordResetRequest::where('status', PasswordResetRequest::STATUS_APPROVED)
-            ->whereNotNull('email_verified_at')->whereNotNull('identity_verified_at')->where('reset_token_hash', hash('sha256', $token))
-            ->where('code_expires_at', '>', now())->first();
+        $reset = PasswordResetRequest::with('user.role')->where('status', PasswordResetRequest::STATUS_APPROVED)
+            ->where('reset_token_hash', hash('sha256', $token))->where('code_expires_at', '>', now())->first();
+        if ($reset?->is_admin_self_service) {
+            return $reset->user && $this->validAdminSelfService($reset, $reset->user) ? $reset : null;
+        }
+
+        return $reset?->email_verified_at && $reset->identity_verified_at ? $reset : null;
     }
 
     public function complete(string $token, string $password): bool
@@ -169,9 +218,12 @@ class EmailRecoveryService
             $user = User::with('role')->whereKey($candidate->user_id)->lockForUpdate()->firstOrFail();
             $reset = PasswordResetRequest::whereKey($candidate->id)->lockForUpdate()->firstOrFail();
             $approver = User::with('role')->find($reset->approved_by);
-            if (! $approver?->canApproveResetFor($user) || $user->isSuperAdmin()
+            $authorized = $reset->is_admin_self_service
+                ? $this->validAdminSelfService($reset, $user)
+                : $approver?->canApproveResetFor($user) && $reset->email_verified_at && $reset->identity_verified_at;
+            if (! $authorized || $user->isSuperAdmin() || $user->status !== 'active' || $user->retired_at
                 || (($user->isStaffRole() || $reset->manager_verified_by) && ! $reset->hasValidManagerVerification())
-                || $reset->status !== PasswordResetRequest::STATUS_APPROVED || ! $reset->email_verified_at || ! $reset->identity_verified_at
+                || $reset->status !== PasswordResetRequest::STATUS_APPROVED
                 || ! $reset->code_expires_at?->isFuture()
                 || ! hash_equals($reset->reset_token_hash ?? '', hash('sha256', $token))
                 || ! hash_equals($user->recovery_code_hash ?? '', $reset->code_hash ?? '')) {
@@ -184,6 +236,7 @@ class EmailRecoveryService
             ]);
             $reset->update([
                 'status' => PasswordResetRequest::STATUS_USED, 'used_at' => now(),
+                'email_verified_at' => $reset->email_verified_at ?? now(),
                 'reset_token_hash' => null, 'code_hash' => null, 'code_expires_at' => null,
             ]);
             $this->codes->rotate($user);

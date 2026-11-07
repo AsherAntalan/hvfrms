@@ -2,16 +2,6 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="piecePrepareTitle">Prepare / Pick</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
         <div class="modal-body">
-            <div id="pieceOrderToolbar" class="d-flex flex-wrap gap-2 mb-3" hidden>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="pieceOrderDetailsButton" aria-pressed="false">View Details</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="pieceOrderPreparationButton" hidden>Preparation</button>
-                @if(!Auth::user()->isCommissaryStaff())
-                <a class="btn btn-sm btn-outline-secondary" id="pieceOrderProforma" target="_blank" rel="noopener" hidden>Print Proforma</a>
-                @endif
-                @if(Auth::user()->isOwner() || Auth::user()->isCommissaryManager())
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="pieceOrderLabels" hidden>Print Labels</button>
-                @endif
-            </div>
             <p class="text-muted small" id="pieceOrderDescription"></p>
             <div id="pieceOrderDetails" hidden></div>
             <div id="piecePrepareBody"></div>
@@ -27,8 +17,21 @@
             <div id="piecePrepareError" class="text-danger mt-2" role="alert"></div>
         </div>
         <div class="modal-footer flex-wrap gap-2">
-            <button type="button" id="pieceOrderCancel" class="btn btn-outline-danger me-auto" hidden>Cancel Order</button>
-            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+            {{-- LEFT: destructive action, kept apart from document/navigation actions to reduce misclicks. --}}
+            <button type="button" id="pieceOrderCancel" class="btn btn-outline-danger" hidden>Cancel Order</button>
+            {{-- SECONDARY: document/navigation actions. Shown as a group only after the order loads (toggled by JS). --}}
+            <div id="pieceOrderToolbar" class="d-flex flex-wrap gap-2 ms-sm-3" hidden>
+                <button type="button" class="btn btn-outline-secondary" id="pieceOrderDetailsButton" aria-pressed="false" hidden>View Details</button>
+                <button type="button" class="btn btn-outline-secondary" id="pieceOrderPreparationButton" hidden>Preparation</button>
+                @if(!Auth::user()->isCommissaryStaff())
+                <a class="btn btn-outline-secondary" id="pieceOrderProforma" target="_blank" rel="noopener" hidden>Print Proforma</a>
+                @endif
+                @if(Auth::user()->isOwner() || Auth::user()->isCommissaryManager())
+                <button type="button" class="btn btn-outline-secondary" id="pieceOrderLabels" hidden>Print Labels</button>
+                @endif
+            </div>
+            {{-- RIGHT: Close plus the primary action. ms-auto pushes this cluster to the right whether or not the secondary group is shown. --}}
+            <button type="button" class="btn btn-light ms-auto" data-bs-dismiss="modal">Close</button>
             <button type="button" id="pieceOrderManualRelease" class="btn btn-outline-maroon" hidden>Manual Release</button>
             <a id="pieceOrderScanOut" class="btn btn-maroon" hidden>Release / Scan Out</a>
             <button type="button" id="piecePrepareSave" class="btn btn-maroon" disabled>Save Preparation &amp; Open Labels</button>
@@ -132,7 +135,7 @@
         preparationAvailable = false;
         modal = bootstrap.Modal.getOrCreateInstance(workspace);
         element('piecePrepareTitle').textContent = (mode === 'prepare' ? 'Prepare / Pick - ' : 'Release - ') + button.dataset.orderNumber;
-        ['pieceOrderToolbar', 'pieceOrderDetails', 'pieceOrderPreparationButton', 'pieceOrderCancelPanel', 'pieceOrderCancel', 'pieceOrderScanOut', 'pieceOrderManualRelease', 'pieceOrderProforma', 'pieceOrderLabels'].forEach(id => {
+        ['pieceOrderToolbar', 'pieceOrderDetails', 'pieceOrderDetailsButton', 'pieceOrderPreparationButton', 'pieceOrderCancelPanel', 'pieceOrderCancel', 'pieceOrderScanOut', 'pieceOrderManualRelease', 'pieceOrderProforma', 'pieceOrderLabels'].forEach(id => {
             if (element(id)) element(id).hidden = true;
         });
         element('pieceOrderCancelReason').value = '';
@@ -171,16 +174,19 @@
                 return;
             }
             element('pieceOrderDescription').textContent = 'Record actual quantities and a reason for shortages. Saving preparation creates labels; goods are released only when dispatched.';
+            // Details/Preparation toggle pair is meaningful only when preparation controls exist.
+            element('pieceOrderDetailsButton').hidden = false;
             element('pieceOrderPreparationButton').hidden = false;
             const options = await post({action:'preparation_options',id:orderId}); if (!options.ok) throw new Error(message(options));
             if (sequence !== loadSequence) return;
             const available = new Map(options.lines.map(line => [line.order_item_id,line.available]));
+            const suggestedExpiry = new Map(options.lines.map(line => [line.order_item_id,line.suggested_expiry]));
             let html = '<p>Destination: <strong>' + escape(result.order.branch_name) + '</strong></p><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Product</th><th>Requested</th><th>Prepare</th><th>Source</th><th>Expiry</th><th>Shortage reason</th></tr></thead><tbody>';
             result.order.items.forEach(item => {
                 html += '<tr data-line="' + item.id + '"><td>' + escape(item.item_name) + '<div class="small text-muted">' + escape(item.unit) + ' · pickable: ' + (available.get(item.id) || 0) + '</div></td>'
                     + '<td>' + item.quantity + '</td><td><input type="number" aria-label="Prepared quantity for ' + escape(item.item_name) + '" min="0" max="' + item.quantity + '" step="1" value="' + (item.fulfilled_quantity ?? item.quantity) + '" class="form-control piece-quantity" style="min-width:85px"></td>'
                     + '<td><span class="text-muted">New production</span></td>'
-                    + '<td><input type="date" aria-label="Expiry for ' + escape(item.item_name) + '" class="form-control piece-expiry"><small class="text-muted piece-expiry-note">Required for perishable production</small></td>'
+                    + '<td><input type="date" aria-label="Expiry for ' + escape(item.item_name) + '" class="form-control piece-expiry" value="' + escape(suggestedExpiry.get(item.id) || '') + '"><small class="text-muted piece-expiry-note">Based on production today. Use the printed expiry if different.</small></td>'
                     + '<td><input type="text" aria-label="Shortage reason for ' + escape(item.item_name) + '" maxlength="500" class="form-control piece-reason" value="' + escape(item.fulfillment_reason || '') + '" placeholder="Required if reduced"></td></tr>';
             });
             document.getElementById('piecePrepareBody').innerHTML = html + '</tbody></table></div>';

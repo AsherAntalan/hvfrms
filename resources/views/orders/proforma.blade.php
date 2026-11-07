@@ -6,92 +6,106 @@
     <title>Proforma Invoice — {{ $order->order_number }}</title>
     <style>
         :root{
-            --maroon:#7A1717; --maroon-dark:#5C1010; --gold:#D4A94A; --gold-soft:#F3E7CC;
-            --ink:#2B2520; --muted:#857B70; --line:#E7E0D4; --paper:#F4EFE7;
+            --maroon:#7A1717; --maroon-dark:#5C1010;
+            --ink:#1F1A17; --muted:#6E655C; --label:#6B6158;
+            --line:#D7D1C7; --rule:#ECE7DE; --paper:#fff;
         }
         *{box-sizing:border-box}
-        body{margin:0;background:var(--paper);color:var(--ink);
-            font:14px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+        html,body{background:#F4F1EA}
+        body{margin:0;color:var(--ink);
+            font:13.5px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;
             font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
-        ::selection{background:var(--gold-soft);color:var(--maroon-dark)}
+        ::selection{background:#F0E4E4;color:var(--maroon-dark)}
 
-        .toolbar{max-width:860px;margin:26px auto 0;display:flex;justify-content:space-between;align-items:center;gap:12px}
-        .toolbar a{color:var(--maroon);font-weight:600;text-decoration:none;font-size:13px;display:inline-flex;align-items:center;gap:.4rem}
+        .toolbar{max-width:800px;margin:24px auto 0;display:flex;justify-content:space-between;align-items:center;gap:12px}
+        .toolbar a{color:var(--maroon);font-weight:600;text-decoration:none;font-size:13px}
         .toolbar a:hover{text-decoration:underline}
-        .toolbar button{background:var(--maroon);color:#fff;border:0;border-radius:10px;padding:10px 20px;
-            font:inherit;font-weight:700;font-size:13px;letter-spacing:.03em;cursor:pointer;
-            box-shadow:0 10px 22px -12px rgba(92,16,16,.55)}
+        .toolbar button{background:var(--maroon);color:#fff;border:0;border-radius:6px;padding:9px 18px;
+            font:inherit;font-weight:700;font-size:13px;cursor:pointer}
         .toolbar button:hover{background:var(--maroon-dark)}
 
-        .sheet{max-width:860px;margin:18px auto 40px;background:#fff;padding:0;
-            border:1px solid var(--line);border-radius:16px;overflow:hidden;
-            box-shadow:0 1px 2px rgba(60,8,8,.05),0 30px 60px -34px rgba(60,8,8,.35)}
-        .band{height:6px;background:linear-gradient(90deg,var(--maroon),var(--maroon-dark) 60%,var(--gold))}
-        .pad{padding:40px 44px}
+        /* The invoice reads as a plain white document: thin border, minimal lift. */
+        .sheet{max-width:800px;margin:14px auto 40px;background:var(--paper);
+            border:1px solid var(--line);border-radius:6px;overflow:hidden;
+            box-shadow:0 1px 2px rgba(31,26,23,.05)}
+        .pad{padding:36px 40px}
 
-        .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
-        .issuer-name{font-family:Georgia,"Times New Roman",serif;font-size:21px;font-weight:700;
-            letter-spacing:-.01em;color:var(--maroon);margin:0}
-        .issuer-sub{color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:.3rem 0 0}
+        .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;
+            padding-bottom:20px;border-bottom:1px solid var(--line)}
+        .brand{display:flex;align-items:center;gap:13px}
+        .brand img{width:52px;height:52px;object-fit:contain}
+        .issuer-name{font-size:17px;font-weight:800;letter-spacing:-.01em;color:var(--maroon);margin:0}
+        .issuer-sub{color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 0}
         .doc-title{text-align:right}
-        .doc-title h1{font-family:Georgia,"Times New Roman",serif;font-size:26px;font-weight:700;
-            letter-spacing:.02em;color:var(--maroon);margin:0;line-height:1}
-        .doc-ref{font-weight:700;color:var(--ink);margin:.55rem 0 0;font-size:14px}
-        .doc-date{color:var(--muted);font-size:12.5px;margin:.15rem 0 0}
+        .doc-title h1{font-size:21px;font-weight:800;letter-spacing:.01em;color:var(--maroon);margin:0;line-height:1}
+        .doc-meta{margin:5px 0 0;font-size:12px;color:var(--muted)}
+        .doc-meta b{color:var(--ink);font-weight:700}
 
-        .rule{height:2px;background:var(--gold);border-radius:2px;margin:22px 0 0;opacity:.85}
-
-        .meta{display:flex;gap:24px;margin:26px 0 6px}
-        .meta>div{flex:1}
-        .label{color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;margin:0 0 6px}
-        .meta .big{font-size:16px;font-weight:700;color:var(--ink);margin:0}
-        .meta p{margin:3px 0;font-size:13px}
-        .meta .kv{color:var(--muted)} .meta .kv b{color:var(--ink);font-weight:600}
+        /* Seller and destination sit as plain columns, not boxed cards. */
+        .parties{display:flex;gap:44px;margin:22px 0 0}
+        .parties>div{flex:1;min-width:0}
+        .label{color:var(--label);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 5px}
+        .big{font-size:14.5px;font-weight:700;color:var(--ink);margin:0}
+        .parties p{margin:3px 0;font-size:12.5px;color:var(--muted)}
+        .parties p b{color:var(--ink);font-weight:600}
 
         table{width:100%;border-collapse:collapse;margin:26px 0 0}
-        thead th{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-            color:var(--maroon);text-align:left;padding:10px 10px;background:var(--gold-soft);
-            border-bottom:1px solid var(--line)}
-        thead th:first-child{border-radius:8px 0 0 8px}
-        thead th:last-child{border-radius:0 8px 8px 0}
-        tbody td{padding:13px 10px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13.5px}
-        tbody tr:last-child td{border-bottom:0}
+        thead th{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+            color:#fff;text-align:left;padding:9px 12px;background:var(--maroon)}
+        thead th.num{text-align:right}
+        tbody td{padding:11px 12px;border-bottom:1px solid var(--rule);vertical-align:top;font-size:13px}
+        tbody tr:last-child td{border-bottom:1px solid var(--line)}
         .num{text-align:right;white-space:nowrap}
-        .prod{font-weight:600;color:var(--ink)}
-        tfoot td{padding:16px 10px 2px}
-        .total-label{text-align:right;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-        .total-val{text-align:right;font-family:Georgia,serif;font-size:22px;font-weight:700;color:var(--maroon)}
-        .total-row td{border-top:2px solid var(--gold)}
+        .center{text-align:center;color:var(--muted)}
+        .prod{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
 
-        .adjust{margin:14px 0 0;font-size:12.5px;color:var(--muted)}
+        .totals{margin:14px 0 0;display:flex;justify-content:flex-end}
+        .totals table{width:280px;max-width:100%;margin:0}
+        .totals td{padding:6px 12px;border:0;font-size:13px}
+        .totals .t-label{text-align:right;color:var(--muted)}
+        .totals .t-val{text-align:right;white-space:nowrap;font-weight:600}
+        .totals .grand td{border-top:1.5px solid var(--maroon);padding-top:9px}
+        .totals .grand .t-label{color:var(--ink);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:11px}
+        .totals .grand .t-val{color:var(--maroon);font-size:17px;font-weight:800}
 
-        .note{margin:26px 0 0;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:16px 18px}
-        .note-head{display:flex;align-items:center;gap:.5rem;font-weight:700;color:var(--maroon-dark);font-size:13.5px}
-        .note-badge{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-            border-radius:999px;padding:.12rem .5rem}
-        .note-badge.has{background:#E6F0E7;color:#2E6B3A}
-        .note-badge.none{background:var(--gold-soft);color:#8A6D00}
-        .note p{margin:.5rem 0 0;font-size:12.5px;color:var(--muted);line-height:1.6}
-        .note .ref{color:var(--ink)}
+        .adjust{margin:12px 0 0;font-size:12px;color:var(--muted)}
 
-        .order-notes{margin:20px 0 0;font-size:13px}
-        .order-notes b{color:var(--maroon-dark)}
-        footer{margin:26px 0 0;padding-top:16px;border-top:1px solid var(--line);
-            font-size:11.5px;color:var(--muted);line-height:1.6}
+        /* Payment + terms as plain sections under a single rule — no nested cards. */
+        .lower{display:flex;gap:44px;margin:26px 0 0;padding-top:20px;border-top:1px solid var(--line);align-items:flex-start}
+        .lower>div{flex:1;min-width:0}
+        .lower h3{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}
+        .lower p{margin:3px 0;font-size:12.5px;color:var(--muted)}
+        .lower p b{color:var(--ink)}
+        .pay{display:flex;gap:14px;align-items:flex-start}
+        .pay img{width:92px;height:92px;object-fit:contain;border:1px solid var(--line);border-radius:4px;padding:4px;background:#fff;flex:none}
+        .proof{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:12px;color:var(--muted)}
+        .proof b{color:var(--ink)}
+        .terms{margin:0;padding-left:16px}
+        .terms li{font-size:12.5px;color:var(--muted);margin:4px 0}
+        .terms .must{color:var(--ink);font-weight:600}
 
-        @media(max-width:600px){
-            .pad{padding:24px 20px}.head,.meta{flex-direction:column;gap:14px}
-            .doc-title{text-align:left}.doc-title h1{font-size:22px}
-            thead th,tbody td{padding:9px 6px}
+        .order-notes{margin:16px 0 0;font-size:12.5px;color:var(--muted)}
+        .order-notes b{color:var(--ink)}
+        footer{margin:24px 0 0;padding-top:14px;border-top:1px solid var(--line);
+            display:flex;justify-content:space-between;gap:16px;font-size:11.5px;color:var(--muted);line-height:1.55}
+        footer .prepared b{color:var(--ink)}
+
+        @media(max-width:620px){
+            .pad{padding:22px 18px}
+            .head,.parties,.lower{flex-direction:column;gap:16px}
+            .doc-title{text-align:left}
+            .totals table{width:100%}
         }
         @media print{
-            @page{size:A4;margin:14mm}
-            body{background:#fff}
+            @page{size:A4 portrait;margin:14mm}
+            html,body{background:#fff}
             .toolbar{display:none}
             .sheet{margin:0;border:0;border-radius:0;max-width:none;box-shadow:none}
-            .band{display:none}.pad{padding:0}
-            thead{display:table-header-group}tr{break-inside:avoid}
-            .note{background:none}
+            .pad{padding:0}
+            *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+            thead{display:table-header-group}
+            tbody tr{break-inside:avoid}
+            .lower,footer,.totals{break-inside:avoid}
         }
     </style>
 </head>
@@ -102,91 +116,133 @@
     </nav>
 
     <main class="sheet">
-        <div class="band"></div>
         <div class="pad">
             <header class="head">
-                <div>
-                    <h2 class="issuer-name">{{ $invoice['issuer'] }}</h2>
-                    <p class="issuer-sub">Commissary order</p>
+                <div class="brand">
+                    <img src="{{ asset('assets/img/logo.jpg') }}" alt="{{ $invoice['issuer'] }} logo">
+                    <div>
+                        <h2 class="issuer-name">{{ $invoice['issuer'] }}</h2>
+                        <p class="issuer-sub">Commissary order</p>
+                    </div>
                 </div>
                 <div class="doc-title">
                     <h1>PROFORMA INVOICE</h1>
-                    <p class="doc-ref">PF-{{ $order->order_number }}</p>
-                    <p class="doc-date">{{ $invoice['date'] }} (PHT)</p>
+                    <p class="doc-meta">Proforma <b>PF-{{ $order->order_number }}</b></p>
+                    <p class="doc-meta">Order <b>{{ $order->order_number }}</b></p>
+                    <p class="doc-meta">Issued <b>{{ $invoice['date'] }} (PHT)</b></p>
                 </div>
             </header>
-            <div class="rule"></div>
 
-            <section class="meta">
+            <section class="parties">
                 <div>
-                    <p class="label">Order for</p>
-                    <p class="big">{{ $invoice['branch'] }}</p>
-                    <p class="kv">Requested by <b>{{ $invoice['requested_by'] }}</b></p>
+                    <p class="label">Seller</p>
+                    <p class="big">{{ $invoice['issuer'] }}</p>
+                    <p>Issuing commissary</p>
                 </div>
                 <div>
-                    <p class="label">Details</p>
-                    <p class="kv">Order <b>{{ $order->order_number }}</b></p>
-                    <p class="kv">Status <b>{{ ucfirst($order->status) }}</b></p>
-                    <p class="kv">Currency <b>PHP</b></p>
-                    <p class="kv">Confirmed by <b>{{ $order->approvedByUser?->full_name ?? 'Authorized manager' }}</b></p>
-                    <p class="kv">Confirmed on <b>{{ $order->approved_at->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)</b></p>
+                    <p class="label">Bill to / Destination</p>
+                    <p class="big">{{ $invoice['branch'] }}</p>
+                    @if(!empty($destination['address']))<p>{{ $destination['address'] }}</p>@endif
+                    @if(!empty($destination['contact']))<p>Contact <b>{{ $destination['contact'] }}</b></p>@endif
+                    <p>Requested by <b>{{ $invoice['requested_by'] }}</b></p>
                 </div>
             </section>
 
             <table>
                 <thead>
                     <tr>
-                        <th>Product</th>
-                        <th class="num">Qty</th>
-                        <th>Unit</th>
-                        <th class="num">Unit price</th>
-                        <th class="num">Amount</th>
+                        <th style="width:48px">No.</th>
+                        <th>Description</th>
+                        <th class="num" style="width:60px">Qty</th>
+                        <th style="width:72px">Unit</th>
+                        <th class="num" style="width:110px">Unit price</th>
+                        <th class="num" style="width:120px">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($invoice['lines'] as $line)
                         <tr>
+                            <td class="center">{{ $loop->iteration }}</td>
                             <td class="prod">{{ $line['name'] }}</td>
                             <td class="num">{{ $line['quantity'] }}</td>
                             <td>{{ $line['unit'] }}</td>
-                            <td class="num">{{ number_format((float)$line['unit_price'], 2) }}</td>
-                            <td class="num">{{ number_format((float)$line['subtotal'], 2) }}</td>
+                            <td class="num">&#8369;{{ number_format((float) $line['unit_price'], 2) }}</td>
+                            <td class="num">&#8369;{{ number_format((float) $line['subtotal'], 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
-                <tfoot>
-                    <tr class="total-row">
-                        <td colspan="4" class="total-label">Order total (PHP)</td>
-                        <td class="total-val">&#8369;{{ number_format((float)$invoice['total'], 2) }}</td>
-                    </tr>
-                </tfoot>
             </table>
 
-            @if($order->fulfilled_amount !== null && (float)$order->fulfilled_amount !== (float)$invoice['total'])
-                <p class="adjust">Current fulfillment value: PHP {{ number_format((float)$order->fulfilled_amount, 2) }}. The Commissary must review any payment adjustment separately.</p>
+            <div class="totals">
+                <table>
+                    <tr>
+                        <td class="t-label">Subtotal</td>
+                        <td class="t-val">&#8369;{{ number_format((float) $invoice['total'], 2) }}</td>
+                    </tr>
+                    <tr class="grand">
+                        <td class="t-label">Total amount</td>
+                        <td class="t-val">&#8369;{{ number_format((float) $invoice['total'], 2) }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            @if($order->fulfilled_amount !== null && (float) $order->fulfilled_amount !== (float) $invoice['total'])
+                <p class="adjust">Current fulfillment value: &#8369;{{ number_format((float) $order->fulfilled_amount, 2) }}. This proforma keeps the original issued amount; any payment adjustment is reviewed separately by the Commissary.</p>
             @endif
 
-            <section class="note">
-                <div class="note-head">
-                    <span>Payment proof</span>
-                    @if($order->payment_reference)
-                        <span class="note-badge has">Submitted — for manual review</span>
+            <section class="lower">
+                <div>
+                    <h3>Payment instructions</h3>
+                    @if($payment['qr_url'] || $payment['account_name'])
+                        <div class="pay">
+                            @if($payment['qr_url'])
+                                <img src="{{ $payment['qr_url'] }}" alt="GCash receiving QR">
+                            @endif
+                            <div>
+                                <p>Pay via GCash to the configured recipient:</p>
+                                @if($payment['account_name'])<p>Name <b>{{ $payment['account_name'] }}</b></p>@endif
+                                @if($payment['account_number'])<p>Number <b>{{ $payment['account_number'] }}</b></p>@endif
+                                <p>Confirm the recipient in GCash before paying.</p>
+                            </div>
+                        </div>
                     @else
-                        <span class="note-badge none">No proof recorded</span>
+                        <p>No GCash receiving details are configured yet. Contact the Commissary for payment instructions.</p>
+                    @endif
+                    <div class="proof">
+                        @if($order->payment_reference)
+                            <p>Payment proof submitted — <b>for manual review</b>.</p>
+                            <p>GCash reference <b>{{ $order->payment_reference }}</b></p>
+                            <p>Submitted {{ $order->payment_submitted_at?->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)</p>
+                        @else
+                            <p>No proof recorded.</p>
+                        @endif
+                    </div>
+                </div>
+
+                <div>
+                    <h3>Notes &amp; terms</h3>
+                    <ul class="terms">
+                        <li class="must">For quotation / payment reference only.</li>
+                        <li class="must">Not an official receipt.</li>
+                        <li>This proforma shows the original requested quantities and prices. It is not a payment receipt or confirmation that funds were received.</li>
+                    </ul>
+                    @if($order->remarks)
+                        <p class="order-notes"><b>Order notes:</b> {{ $order->remarks }}</p>
                     @endif
                 </div>
-                @if($order->payment_reference)
-                    <p class="ref">GCash reference: <strong>{{ $order->payment_reference }}</strong></p>
-                    <p class="ref">Submitted: {{ $order->payment_submitted_at?->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)</p>
-                @endif
-                <p>This proforma shows the original requested quantities and prices. It is not a payment receipt or confirmation that funds were received.</p>
             </section>
 
-            @if($order->remarks)
-                <p class="order-notes"><b>Order notes:</b> {{ $order->remarks }}</p>
-            @endif
-
-            <footer>Preparation, dispatch, and branch receipt are tracked separately. Delivery status does not verify payment.</footer>
+            <footer>
+                <div class="prepared">
+                    <p>Prepared by <b>{{ $order->approvedByUser?->full_name ?? 'Authorized commissary staff' }}</b></p>
+                    <p>Confirmed by <b>{{ $order->approvedByUser?->full_name ?? 'Authorized manager' }}</b>
+                        · Confirmed on <b>{{ $order->approved_at?->timezone('Asia/Manila')->format('M j, Y g:i A') }} (PHT)</b></p>
+                </div>
+                <div style="text-align:right">
+                    <p><b style="color:var(--maroon)">{{ $invoice['issuer'] }}</b></p>
+                    <p>Preparation, dispatch, and branch receipt are tracked separately.</p>
+                </div>
+            </footer>
         </div>
     </main>
 </body>

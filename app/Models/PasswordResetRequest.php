@@ -37,6 +37,7 @@ class PasswordResetRequest extends Model
     ];
 
     protected $fillable = [
+        'is_admin_self_service',
         'manager_verified_by', 'manager_verified_at', 'manager_verification_method',
         'manager_verified_branch_id', 'manager_verified_role_id', 'manager_verified_email_hash',
         'rejection_reason',
@@ -69,6 +70,7 @@ class PasswordResetRequest extends Model
     protected function casts(): array
     {
         return [
+            'is_admin_self_service' => 'boolean',
             'manager_verified_at' => 'datetime',
             'request_contact_number' => 'encrypted',
             'request_email' => 'encrypted',

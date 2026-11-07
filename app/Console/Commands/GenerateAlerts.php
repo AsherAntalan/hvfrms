@@ -25,7 +25,7 @@ class GenerateAlerts extends Command
             return self::SUCCESS;
         }
         $recipients = User::with('role')->whereHas('role', fn (Builder $roles) => $roles->whereIn('role_name', ['super_admin', 'owner', 'admin', 'commissary_manager']))
-            ->where('status', 'active')->whereNotNull('email')->get();
+            ->where('status', 'active')->whereNull('retired_at')->whereNotNull('email')->get();
         foreach ($recipients as $recipient) {
             $alerts = Alert::visibleTo($recipient)->whereIn('id', $criticalIds)->get();
             if ($alerts->isEmpty()) {

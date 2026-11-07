@@ -159,6 +159,8 @@ class RecoveryApprovalNotificationTest extends TestCase
         $response->assertSee('reset-requests?request='.$request->id);
 
         $this->assertGreaterThanOrEqual(1, $response->json('total'));
+        // Sidebar badge count mirrors the actionable recovery items for this actor.
+        $this->assertSame(1, $response->json('sidebar.recovery'));
         $response->assertDontSee('secret-inbox@hv.test');
         $response->assertDontSee($code);
 

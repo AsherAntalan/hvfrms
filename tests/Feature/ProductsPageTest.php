@@ -88,11 +88,37 @@ class ProductsPageTest extends TestCase
         $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id])
             ->assertUnprocessable()->assertJsonValidationErrors('confirmed');
         $this->assertDatabaseHas('items', ['id' => $item->id]);
+        $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id, 'confirmed' => 1])->assertUnprocessable();
+        $this->postJson('/warehouse/api', ['action' => 'archive_product', 'id' => $item->id, 'confirmed' => 1])->assertOk();
         $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id, 'confirmed' => 1])
             ->assertOk()->assertJson(['ok' => true]);
         $this->assertDatabaseMissing('items', ['id' => $item->id]);
         $this->assertDatabaseHas('audit_log', ['action' => 'deleted product', 'record_id' => $item->id, 'user_id' => $world['users']['admin']->id]);
         $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $item->id, 'confirmed' => 1])->assertNotFound();
+    }
+
+    public function test_archived_products_can_be_restored_without_changing_history_or_reactivated_directly(): void
+    {
+        $world = $this->world();
+        $id = $world['item']->id;
+        $this->actingAs($world['users']['admin'])->postJson('/warehouse/api', ['action' => 'archive_product', 'id' => $id, 'confirmed' => 1])->assertOk();
+        $this->assertNotNull($world['item']->fresh()->archived_at);
+        $this->assertFalse($world['item']->fresh()->is_active);
+        $this->get('/products')->assertOk()->assertSee('id="archivedProductsModal"', false)
+            ->assertViewHas('allItems', fn ($items) => ! $items->contains('id', $id))
+            ->assertViewHas('archivedProducts', fn ($items) => $items->contains('id', $id));
+        $this->postJson('/warehouse/api', ['action' => 'toggle_product', 'id' => $id, 'is_active' => 1])->assertNotFound();
+        $this->postJson('/inventory/api', ['action' => 'toggle', 'id' => $id, 'is_active' => 1])->assertNotFound();
+        $this->postJson('/warehouse/api', ['action' => 'delete_product', 'id' => $id, 'confirmed' => 1])->assertUnprocessable();
+        $this->assertEquals(14, StockBatch::sum('quantity_left'));
+        $this->postJson('/warehouse/api', ['action' => 'restore_product', 'id' => $id, 'confirmed' => 1])->assertOk();
+        $this->assertNull($world['item']->fresh()->archived_at);
+        $this->assertFalse($world['item']->fresh()->is_active);
+        $this->get('/products')->assertOk()->assertViewHas('allItems', fn ($items) => $items->contains('id', $id));
+        $this->assertDatabaseHas('audit_log', ['action' => 'archived product', 'record_id' => $id]);
+        $this->assertDatabaseHas('audit_log', ['action' => 'restored product', 'record_id' => $id]);
+        $this->actingAs($world['users']['commissary_manager'])->postJson('/warehouse/api', ['action' => 'archive_product', 'id' => $id, 'confirmed' => 1])->assertForbidden();
+        $this->postJson('/warehouse/api', ['action' => 'restore_product', 'id' => $id, 'confirmed' => 1])->assertForbidden();
     }
 
     public function test_product_deletion_preserves_linked_history_and_rejects_managers(): void

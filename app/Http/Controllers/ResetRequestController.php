@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\PasswordResetRequest;
 use App\Models\User;
 use App\Services\EmailRecoveryService;
+use App\Services\RecoveryApprovalService;
 use App\Services\ResetCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class ResetRequestController extends Controller
     /**
      * Reset Requests management page, scoped to what the actor may act on.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $actor = Auth::user();
         $actor->load('role', 'branch');
@@ -52,6 +53,10 @@ class ResetRequestController extends Controller
                     });
                 }
             });
+
+        if ($request->boolean('actionable')) {
+            $requestQuery->whereIn('id', app(RecoveryApprovalService::class)->actionableFor($actor)->pluck('id'));
+        }
 
         $requests = $requestQuery
             ->orderByDesc('id')

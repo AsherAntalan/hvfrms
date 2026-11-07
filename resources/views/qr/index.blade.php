@@ -91,7 +91,7 @@
             <input type="text" id="manualCode" class="form-control" placeholder="e.g. HV-ITEM-0007" autocomplete="off">
             <button type="submit" class="btn btn-outline-maroon">Look up</button>
         </form>
-        <div class="form-text">Tip: a USB barcode scanner types into this box automatically — just scan.</div>
+        <div class="form-text">Tap Start camera and scan the QR code using your phone.</div>
     </div>
 
     <div id="scanResult"></div>
@@ -103,6 +103,7 @@
 @include('partials.commissary-group-scanner')
 
 @push('scripts')
+@include('partials.shelf-life-scripts')
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 (function () {
@@ -298,17 +299,12 @@
 
         // Mode-specific fields
         if (mode === 'in') {
-            let defExpiry = '';
-            if (p.shelf_life_days) {
-                const d = new Date();
-                d.setDate(d.getDate() + parseInt(p.shelf_life_days));
-                defExpiry = d.toISOString().split('T')[0];
-            }
+            let defExpiry = p._matched_batch ? (p._matched_batch.expiry_date || '') : '';
+            h += '<label class="form-label small text-muted">Production / Manufacturing Date</label>';
+            h += '<input type="date" class="form-control mb-2" id="fProduction" max="{{ now()->toDateString() }}" data-months="' + (p.shelf_life_months || 0) + '" data-days="' + (p.shelf_life_days || 0) + '" onchange="updateShelfLifeExpiry()">';
             h += '<label class="form-label small text-muted">Expiry Date</label>';
             h += '<input type="date" class="form-control mb-3" id="fExpiry" value="' + defExpiry + '">';
-            if (p.shelf_life_days) {
-                h += '<div class="form-text mb-2" style="margin-top:-8px">Auto-set to ' + p.shelf_life_days + ' days from today.</div>';
-            }
+            h += '<div class="form-text mb-2">Enter the production date to calculate expiry, or use the printed expiry. Receiving does not restart shelf life.</div>';
         } else {
             if (onHand <= 0) {
                 h += '<div class="alert alert-warning py-2 small mb-0">' +
@@ -393,6 +389,7 @@
         if (mode === 'in') {
             fields.action      = 'stock_in';
             fields.expiry_date = $('fExpiry') ? $('fExpiry').value : '';
+            fields.production_date = $('fProduction') ? $('fProduction').value : '';
             fields.reason      = 'Stock received (scan)';
         } else {
             const reason = $('fReason') ? $('fReason').value : '';

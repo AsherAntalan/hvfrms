@@ -115,6 +115,7 @@
         <a href="{{ route('reset-requests') }}"
            class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
             <i class="ph ph-key"></i> <span>Reset Requests</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
         </a>
 
         <hr class="hv-sidebar-divider">
@@ -200,6 +201,7 @@
         <a href="{{ route('reset-requests') }}"
            class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
             <i class="ph ph-key hv-nav-icon"></i> <span>Reset Requests</span>
+            <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
         </a>
         @endif
 
@@ -246,6 +248,7 @@
             <button class="hv-nav-group-toggle {{ $mgtActive ? 'active' : '' }}" onclick="toggleNav(this)">
                 <i class="ph ph-users hv-nav-icon"></i>
                 <span>Management</span>
+                <span class="hv-sidebar-badge" id="sidebarBadgeRecoveryMgt" style="display:none;">0</span>
                 <i class="ph {{ $mgtActive ? 'ph-caret-down' : 'ph-caret-right' }}"></i>
             </button>
             <div class="hv-nav-submenu {{ $mgtActive ? 'open' : '' }}">
@@ -261,6 +264,7 @@
                 <a href="{{ route('reset-requests') }}"
                    class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
                     <span>Reset Requests</span>
+                    <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
                 </a>
             </div>
         </div>
@@ -361,7 +365,7 @@
                         <span class="fw-bold small" style="color:var(--maroon);">
                             <i class="ph ph-bell me-1"></i> Notifications
                         </span>
-                        <span class="text-muted" style="font-size:11px;" id="notifTotal"></span>
+                        <span style="font-size:11px;color:#000 !important;" id="notifTotal"></span>
                     </div>
                     <div id="notifList">
                         <div class="text-center text-muted small py-4">Loading...</div>
@@ -567,6 +571,25 @@ function toggleNav(btn) {
     }
     function notificationId(n) { return n.id || n.type + ':' + n.message; }
 
+    function startupNotifications(items) {
+        var priorities = { critical: 0, warning: 1, info: 2 };
+        var sorted = items.slice().sort(function(a, b) {
+            return (priorities[a.severity] ?? 2) - (priorities[b.severity] ?? 2);
+        });
+        var selected = [];
+        ['accounts', 'orders', 'recovery', 'inventory'].forEach(function(category) {
+            var item = sorted.find(function(n) {
+                var key = n.category || (n.type === 'account_request' ? 'accounts' : (n.type === 'recovery' ? 'recovery' : (n.type === 'delivery' || n.type === 'order_declined' ? 'orders' : 'inventory')));
+                return key === category;
+            });
+            if (item) selected.push(item);
+        });
+        sorted.forEach(function(n) {
+            if (selected.length < 4 && !selected.some(function(item) { return notificationId(item) === notificationId(n); })) selected.push(n);
+        });
+        return selected;
+    }
+
     function notificationLink(n) {
         if (typeof n.link !== 'string' || n.link.trim() === '') return null;
         try {
@@ -658,10 +681,7 @@ function toggleNav(btn) {
                 if (showStartupNotifications) {
                     showStartupNotifications = false;
                     try { sessionStorage.setItem(startupStorageKey, currentUser); } catch (e) {}
-                    var priorities = { critical: 0, warning: 1, info: 2 };
-                    var initialNotifications = data.items.slice().sort(function(a, b) {
-                        return (priorities[a.severity] ?? 2) - (priorities[b.severity] ?? 2);
-                    }).slice(0, 3);
+                    var initialNotifications = startupNotifications(data.items);
                     afterLoginReady(function() { initialNotifications.forEach(showToast); });
                 }
             }
@@ -671,6 +691,8 @@ function toggleNav(btn) {
             if (data.sidebar) {
                 updateSidebarBadge('sidebarBadgeOrders', data.sidebar.orders);
                 updateSidebarBadge('sidebarBadgeAlerts', data.sidebar.alerts);
+                updateSidebarBadge('sidebarBadgeRecovery', data.sidebar.recovery);
+                updateSidebarBadge('sidebarBadgeRecoveryMgt', data.sidebar.recovery);
             }
         })
         .catch(function() {})
@@ -678,7 +700,7 @@ function toggleNav(btn) {
     }
 
     function showToast(n) {
-        if (toastBox.children.length >= 3) return;
+        if (toastBox.children.length >= 4) return;
         var s = sevIcons[n.severity] || sevIcons.info;
         var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : (n.type === 'account_request' ? 'Account Requests' : (n.type === 'recovery' ? 'Account Recovery' : 'Alert')));
         var toast = document.createElement('div');
@@ -707,20 +729,9 @@ function toggleNav(btn) {
             toast.classList.add('fade-out');
             setTimeout(function() { toast.remove(); }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300);
         }
-        function pause() { clearTimeout(dismissTimer); }
-        function resume() {
-            pause();
-            if (!dismissed && !toast.matches(':hover') && !toast.contains(document.activeElement)) {
-                dismissTimer = setTimeout(dismiss, 10000);
-            }
-        }
         toast.querySelector('.hv-toast-close').addEventListener('click', dismiss);
-        toast.addEventListener('mouseenter', pause);
-        toast.addEventListener('mouseleave', resume);
-        toast.addEventListener('focusin', pause);
-        toast.addEventListener('focusout', function() { setTimeout(resume, 0); });
         toastBox.appendChild(toast);
-        resume();
+        dismissTimer = setTimeout(dismiss, 7000);
     }
 
     function updateSidebarBadge(id, count) {

@@ -66,6 +66,9 @@ async function refreshCatalog() {
     var target = document.getElementById('productCatalogBody');
     if (!fresh || !target) { throw new Error('missing'); }
     target.innerHTML = fresh.innerHTML;
+    var archiveBody = document.getElementById('archivedProductsBody');
+    var freshArchiveBody = doc.getElementById('archivedProductsBody');
+    if (archiveBody && freshArchiveBody) archiveBody.innerHTML = freshArchiveBody.innerHTML;
     if (typeof filterProducts === 'function') { filterProducts(); }
     window.scrollTo(0, scrollY);
 }
@@ -88,6 +91,7 @@ function openProductModal(data) {
         document.getElementById('p_price').value           = data.price;
         document.getElementById('p_reorder_level').value   = data.reorder_level;
         document.getElementById('p_shelf_life_days').value = (data.shelf_life_days != null && data.shelf_life_days !== '') ? data.shelf_life_days : '';
+        document.getElementById('p_shelf_life_months').value = data.shelf_life_months || '';
         document.getElementById('p_remarks').value         = data.remarks || '';
     } else {
         title.innerHTML = '<i class="ph ph-package me-1"></i> Add Product';
@@ -147,8 +151,48 @@ async function toggleProduct(id, newStatus) {
 @endif
 
 @if(auth()->user()->isOwner())
-function deleteProduct(id, name) {
+function archiveProduct(id, name) {
     window.hvModal.confirm({
+        title: 'Archive product?', message: 'Archive "' + name + '"? It will be unavailable for new orders. Existing stock and history will be preserved.',
+        confirmText: 'Archive', variant: 'question',
+        action: async function () {
+            var result = await postAPI({ action: 'archive_product', id: id, confirmed: 1 });
+            if (result.ok) await refreshCatalog();
+            return result;
+        },
+        success: { title: 'Product archived', message: 'You can restore it from Archived Products.' }
+    });
+}
+
+async function confirmArchivedProduct(options) {
+    var element = document.getElementById('archivedProductsModal');
+    var modal = bootstrap.Modal.getInstance(element);
+    var reopen = element.classList.contains('show');
+    if (reopen) {
+        await new Promise(function(resolve) {
+            element.addEventListener('hidden.bs.modal', resolve, { once: true });
+            modal.hide();
+        });
+    }
+    try { return await window.hvModal.confirm(options); }
+    finally { if (reopen) modal.show(); }
+}
+
+function restoreProduct(id, name) {
+    confirmArchivedProduct({
+        title: 'Restore product?', message: 'Restore "' + name + '" to the catalog as unavailable? You can make it available for orders afterward.',
+        confirmText: 'Restore', variant: 'question',
+        action: async function () {
+            var result = await postAPI({ action: 'restore_product', id: id, confirmed: 1 });
+            if (result.ok) await refreshCatalog();
+            return result;
+        },
+        success: { title: 'Product restored', message: 'The product is back in the catalog as unavailable.' }
+    });
+}
+
+function deleteProduct(id, name) {
+    confirmArchivedProduct({
         title: 'Delete product?',
         message: 'Permanently delete "' + name + '" from the catalog? This cannot be undone. Products with linked records cannot be deleted.',
         confirmText: 'Delete',

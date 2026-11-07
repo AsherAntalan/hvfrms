@@ -2,8 +2,7 @@
 @section('title', 'Account Requests')
 @section('content')
 <div class="d-flex gap-2 mb-3">
-    <a href="{{ route('users') }}" class="btn btn-sm btn-outline-secondary">Users</a>
-    <a href="{{ route('account-requests') }}" class="btn btn-sm btn-outline-secondary">All account requests</a>
+    <a href="{{ route('users') }}" class="btn btn-sm btn-outline-secondary"><i class="ph ph-arrow-left me-1"></i>Leave</a>
 </div>
 @if($errors->any())<div class="alert alert-danger" role="alert">{{ $errors->first() }}</div>@endif
 @if($actor->isManagerRole())
@@ -23,7 +22,7 @@
 @forelse($entries as $entry)
 <tr id="account-request-{{ $entry->id }}" @class(['table-warning' => (int) request('request') === $entry->id])>
     <td><strong>{{ $entry->full_name }}</strong><div class="small text-muted">{{ $entry->username }}</div></td>
-    <td>{{ $entry->branch?->branch_name }}<div class="small text-muted">{{ ucwords(str_replace('_', ' ', $entry->requested_role)) }}</div></td>
+    <td>{{ $entry->branch?->branch_name }}<div class="small text-muted">{{ ucwords(str_replace('_', ' ', $entry->requested_role)) }}</div>@if($entry->origin === 'admin_created')<div class="small text-muted">Admin-created</div>@endif</td>
     <td>{{ $entry->requester?->full_name }}<div class="small text-muted">{{ $entry->created_at->format('M j, Y g:i A') }}</div></td>
     <td>{{ ucfirst($entry->status) }}
         @if($entry->rejection_reason)<div class="small text-muted">{{ $entry->rejection_reason }}</div>@endif
@@ -41,7 +40,8 @@
         @if($actor->canAuthorizeResets() && $entry->status === 'approved' && $entry->user?->must_change_password)
             <button class="btn btn-sm btn-outline-secondary" data-account-action="replace" data-id="{{ $entry->id }}">Issue replacement</button>
         @endif
-        @if((int) $entry->requested_by === (int) $actor->id && $entry->status === 'approved' && $entry->user?->must_change_password)
+        @if($entry->status === 'approved' && $entry->user?->must_change_password
+            && ((int) $entry->requested_by === (int) $actor->id || ($entry->origin === 'admin_created' && $actor->canAuthorizeResets())))
             @if(!$entry->credential_revealed_at && $entry->credential_expires_at?->isFuture())
                 <button class="btn btn-sm btn-maroon" data-reveal-id="{{ $entry->id }}">Reveal temporary password once</button>
             @else

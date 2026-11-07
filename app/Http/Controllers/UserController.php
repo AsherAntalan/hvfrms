@@ -2,17 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountRequest;
 use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\RememberToken;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AccountRequestService;
 use App\Services\ResetCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -25,6 +29,7 @@ class UserController extends Controller
             $actor = Auth::user();
             $staffRole = $actor->isBranchManager() ? 'branch_staff' : 'commissary_staff';
             $staff = User::with('role')->where('branch_id', $actor->branch_id)
+                ->whereNull('retired_at')
                 ->whereHas('role', fn ($roles) => $roles->where('role_name', $staffRole))->orderBy('full_name')->get();
             $recoveryCodes = [];
             foreach ($staff as $employee) {
@@ -44,6 +49,7 @@ class UserController extends Controller
         }
 
         $users = User::with('role')->select('users.*', 'roles.role_name', 'branches.branch_name')
+            ->whereNull('users.retired_at')
             ->join('roles', 'roles.id', '=', 'users.role_id')
             ->join('branches', 'branches.id', '=', 'users.branch_id')
             ->orderBy('users.status')
@@ -53,6 +59,15 @@ class UserController extends Controller
 
         $roles = Role::orderBy('id')->get();
         $branches = Branch::where('is_active', 1)->orderBy('branch_name')->get();
+
+        // Create-user shortcut from Branches: resolve the preselected branch from
+        // the database and keep it only when it is genuinely active. A forged or
+        // stale id simply yields no preselection.
+        $preselectBranchId = null;
+        if (request()->filled('branch')) {
+            $preselectBranchId = Branch::where('id', (int) request()->query('branch'))
+                ->where('is_active', 1)->value('id');
+        }
 
         $recoveryCodes = [];
         foreach ($users as $user) {
@@ -70,7 +85,7 @@ class UserController extends Controller
             ]);
         }
 
-        return response()->view('users.index', compact('users', 'roles', 'branches', 'recoveryCodes'))
+        return response()->view('users.index', compact('users', 'roles', 'branches', 'recoveryCodes', 'preselectBranchId'))
             ->header('Cache-Control', 'no-store, private');
     }
 
@@ -80,6 +95,9 @@ class UserController extends Controller
     public function api(Request $request): JsonResponse
     {
         $action = $request->input('action');
+        if (User::whereKey((int) $request->input('id', 0))->whereNotNull('retired_at')->exists()) {
+            return response()->json(['ok' => false, 'error' => 'This account has been retired.'], 403);
+        }
 
         if ($action === 'save') {
             return $this->saveUser($request);
@@ -135,10 +153,9 @@ class UserController extends Controller
             return response()->json(['ok' => false, 'error' => 'Please select a branch.'], 422);
         }
 
-        // Password required for new users, optional for edits
-        if ($id === 0 && strlen($password) < 6) {
-            return response()->json(['ok' => false, 'error' => 'Password must be at least 6 characters.'], 422);
-        }
+        // New accounts never take an admin-typed password: a strong temporary one
+        // is generated server-side and the user must change it on first login.
+        // On edits a password is optional, but still has a minimum length.
         if ($id > 0 && $password !== '' && strlen($password) < 6) {
             return response()->json(['ok' => false, 'error' => 'Password must be at least 6 characters.'], 422);
         }
@@ -177,6 +194,18 @@ class UserController extends Controller
             return response()->json(['ok' => false, 'error' => 'Only super admins can assign the super admin role.'], 422);
         }
 
+        // New accounts are branch users only: an authorizing admin creates a
+        // Branch/Commissary Manager or Staff for the selected location. The role
+        // must match the branch type; elevated roles (admin/owner/super admin) are
+        // never creatable here. Enforced server-side regardless of the submitted form.
+        if ($id === 0 && ! in_array($role->role_name, User::assignableBranchRoles($branch->branch_type), true)) {
+            $allowed = $branch->branch_type === 'commissary'
+                ? 'Commissary Manager or Commissary Staff'
+                : 'Branch Manager or Branch Staff';
+
+            return response()->json(['ok' => false, 'error' => "Choose a {$allowed} role for this location."], 422);
+        }
+
         if ($id > 0) {
             // Update existing user
             $user = User::findOrFail($id);
@@ -205,32 +234,62 @@ class UserController extends Controller
 
             return response()->json(['ok' => true, 'message' => 'User updated successfully.']);
         } else {
-            // Create new user
-            $user = User::create([
-                'username' => $username,
-                'full_name' => $fullName,
-                'email' => $email !== '' ? $email : null,
-                'password_hash' => Hash::make($password),
-                'role_id' => $roleId,
-                'branch_id' => $branchId,
-                'status' => 'active',
-            ]);
+            // A username already reserved by any account request (pending, rejected,
+            // or a prior admin-created delivery) cannot be reused — mirrors the
+            // manager-request rule and prevents a half-written create.
+            if (AccountRequest::whereRaw('LOWER(username) = ?', [strtolower($username)])->exists()) {
+                return response()->json(['ok' => false, 'error' => 'That username is reserved by an existing account request.'], 422);
+            }
 
+            // Create the branch user and its one-time credential-delivery record in
+            // a single transaction so onboarding state is never left half-written.
+            // The admin is the truthful originator (origin = admin_created); no
+            // manager request is fabricated and no false requester is assigned.
+            $actor = Auth::user();
+            $entryId = DB::transaction(function () use ($username, $fullName, $email, $role, $branch, $actor): int {
+                $user = User::create([
+                    'username' => $username,
+                    'full_name' => $fullName,
+                    'email' => $email !== '' ? $email : null,
+                    'password_hash' => Hash::make(Str::random(40)),
+                    'role_id' => $role->id,
+                    'branch_id' => $branch->id,
+                    'status' => 'active',
+                    'must_change_password' => true,
+                ]);
+                $entry = AccountRequest::create([
+                    'requested_by' => $actor->id,
+                    'branch_id' => $branch->id,
+                    'full_name' => $fullName,
+                    'username' => $username,
+                    'requested_role' => $role->role_name,
+                    'origin' => 'admin_created',
+                    'status' => 'approved',
+                    'reviewed_by' => $actor->id,
+                    'reviewed_at' => now(),
+                    'user_id' => $user->id,
+                ]);
+                app(AccountRequestService::class)->issuePassword($entry, $user);
+
+                return $entry->id;
+            }, 3);
+
+            $createdUserId = AccountRequest::whereKey($entryId)->value('user_id');
             AuditLog::create([
-                'user_id' => Auth::id(),
+                'user_id' => $actor->id,
                 'action' => 'created user',
                 'table_name' => 'users',
-                'record_id' => $user->id,
-                'details' => "Name: {$fullName}, Role: {$role->role_name}",
+                'record_id' => $createdUserId,
+                'details' => "Name: {$fullName}, Role: {$role->role_name}, Branch: {$branch->branch_name}",
                 'ip_address' => $request->ip(),
             ]);
 
             return response()->json([
                 'ok' => true,
-                'message' => 'User created successfully.',
-                'id' => $user->id,
-                'recovery_code' => Auth::user()->canViewRecoveryCodeFor($user) ? $user->recovery_code : null,
-            ])->header('Cache-Control', 'no-store');
+                'message' => 'User created. Reveal the temporary password privately from Account Requests, then give it to the employee. They set their own password on first login.',
+                'id' => $createdUserId,
+                'account_request_id' => $entryId,
+            ])->header('Cache-Control', 'no-store, private');
         }
     }
 

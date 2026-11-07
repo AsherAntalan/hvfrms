@@ -42,6 +42,12 @@ class User extends Authenticatable
     {
         return [
             'must_change_password' => 'boolean',
+            'profile_updated_at' => 'datetime',
+            'name_updated_at' => 'datetime',
+            'email_updated_at' => 'datetime',
+            'last_activity_at' => 'datetime',
+            'retired_at' => 'datetime',
+            'activity_tracking_started_at' => 'datetime',
             'temporary_password_expires_at' => 'datetime',
             'recovery_code' => 'encrypted',
             'locked_until' => 'datetime',
@@ -52,12 +58,20 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::creating(function (User $user): void {
+            $user->activity_tracking_started_at = now();
             if ($user->role?->role_name !== 'super_admin') {
                 $code = app(ResetCodeService::class)->generate();
                 $user->recovery_code = $code['plain'];
                 $user->recovery_code_hash = $code['hash'];
             }
         });
+    }
+
+    public function hasNoRecentActivity(): bool
+    {
+        $reference = $this->last_activity_at ?? $this->activity_tracking_started_at ?? $this->created_at;
+
+        return $this->status === 'active' && $reference !== null && now()->greaterThanOrEqualTo($reference->copy()->addDays(30));
     }
 
     public function canViewRecoveryCodeFor(User $target): bool
@@ -189,6 +203,21 @@ class User extends Authenticatable
     public function isBranchScoped(): bool
     {
         return ! $this->isOwner();
+    }
+
+    /**
+     * Roles an admin may assign to a branch user through the Create User flow,
+     * resolved from the location's branch type. The separate commissary location
+     * takes commissary roles; normal store and the main store (Tanza) take branch
+     * roles. Admin/Owner/Super Admin are deliberately never creatable here.
+     *
+     * @return array<int, string>
+     */
+    public static function assignableBranchRoles(string $branchType): array
+    {
+        return $branchType === 'commissary'
+            ? ['commissary_manager', 'commissary_staff']
+            : ['branch_manager', 'branch_staff'];
     }
 
     public function canManageInventory(): bool

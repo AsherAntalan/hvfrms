@@ -8,7 +8,7 @@
 window.renderCommissaryGroup = function (p, container, postData, stockApi, beep, context = {}) {
     const escape = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const key = window.crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2);
-    const issueReasons = ['Missing Quantity','Damaged in Transit','Incorrect Quantity','Incorrect Item','Other'];
+    const issueReasons = ['Damaged / Spilled','Other'];
     let posting = false, recorded = false, pendingReceipt = null;
     let html = '<div class="hv-card p-3 mt-3" data-commissary-group><h5>'+escape(p.item_name)+'</h5>';
     html += '<p><strong>'+p.quantity+' '+escape(p.unit)+'</strong> prepared for this order. All copies use this same QR.</p>';
@@ -25,9 +25,11 @@ window.renderCommissaryGroup = function (p, container, postData, stockApi, beep,
         if (canReceive) html += '<option value="stock_in">Stock In — Receive Delivery</option>';
         if (canUse) html += '<option value="usage">Stock Out — For Branch Use</option>';
         html += '</select><div id="productionMovementSummary" class="small text-muted mb-3" hidden></div>';
-        html += '<div id="productionReceiptWrap" hidden><label for="productionReceiptStatus" class="form-label">Receipt result</label><select id="productionReceiptStatus" class="form-select mb-3"><option value="good">Complete and good / No issue</option><option value="partial">Partial delivery - remaining will follow</option>' + issueReasons.map(value => '<option>'+escape(value)+'</option>').join('') + '</select></div>';
+        html += '<div id="productionReceiptWrap" hidden><label for="productionReceiptStatus" class="form-label">Receipt result</label><select id="productionReceiptStatus" class="form-select mb-3"><option value="good">Complete and good / No issue</option>' + issueReasons.map(value => '<option>'+escape(value)+'</option>').join('') + '</select></div>';
         html += '<label for="productionQuantity" class="form-label" id="productionQuantityLabel">Quantity</label><input id="productionQuantity" type="number" required step="1" class="form-control mb-2">';
         html += '<div class="small text-muted mb-3" id="productionLimit"></div>';
+        html += '<div id="productionRemarksWrap" hidden><label for="productionRemarks" class="form-label">Details</label><textarea id="productionRemarks" class="form-control mb-3" maxlength="500" rows="2" placeholder="Describe the issue (required for Other)"></textarea></div>';
+        html += '<div id="productionProofWrap" hidden><label for="productionProof" class="form-label">Proof photo</label><input id="productionProof" type="file" accept="image/*" capture="environment" class="form-control mb-1"><div class="small text-muted mb-3">Required. Photo of the damaged/spilled goods or the delivery. JPG/PNG/WebP, max 5MB.</div></div>';
         html += '<div id="productionReasonWrap" hidden><label for="productionReason" class="form-label">Usage reason</label><select id="productionReason" class="form-select mb-3"></select></div>';
         html += '<button class="btn btn-maroon" type="button" id="btnProductionGroup">Confirm</button>';
         html += '<section id="productionReceiptReview" class="border rounded p-3 mt-3" aria-label="Review receipt with issue" hidden><strong>Review receipt</strong><div id="productionReceiptSummary" class="small my-3" role="status"></div><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-outline-secondary" id="productionReceiptBack">Back</button><button type="button" class="btn btn-maroon" id="productionReceiptConfirm">Confirm Receipt With Issue</button></div></section>';
@@ -45,11 +47,15 @@ window.renderCommissaryGroup = function (p, container, postData, stockApi, beep,
     const review = container.querySelector('#productionReceiptReview');
     const reviewConfirm = container.querySelector('#productionReceiptConfirm');
     const reviewBack = container.querySelector('#productionReceiptBack');
+    const proofInput = container.querySelector('#productionProof');
+    const remarksInput = container.querySelector('#productionRemarks');
     function lockControls() {
         const locked = posting || recorded || !review.hidden;
         movement.disabled = locked;
         quantity.disabled = locked;
         receiptStatus.disabled = locked;
+        proofInput.disabled = locked;
+        remarksInput.disabled = locked;
         reason.disabled = locked || movement.value !== 'usage';
         button.disabled = posting || recorded;
         reviewConfirm.disabled = posting || recorded;
@@ -64,12 +70,18 @@ window.renderCommissaryGroup = function (p, container, postData, stockApi, beep,
         reason.required = use;
         reason.disabled = !use;
         quantity.min = issue ? 0 : 1;
-        container.querySelector('#productionQuantityLabel').textContent = receive ? 'Quantity accepted in good condition' : 'Quantity';
+        quantity.readOnly = receive && !issue;
+        const other = issue && receiptStatus.value === 'Other';
+        container.querySelector('#productionProofWrap').hidden = !issue;
+        container.querySelector('#productionRemarksWrap').hidden = !other;
+        proofInput.required = issue;
+        remarksInput.required = other;
+        container.querySelector('#productionQuantityLabel').textContent = 'Quantity';
         container.querySelector('#productionLimit').textContent = 'Maximum: '+quantity.max+' '+p.unit+'. '+(receive
             ? (issue ? 'Enter only the good quantity accepted. Review the remaining units before confirming this issue.'
-                : (receiptStatus.value === 'partial' ? 'The remaining quantity stays pending for a later delivery. No missing-item report is created.' : 'All released units will be accepted. No issue will be recorded unless the system detects expired or damaged goods.'))
+                : 'All released units will be accepted. No issue will be recorded unless the system detects expired or damaged goods.')
             : (use ? 'Deducts only remaining usable stock from this delivery at '+p.destination+'.' : 'Releases these goods for delivery.'));
-        button.textContent = receive ? (issue ? 'Review Receipt' : (receiptStatus.value === 'partial' ? 'Receive Partial Delivery' : 'Confirm Good Delivery')) : (use ? 'Confirm Stock Out for Branch Use' : 'Confirm Stock Out for Delivery');
+        button.textContent = receive ? (issue ? 'Review Receipt' : 'Confirm Good Delivery') : (use ? 'Confirm Stock Out for Branch Use' : 'Confirm Stock Out for Delivery');
     }
     function update() {
         const receive = movement.value === 'stock_in', use = movement.value === 'usage';
@@ -88,12 +100,7 @@ window.renderCommissaryGroup = function (p, container, postData, stockApi, beep,
         if (receiptStatus.value === 'good') quantity.value = p.receivable_quantity;
         updateReceipt();
     };
-    quantity.oninput = function () {
-        if (movement.value === 'stock_in' && ['good','partial'].includes(receiptStatus.value)) {
-            receiptStatus.value = Number(quantity.value) < Number(p.receivable_quantity) ? 'partial' : 'good';
-        }
-        updateReceipt();
-    };
+    quantity.oninput = function () { updateReceipt(); };
     movement.onchange = update; update();
     button.onclick = async function () {
         if (posting || recorded) return;
@@ -103,18 +110,18 @@ window.renderCommissaryGroup = function (p, container, postData, stockApi, beep,
         const message = container.querySelector('#productionMessage');
         message.textContent = '';
         if (receive && !receiptStatus.reportValidity()) return;
-        if (receive && receiptStatus.value === 'partial' && Number(quantity.value) >= Number(p.receivable_quantity)) {
-            message.textContent = 'Enter fewer accepted units for a partial delivery, or choose Complete and good.';
-            return;
-        }
         if (issue && Number(quantity.value) >= p.receivable_quantity) {
             message.textContent = 'For an issue, enter fewer accepted good units than the released quantity. If everything was accepted, choose No issue.';
             return;
         }
+        if (issue && !proofInput.files[0]) { message.textContent = 'Attach a proof photo for this issue.'; return; }
+        if (issue && receiptStatus.value === 'Other' && !remarksInput.value.trim()) { message.textContent = 'Describe the issue in Details.'; return; }
         if (use && !reason.reportValidity()) return;
         const fields = {action:use ? 'stock_out' : movement.value,movement:use ? 'usage' : 'delivery',qr:p.qr_code,quantity:Number(quantity.value),idempotency_key:key,
             branch_id:context.branchId ?? p.usage_branch_id ?? '',finalize:issue ? '1' : '0',reason:use ? reason.value : (issue ? receiptStatus.value : ''),...(receive ? {receipt_status:issue ? 'issue' : 'good'} : {})};
         if (issue) {
+            fields.proof = proofInput.files[0];
+            if (receiptStatus.value === 'Other') fields.remarks = remarksInput.value.trim();
             pendingReceipt = fields;
             const rejected = Number(p.receivable_quantity) - fields.quantity;
             container.querySelector('#productionReceiptSummary').innerHTML = '<p>Released, awaiting receipt: <strong>'+p.receivable_quantity+' '+escape(p.unit)+'</strong><br>Accepted in good condition: <strong>'+fields.quantity+' '+escape(p.unit)+'</strong><br>Not accepted: <strong>'+rejected+' '+escape(p.unit)+'</strong><br>Issue: <strong>'+escape(fields.reason)+'</strong></p><p class="mb-0">The '+rejected+' unaccepted units will be recorded under this issue and will no longer be pending for this receipt.</p>';

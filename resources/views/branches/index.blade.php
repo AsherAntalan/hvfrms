@@ -91,7 +91,6 @@
 <p class="text-muted small mt-2">
     <i class="ph ph-info me-1"></i>
     Showing {{ $branches->count() }} branch{{ $branches->count() !== 1 ? 'es' : '' }}.
-    Main branch is the commissary / central kitchen.
 </p>
 
 {{-- ═══ ADD / EDIT MODAL ═══════════════════════════════════ --}}
@@ -205,6 +204,7 @@ async function saveBranch(e) {
     const form = document.getElementById('branchForm');
     const data = new FormData(form);
     data.append('action', 'save');
+    const isCreate = !data.get('id');
 
     const btn = document.getElementById('btnSave');
     btn.disabled = true;
@@ -223,6 +223,23 @@ async function saveBranch(e) {
 
         if (json.ok) {
             modal.hide();
+            // After a branch is created (and the transaction has committed),
+            // offer to create a user for it with the branch preselected. Branch
+            // and user creation stay separate: "Done" leaves the branch alone.
+            if (isCreate && json.id) {
+                const makeUser = await window.hvModal.confirm({
+                    variant: 'success', icon: 'success',
+                    title: 'Branch created successfully.',
+                    message: 'Add an authorized user for this branch now, or finish.',
+                    confirmText: 'Create user for this branch',
+                    cancelText: 'Done',
+                    focus: 'confirm',
+                });
+                if (makeUser) {
+                    window.location = '{{ route("users") }}?branch=' + encodeURIComponent(json.id);
+                    return;
+                }
+            }
             location.reload();
         } else {
             alert(json.error || 'Something went wrong.');

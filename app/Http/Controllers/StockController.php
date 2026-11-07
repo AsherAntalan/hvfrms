@@ -12,6 +12,7 @@ use App\Services\StockService;
 use DateTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
@@ -50,6 +51,23 @@ class StockController extends Controller
     protected function mainWarehouse(): ?Branch
     {
         return Branch::commissary();
+    }
+
+    /**
+     * Persist a delivery-issue proof photo and return its public relative path.
+     * Mirrors the item-image upload convention (public/uploads, moved file).
+     */
+    protected function storeReceiptProof(UploadedFile $file): string
+    {
+        $ext = match ($file->getMimeType()) {
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => 'jpg',
+        };
+        $filename = 'receipt_'.time().'_'.bin2hex(random_bytes(4)).'.'.$ext;
+        $file->move(public_path('uploads/receipts'), $filename);
+
+        return 'uploads/receipts/'.$filename;
     }
 
     /**
@@ -192,8 +210,19 @@ class StockController extends Controller
             }
             if ($action === 'stock_in') {
                 $request->validate(['receipt_status' => ['nullable', 'string', 'in:good,issue']]);
+                $proofPath = null;
+                $remarks = null;
+                if ($request->input('receipt_status') === 'issue') {
+                    $request->validate([
+                        'reason' => ['required', 'string', 'in:Damaged / Spilled,Other'],
+                        'proof' => ['required', 'file', 'image', 'max:5120'],
+                        'remarks' => [$request->input('reason') === 'Other' ? 'required' : 'nullable', 'string', 'max:500'],
+                    ]);
+                    $proofPath = $this->storeReceiptProof($request->file('proof'));
+                    $remarks = $request->filled('remarks') ? trim((string) $request->input('remarks')) : null;
+                }
 
-                return response()->json($service->receive($qr, $user, $request->input('quantity'), $request->input('reason'), $key, $request->boolean('finalize'), $request->input('receipt_status')));
+                return response()->json($service->receive($qr, $user, $request->input('quantity'), $request->input('reason'), $key, $request->boolean('finalize'), $request->input('receipt_status'), $proofPath, $remarks));
             }
 
             return response()->json(['ok' => false, 'error' => 'Use delivery release or delivery receipt for this QR.'], 422);
@@ -245,20 +274,26 @@ class StockController extends Controller
         $stockService = new StockService;
 
         if ($action === 'stock_in') {
+            $request->validate(['production_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today']]);
             // Calculate expiry date
             $expiryDate = null;
             $rawExpiry = trim($request->input('expiry_date', ''));
 
             if ($rawExpiry !== '') {
                 $parsed = DateTime::createFromFormat('Y-m-d', $rawExpiry);
-                if (! $parsed) {
+                if (! $parsed || $parsed->format('Y-m-d') !== $rawExpiry) {
                     return response()->json(['ok' => false, 'error' => 'Invalid expiry date format.'], 422);
                 }
                 $expiryDate = $parsed->format('Y-m-d');
-            } elseif ($item->shelf_life_days) {
-                $d = new DateTime;
-                $d->modify('+'.(int) $item->shelf_life_days.' days');
-                $expiryDate = $d->format('Y-m-d');
+            } elseif ($item->shelfLifeMonths() || $item->shelf_life_days) {
+                if (! $request->filled('production_date')) {
+                    return response()->json(['ok' => false, 'error' => 'Enter the production date to calculate expiry, or enter the printed expiry date.'], 422);
+                }
+                $expiryDate = $item->expiryFromProduction($request->string('production_date')->toString());
+            }
+
+            if ($request->filled('production_date')) {
+                $remarks = trim($remarks.'; Production date: '.$request->string('production_date')->toString(), '; ');
             }
 
             $result = $stockService->stockIn(

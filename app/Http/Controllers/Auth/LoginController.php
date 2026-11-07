@@ -60,7 +60,7 @@ class LoginController extends Controller
         }
 
         // --- Account not active ---
-        if ($user->status !== 'active') {
+        if ($user->status !== 'active' || $user->retired_at !== null) {
             return back()
                 ->withInput($request->only('login'))
                 ->with('error', 'Your account is not active yet. Please wait for approval.');
@@ -103,6 +103,7 @@ class LoginController extends Controller
 
         // --- Success ---
         // Reset failed attempts and lockout
+        $user->last_activity_at = now();
         $user->update([
             'failed_attempts' => 0,
             'locked_until' => null,

@@ -209,12 +209,12 @@ class OrderGroupLabelService
         });
     }
 
-    public function receive(string $qr, User $user, mixed $quantity = null, ?string $reason = null, ?string $key = null, bool $finalize = false, ?string $receiptStatus = null): array
+    public function receive(string $qr, User $user, mixed $quantity = null, ?string $reason = null, ?string $key = null, bool $finalize = false, ?string $receiptStatus = null, ?string $proofPath = null, ?string $remarks = null): array
     {
         $production = $this->production($qr);
         abort_unless($this->canReceive($production->order, $user), 403);
 
-        return DB::transaction(function () use ($production, $user, $quantity, $reason, $key, $finalize, $receiptStatus) {
+        return DB::transaction(function () use ($production, $user, $quantity, $reason, $key, $finalize, $receiptStatus, $proofPath, $remarks) {
             $order = Order::whereKey($production->order_id)->lockForUpdate()->firstOrFail();
             $production = OrderProduction::whereKey($production->id)->lockForUpdate()->firstOrFail();
             if (in_array($order->status, ['delivered', 'settled'], true)) {
@@ -231,7 +231,7 @@ class OrderGroupLabelService
                 return ['ok' => true, 'already' => true, 'message' => 'No released quantities remain to receive for this product.'];
             }
             $quantity = $this->quantity($quantity, $units->count(), true);
-            if ($reason && ! in_array($reason, ['Missing Quantity', 'Damaged in Transit', 'Incorrect Quantity', 'Incorrect Item', 'Other'], true)) {
+            if ($reason && ! in_array($reason, ['Missing Quantity', 'Damaged in Transit', 'Incorrect Quantity', 'Incorrect Item', 'Other', 'Damaged / Spilled'], true)) {
                 $this->fail('reason', 'Invalid receipt discrepancy reason.');
             }
             if ($receiptStatus !== null && ! in_array($receiptStatus, ['good', 'issue'], true)) {
@@ -283,7 +283,9 @@ class OrderGroupLabelService
             $line->update(['received_quantity' => (int) $line->received_quantity + $accepted]);
             if ($accepted < count($accountedIds)) {
                 DeliveryDiscrepancy::create(['order_id' => $order->id, 'order_item_id' => $line->id, 'expected_quantity' => count($accountedIds), 'received_quantity' => $accepted,
-                    'reason' => $invalid ? 'Other' : ($reason ?: 'Missing Quantity'), 'remarks' => $invalid ? $invalid.' units expired, damaged or missing source records; excluded from usable stock.' : null, 'reported_by' => $user->id]);
+                    'reason' => $invalid ? 'Other' : ($reason ?: 'Missing Quantity'),
+                    'remarks' => $invalid ? $invalid.' units expired, damaged or missing source records; excluded from usable stock.' : ($remarks ?: null),
+                    'proof_path' => $proofPath, 'reported_by' => $user->id]);
             }
             AuditLog::create(['user_id' => $user->id, 'action' => 'order group received', 'table_name' => 'order_productions', 'record_id' => $production->id,
                 'details' => $production->qr_code.': '.$accepted.' accepted, '.($units->count() - count($accountedIds)).' awaiting receipt.']);

@@ -38,14 +38,30 @@ class UserUsernameTest extends TestCase
 
     #[TestWith(['new.staff'])]
     #[TestWith(['staff@example.test'])]
-    public function test_created_username_is_shown_and_can_be_used_to_sign_in(string $login): void
+    public function test_created_username_is_shown_and_signs_in_with_a_temporary_password(string $login): void
     {
-        $this->actingAs($this->admin)->postJson(route('users.api'), $this->payload)->assertOk()->assertJson(['ok' => true]);
+        // The admin never types a reusable password: creation issues a one-time
+        // temporary password revealed privately, and first login forces a change.
+        $response = $this->actingAs($this->admin)->postJson(route('users.api'), $this->payload)
+            ->assertOk()->assertJson(['ok' => true])
+            ->assertJsonMissingPath('recovery_code')->assertJsonMissingPath('password');
+        $entryId = $response->json('account_request_id');
+        $this->assertNotNull($entryId);
+
+        $user = User::where('username', 'new.staff')->firstOrFail();
+        $this->assertTrue($user->must_change_password);
         $this->assertDatabaseHas('users', ['username' => 'new.staff', 'email' => 'staff@example.test']);
         $this->get(route('users'))->assertOk()->assertSee('Username')->assertSee('new.staff');
+
+        $password = $this->postJson(route('account-requests.api'), [
+            'id' => $entryId, 'action' => 'reveal', 'current_password' => 'password123',
+        ])->assertOk()->json('temporary_password');
+        $this->assertNotEmpty($password);
+
         $this->post(route('logout'));
-        $this->post(route('login.submit'), ['login' => $login, 'password' => 'password123'])->assertRedirect(route('qr'));
-        $this->assertAuthenticatedAs(User::where('username', 'new.staff')->firstOrFail());
+        $this->post(route('login.submit'), ['login' => $login, 'password' => $password])
+            ->assertRedirect(route('password.initial'));
+        $this->assertAuthenticatedAs($user->fresh());
     }
 
     public function test_username_can_be_kept_or_changed_without_changing_password(): void

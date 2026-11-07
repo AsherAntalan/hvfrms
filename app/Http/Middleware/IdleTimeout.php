@@ -21,6 +21,14 @@ class IdleTimeout
         $maxIdleMinutes = config('session.idle_timeout', 120);
         $lastActivity = $request->session()->get('last_activity');
 
+        if (Auth::user()?->retired_at !== null) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->with('warning', 'This account has been retired.');
+        }
+
         if ($lastActivity && (time() - $lastActivity) > ($maxIdleMinutes * 60)) {
             Auth::logout();
             $request->session()->invalidate();
@@ -32,6 +40,13 @@ class IdleTimeout
 
         $request->session()->put('last_activity', time());
 
-        return $next($request);
+        $response = $next($request);
+        $user = Auth::user();
+        if ($user && $user->status === 'active' && $response->getStatusCode() < 400 && ! $request->routeIs('notifications', 'logout')) {
+            $user->last_activity_at = now();
+            $user::withoutTimestamps(fn () => $user->saveQuietly());
+        }
+
+        return $response;
     }
 }

@@ -14,6 +14,7 @@ class DeliveryDiscrepancy extends Model
         'received_quantity',
         'reason',
         'remarks',
+        'proof_path',
         'reported_by',
     ];
 

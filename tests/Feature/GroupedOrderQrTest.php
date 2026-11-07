@@ -13,6 +13,7 @@ use App\Models\StockBatch;
 use App\Models\StockTransaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\TestWith;
@@ -207,20 +208,35 @@ class GroupedOrderQrTest extends TestCase
         $this->assertEquals($quantity, StockBatch::where('branch_id', $world['branch']->id)->sum('quantity_left'));
     }
 
-    #[TestWith(['Missing Quantity', 2])]
-    #[TestWith(['Damaged in Transit', 2])]
-    #[TestWith(['Incorrect Item', 0])]
-    public function test_reported_issues_only_add_accepted_good_units_and_record_the_selected_reason(string $reason, int $accepted): void
+    #[TestWith(['Damaged / Spilled', 2, null])]
+    #[TestWith(['Other', 0, 'Nothing usable arrived'])]
+    public function test_reported_issues_only_add_accepted_good_units_and_record_the_selected_reason(string $reason, int $accepted, ?string $remarks): void
     {
         $world = $this->world(3);
         $qr = $this->prepare($world);
         $this->release($world, $qr)->assertOk();
-        $this->actingAs($world['users']['branch_staff'])->postJson('/qr/api', ['action' => 'stock_in', 'qr' => $qr, 'quantity' => $accepted,
-            'receipt_status' => 'issue', 'reason' => $reason, 'finalize' => true])->assertOk()
+        $payload = ['action' => 'stock_in', 'qr' => $qr, 'quantity' => $accepted, 'receipt_status' => 'issue',
+            'reason' => $reason, 'finalize' => true, 'proof' => UploadedFile::fake()->create('proof.jpg', 100, 'image/jpeg')];
+        if ($remarks !== null) {
+            $payload['remarks'] = $remarks;
+        }
+        $this->actingAs($world['users']['branch_staff'])->post('/qr/api', $payload)->assertOk()
             ->assertJson(['received_quantity' => $accepted, 'remaining_to_receive' => 0, 'status' => 'delivered', 'settled' => false]);
-        $this->assertDatabaseHas('delivery_discrepancies', ['order_id' => $world['order']->id, 'expected_quantity' => 3, 'received_quantity' => $accepted, 'reason' => $reason]);
+        $this->assertDatabaseHas('delivery_discrepancies', ['order_id' => $world['order']->id, 'expected_quantity' => 3, 'received_quantity' => $accepted, 'reason' => $reason, 'remarks' => $remarks]);
+        $this->assertNotNull(DeliveryDiscrepancy::where('order_id', $world['order']->id)->value('proof_path'));
         $this->assertEquals($accepted, StockBatch::where('branch_id', $world['branch']->id)->where('condition', 'good')->sum('quantity_left'));
         $this->assertSame(3 - $accepted, DB::table('order_production_units')->whereNotNull('received_at')->where('receipt_accepted', false)->count());
+    }
+
+    public function test_receipt_issue_requires_a_proof_photo(): void
+    {
+        $world = $this->world(3);
+        $qr = $this->prepare($world);
+        $this->release($world, $qr)->assertOk();
+        $this->actingAs($world['users']['branch_staff'])->postJson('/qr/api', ['action' => 'stock_in', 'qr' => $qr, 'quantity' => 2,
+            'receipt_status' => 'issue', 'reason' => 'Damaged / Spilled', 'finalize' => true])->assertUnprocessable();
+        $this->assertSame(0, DeliveryDiscrepancy::count());
+        $this->assertSame(0, StockBatch::where('branch_id', $world['branch']->id)->count());
     }
 
     public function test_invalid_inspection_results_do_not_close_receipts_or_consume_retry_keys(): void
@@ -228,19 +244,22 @@ class GroupedOrderQrTest extends TestCase
         $world = $this->world(3);
         $qr = $this->prepare($world);
         $this->release($world, $qr)->assertOk();
-        $base = ['action' => 'stock_in', 'qr' => $qr, 'quantity' => 2, 'receipt_status' => 'issue', 'reason' => 'Damaged in Transit', 'finalize' => true, 'idempotency_key' => 'inspection-retry'];
+        $base = ['action' => 'stock_in', 'qr' => $qr, 'quantity' => 2, 'receipt_status' => 'issue', 'reason' => 'Damaged / Spilled', 'finalize' => true, 'idempotency_key' => 'inspection-retry'];
+        $proof = fn () => UploadedFile::fake()->create('proof.jpg', 100, 'image/jpeg');
+        $json = ['Accept' => 'application/json'];
         $auditCount = DB::table('audit_log')->count();
-        foreach ([['reason' => ''], ['finalize' => false], ['quantity' => 3], ['receipt_status' => 'good'], ['receipt_status' => 'unknown'], ['receipt_status' => ['good']]] as $invalid) {
-            $this->actingAs($world['users']['branch_staff'])->postJson('/qr/api', array_replace($base, $invalid))->assertUnprocessable();
+        foreach ([['reason' => ''], ['proof' => null], ['finalize' => false], ['quantity' => 3], ['receipt_status' => 'good'], ['receipt_status' => 'unknown']] as $invalid) {
+            $this->actingAs($world['users']['branch_staff'])->post('/qr/api', array_replace($base, ['proof' => $proof()], $invalid), $json)->assertUnprocessable();
             $this->assertSame(0, DeliveryDiscrepancy::count());
             $this->assertSame(0, StockBatch::where('branch_id', $world['branch']->id)->count());
             $this->assertSame(0, DB::table('order_production_units')->whereNotNull('received_at')->count());
             $this->assertSame(0, DB::table('stock_idempotency_keys')->where('scope', 'group_receive')->count());
             $this->assertSame($auditCount, DB::table('audit_log')->count());
         }
+        $this->postJson('/qr/api', array_replace($base, ['receipt_status' => ['good']]))->assertUnprocessable();
         $this->postJson('/qr/api', array_replace($base, ['receipt_status' => 'good', 'reason' => '']))->assertUnprocessable();
-        $this->postJson('/qr/api', $base)->assertOk()->assertJson(['received_quantity' => 2]);
-        $this->postJson('/qr/api', $base)->assertOk()->assertJson(['already' => true]);
+        $this->post('/qr/api', array_replace($base, ['proof' => $proof()]), $json)->assertOk()->assertJson(['received_quantity' => 2]);
+        $this->post('/qr/api', array_replace($base, ['proof' => $proof()]), $json)->assertOk()->assertJson(['already' => true]);
         $this->assertEquals(2, StockBatch::where('branch_id', $world['branch']->id)->sum('quantity_left'));
     }
 

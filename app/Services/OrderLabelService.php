@@ -99,6 +99,8 @@ class OrderLabelService
                 }
                 $date = trim($date ?? '') ?: null;
                 if ($quantity > 0 && $source === 'produced') {
+                    $productionDate = OrderProduction::where('order_item_id', $line->id)->value('production_at') ?? now();
+                    $date ??= $line->item->expiryFromProduction($productionDate);
                     if (! $date && $line->item->shelf_life_days > 0) {
                         $this->fail('expiry', 'Expiry date is required for '.$line->item->item_name.'.');
                     }

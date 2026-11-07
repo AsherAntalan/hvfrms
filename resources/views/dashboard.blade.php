@@ -129,13 +129,22 @@
     </section>
 
     {{-- RIGHT health panel removed — Low Stock / Expired / Open Alerts are
-         already surfaced by "Needs Your Attention" and the Active Alerts card. --}}
+         already surfaced by "Needs Your Attention" and the Notifications card. --}}
 </div>
 
 {{-- ═══ NEEDS YOUR ATTENTION ═════════════════════════════ --}}
 @if($isOwner || $user->canManageInventory() || $isWarehouse)
 @php
     $attention = [];
+    if (($stats['recovery_requests'] ?? 0) > 0) {
+        $attention[] = ['text' => $stats['recovery_requests'] . ' account recovery request' . ($stats['recovery_requests'] > 1 ? 's' : '') . ' to review', 'link' => route('reset-requests', ['actionable' => 1])];
+    }
+    if (($stats['receiving_issues'] ?? 0) > 0) {
+        $attention[] = ['text' => $stats['receiving_issues'] . ' receiving issue' . ($stats['receiving_issues'] > 1 ? 's' : '') . ' awaiting assistance', 'link' => route('orders', ['queue' => 'active', 'receiving_issues' => 1])];
+    }
+    if (($stats['account_requests'] ?? 0) > 0) {
+        $attention[] = ['icon' => 'ph-user-plus', 'text' => $stats['account_requests'] . ' account request' . ($stats['account_requests'] > 1 ? 's' : '') . ($user->canAuthorizeResets() ? ' awaiting approval' : ' ready for credential delivery'), 'link' => route('account-requests'), 'color' => 'var(--maroon)'];
+    }
     if ($stats['pending'] > 0 && ($isOwner || $isWA))
         $attention[] = ['icon' => 'ph-hourglass', 'text' => $stats['pending'] . ' order' . ($stats['pending'] > 1 ? 's' : '') . ' waiting for approval', 'link' => route('orders'), 'color' => '#856404'];
     if (($stats['approved'] ?? 0) > 0 && ($isWarehouse || $isOwner))
@@ -149,7 +158,7 @@
     if ($stats['alerts_critical'] > 0)
         $attention[] = ['icon' => 'ph-warning-circle', 'text' => $stats['alerts_critical'] . ' critical alert' . ($stats['alerts_critical'] > 1 ? 's' : ''), 'link' => route('alerts'), 'color' => 'var(--danger)'];
     if (isset($stats['expired']) && $stats['expired'] > 0)
-        $attention[] = ['icon' => 'ph-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ' for disposal', 'link' => route('warehouse', ['tab' => 'expired']), 'color' => 'var(--danger)'];
+        $attention[] = ['icon' => 'ph-calendar-x', 'text' => $stats['expired'] . ' expired batch' . ($stats['expired'] > 1 ? 'es' : '') . ($user->isAdmin() ? ' to monitor' : ' for disposal'), 'link' => route('warehouse', ['tab' => 'expired']), 'color' => 'var(--danger)'];
     if ($isOwner && isset($stats['inactive_branches']) && $stats['inactive_branches'] > 0)
         $attention[] = ['icon' => 'ph-buildings', 'text' => $stats['inactive_branches'] . ' inactive branch' . ($stats['inactive_branches'] > 1 ? 'es' : ''), 'link' => route('branches'), 'color' => 'var(--muted)'];
 @endphp
@@ -255,12 +264,12 @@
     </div>
         @endif
 
-        {{-- Active Alerts --}}
+        {{-- Notifications --}}
         @if($user->canManageInventory() || $isWarehouse)
     <div class="col-lg d-flex flex-column">
         <div class="hv-card p-3 h-100 flex-fill">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0">Active Alerts</h6>
+                <h6 class="mb-0">Notifications</h6>
                 @if(!$isWS)
                 <a href="{{ route('alerts') }}" class="btn btn-sm btn-outline-secondary">
                     All <i class="ph ph-arrow-right ms-1"></i>
@@ -270,10 +279,10 @@
             @if(empty($activeAlerts) || (is_countable($activeAlerts) && count($activeAlerts) === 0) || ($activeAlerts instanceof \Illuminate\Support\Collection && $activeAlerts->isEmpty()))
                 <div class="text-center text-muted small py-3">
                     <i class="ph ph-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>
-                    All clear &mdash; no open alerts.
+                    All clear &mdash; no notifications.
                 </div>
             @else
-                <div class="hv-alert-head">Alert</div>
+                <div class="hv-alert-head">Notification</div>
                 @foreach(collect($activeAlerts)->take(6) as $a)
                 <div class="hv-alert-row border-bottom {{ $a->severity === 'critical' ? 'hv-alert-crit' : '' }}">
                     <div class="d-flex gap-1 align-items-center">

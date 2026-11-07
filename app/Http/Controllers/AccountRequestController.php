@@ -65,7 +65,12 @@ class AccountRequestController extends Controller
             $entry = $this->accounts->visibleTo($actor)->whereKey($data['id'])->lockForUpdate()->firstOrFail();
             $action = $data['action'];
             if ($action === 'reveal') {
-                abort_unless((int) $entry->requested_by === (int) $actor->id && $this->accounts->validRequester($entry), 403);
+                // Manager-requested accounts are revealed once by the requesting
+                // manager; admin-created accounts are revealed once by any
+                // authorizing admin. Current-password confirmation is required below.
+                abort_unless($entry->origin === 'admin_created'
+                    ? $actor->canAuthorizeResets()
+                    : ((int) $entry->requested_by === (int) $actor->id && $this->accounts->validRequester($entry)), 403);
                 if (! Hash::check($data['current_password'], $actor->password_hash)) {
                     throw ValidationException::withMessages(['current_password' => 'Current password is incorrect.']);
                 }
@@ -82,11 +87,17 @@ class AccountRequestController extends Controller
                 return response()->json(['ok' => true, 'username' => $user->username, 'temporary_password' => $password,
                     'expires_at' => $entry->credential_expires_at->format('M j, Y g:i A')])->header('Cache-Control', 'no-store, private');
             }
-            abort_unless($actor->canAuthorizeResets() && (int) $actor->id !== (int) $entry->requested_by, 403);
+            // Approve/reject/replace are authorizing-admin actions. For a
+            // manager-requested entry the authorizer must not be the requesting
+            // manager; an admin-created entry has an admin originator, so any
+            // authorizing admin (including the creator) may replace it.
+            abort_unless($actor->canAuthorizeResets()
+                && ($entry->origin === 'admin_created' || (int) $actor->id !== (int) $entry->requested_by), 403);
             if ($action === 'replace') {
                 $user = User::whereKey($entry->user_id)->lockForUpdate()->first();
                 if ($entry->status !== 'approved' || ! $user || ! $user->must_change_password || $user->status !== 'active'
-                    || ! $this->accounts->validRequester($entry) || (int) $user->branch_id !== (int) $entry->branch_id
+                    || ! ($entry->origin === 'admin_created' || $this->accounts->validRequester($entry))
+                    || (int) $user->branch_id !== (int) $entry->branch_id
                     || $user->role->role_name !== $entry->requested_role) {
                     throw ValidationException::withMessages(['id' => 'Only unused staff onboarding credentials can be replaced.']);
                 }
