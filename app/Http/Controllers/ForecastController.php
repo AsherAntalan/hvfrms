@@ -29,8 +29,13 @@ class ForecastController extends Controller
                 ->forecastDestinations()
                 ->orderBy('branch_name')
                 ->get();
+            // Forecast is monitored per branch only — no aggregated "All Branches"
+            // view. Default to the main branch (else the first destination).
             $selBranch = (int) $request->input('branch', 0);
-            abort_if($selBranch !== 0 && ! $branches->contains('id', $selBranch), 422, 'Select a receiving branch for forecasting.');
+            if ($selBranch === 0) {
+                $selBranch = (int) ($branches->firstWhere('branch_type', 'main')?->id ?? $branches->first()?->id ?? 0);
+            }
+            abort_if(! $branches->contains('id', $selBranch), 422, 'Select a receiving branch for forecasting.');
         }
 
         // Handle save action
@@ -63,7 +68,8 @@ class ForecastController extends Controller
         $totalUnits = array_sum(array_column($forecasts, 'recommend_qty'));
 
         $mainBranch = Branch::where('branch_type', 'main')->where('is_active', true)->orderBy('id')->first();
-        $allowAllBranches = ! $user->isBranchScoped();
+        // Per-branch monitoring only: the aggregated "All Branches" view is removed.
+        $allowAllBranches = false;
 
         return view('forecast.index', compact(
             'forecasts',

@@ -69,6 +69,9 @@ class ReportsArchiveTest extends TestCase
     public function test_forecast_page_renders_with_data_and_no_array_error(): void
     {
         [$owner, $main] = $this->owner();
+        // A dedicated commissary exists (production source), so the main store is
+        // a valid forecast destination and the per-branch default resolves to it.
+        $this->branch('Commissary Hub', 'commissary');
         $item = $this->item('Rice Noodles');
         $batch = $this->batch($item->id, $main->id, 100, now()->addMonths(3)->toDateString());
 
@@ -92,6 +95,7 @@ class ReportsArchiveTest extends TestCase
     public function test_forecast_handles_empty_data(): void
     {
         [$owner] = $this->owner();
+        $this->branch('Commissary Hub', 'commissary'); // production source; main stays a destination
         $this->item('Lonely Item'); // no transactions → insufficient data
 
         $res = $this->actingAs($owner)->get('/forecast');
