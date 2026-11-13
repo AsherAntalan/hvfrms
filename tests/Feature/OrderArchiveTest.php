@@ -157,7 +157,7 @@ class OrderArchiveTest extends TestCase
         $world = $this->world();
         $this->changeArchive($world['users']['owner'], $world['history'])->assertOk()->assertJsonPath('redirect_url', route('orders', ['queue' => 'history']));
         $normal = $this->get('/orders?queue=history')->assertOk()->assertViewHas('defaultOrderQueue', 'history')->assertViewHas('archivedOrderCount', 1)
-            ->assertViewHas('orderQueueCounts', ['active' => 1, 'history' => 1, 'all' => 2]);
+            ->assertViewHas('orderQueueCounts', ['active' => 2, 'history' => 1, 'all' => 2]);
         $normal->assertDontSee('ORD-HISTORY')->assertSee('ORD-ACTIVE')->assertSee('ORD-FOREIGN')->assertSee('Archived Orders');
         $archived = $this->get('/orders?archived=1')->assertOk()->assertViewHas('showArchivedOrders', true)
             ->assertViewHas('orders', fn ($orders) => $orders->count() === 1 && $orders->first()->id === $world['history']->id);

@@ -242,4 +242,46 @@ class DeliveryWorkflowTest extends TestCase
         $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
         $this->assertEquals(95, StockBatch::where('branch_id', $scenario['main']->id)->sum('quantity_left'));
     }
+
+    public function test_refund_on_received_order_removes_damaged_stock_on_confirm(): void
+    {
+        $scenario = $this->scenario(5, 100);
+        $this->prepareAndRelease($scenario);
+        $order = Order::findOrFail($scenario['orderId']);
+
+        // Branch staff receives (stocks in) the delivery — branch now holds 5.
+        $qr = OrderWorkflowService::shipmentQr($order);
+        $this->callApi($scenario['bm'], ['action' => 'receive_scan', 'qr' => $qr])->assertOk();
+        $this->assertSame('settled', $order->fresh()->status);
+        $this->assertEquals(5, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+
+        // Opening the box, 2 are damaged → request a refund with a photo.
+        $lineId = DB::table('order_items')->where('order_id', $order->id)->value('id');
+        $photo = \Illuminate\Http\UploadedFile::fake()->create('evidence.jpg', 20, 'image/jpeg');
+        $this->actingAs($scenario['bm'])->post('/orders/api', [
+            'action' => 'request_refund', 'id' => $order->id,
+            'reason' => 'Two packs arrived crushed and unusable.',
+            'items' => json_encode([['order_item_id' => $lineId, 'quantity' => 2]]),
+            'photo' => $photo,
+        ], ['X-Requested-With' => 'XMLHttpRequest'])->assertOk()->assertJson(['ok' => true]);
+
+        $issue = \App\Models\ReceivingIssue::where('order_id', $order->id)->firstOrFail();
+        $this->assertSame('refund', $issue->type);
+        $this->assertNotNull($issue->photo_path);
+
+        // The commissary manager confirms → the 2 damaged units leave branch stock.
+        $this->callApi($scenario['wa'], ['action' => 'resolve_receiving_issue', 'issue_id' => $issue->id,
+            'reason' => 'Reviewed the photo and reason; refund approved.', 'review_confirmed' => true])
+            ->assertOk()->assertJson(['ok' => true]);
+        $this->assertSame('resolved', $issue->fresh()->status);
+        $this->assertEquals(3, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+
+        // Confirming again is a safe no-op (idempotent stock-out key).
+        $this->callApi($scenario['wa'], ['action' => 'resolve_receiving_issue', 'issue_id' => $issue->id,
+            'reason' => 'Reviewed the photo and reason; refund approved.', 'review_confirmed' => true])
+            ->assertOk()->assertJson(['already' => true]);
+        $this->assertEquals(3, StockBatch::where('branch_id', $scenario['silang']->id)->sum('quantity_left'));
+
+        @unlink(public_path($issue->photo_path));
+    }
 }

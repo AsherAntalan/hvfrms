@@ -6,27 +6,39 @@
 
 
 {{-- Info banner --}}
-<div class="alert alert-info py-2 small mb-3">
-    <strong>Weighted Moving Average</strong> &mdash; Analyzes the last {{ $forecastMeta['weeks'] }} completed weeks of stock movements
-    (out, expiry, damage and adjustments &mdash; not verified sales).
-    The most recent {{ $forecastMeta['wma_weeks'] }} weeks are weighted {{ implode('&times;, ', $forecastMeta['wma_weights']) }}&times; (oldest to newest) to reflect current demand trends.
-    The suggested order quantity accounts for a safety factor of {{ rtrim(rtrim(number_format($forecastMeta['safety_factor'], 2), '0'), '.') }}&times; and your current recorded stock on hand.
-</div>
+<p class="small text-muted mb-3"><strong>Weighted Moving Average</strong> &mdash; last {{ $forecastMeta['weeks'] }} weeks of stock movement</p>
 
 {{-- Success flash is shown once by the shared success modal (layouts.app). --}}
 
-{{-- Branch filter chips (inline navigation, no modal) --}}
-<div class="hv-card p-3 mb-3 no-print">
-    @include('partials.branch-chips', [
-        'chipRoute'    => 'forecast',
-        'chipBranches' => $branches,
-        'chipSelected' => $selBranch,
-        'chipAllValue' => 0,
-        'chipAllowAll' => $allowAllBranches,
-        'chipMainId'   => $mainBranch?->id,
-        'chipPreserve' => [],
-    ])
-    <div class="small text-muted mt-2">
+{{-- Branch + product filter bar (matches the All-Branches Inventory monitor) --}}
+<div class="hv-card p-0 mb-3 no-print">
+    <div class="hv-inv-filter p-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-12 col-lg">
+                <input type="search" class="form-control form-control-sm" id="fcSearch" placeholder="Search product or category…" aria-label="Search products">
+            </div>
+            <div class="col-6 col-md-4 col-lg-auto">
+                <select class="form-select form-select-sm" id="fcBranch" aria-label="Filter by branch" onchange="if(this.value){window.location.href=this.value;}">
+                    @if($allowAllBranches)
+                    <option value="{{ route('forecast', ['branch' => 0]) }}" @selected($selBranch === 0)>All Branches</option>
+                    @endif
+                    @foreach($branches as $br)
+                    <option value="{{ route('forecast', ['branch' => $br->id]) }}" @selected($selBranch === (int) $br->id)>{{ $br->branch_name }}@if($mainBranch && (int) $br->id === (int) $mainBranch->id) · Main Branch @endif</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-auto">
+                <select class="form-select form-select-sm" id="fcSort" aria-label="Sort products">
+                    <option value="az">Product A&ndash;Z</option>
+                    <option value="za">Product Z&ndash;A</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="fcClear"><i class="ph ph-x" aria-hidden="true"></i> Clear Filters</button>
+            </div>
+        </div>
+    </div>
+    <div class="px-3 pb-3 pt-2 small text-muted">
         Forecast figures below are computed from <strong>{{ $selBranch === 0 ? 'all branches (aggregated)' : ($branches->firstWhere('id', $selBranch)->branch_name ?? 'the selected branch') }}</strong>'s own consumption and stock.
     </div>
 </div>
@@ -37,7 +49,7 @@
 {{-- ═══ FORECAST TABLE ════════════════════════════════════ --}}
 <div class="hv-card p-0">
     <div class="table-responsive">
-        <table class="table table-hover table-sm align-middle mb-0">
+        <table class="table table-hover table-sm align-middle mb-0" id="forecastTable">
             <thead>
                 <tr>
                     <th class="ps-3">Product</th>
@@ -62,7 +74,7 @@
                         $lowStock = $fc['stock_on_hand'] > 0 && $fc['stock_on_hand'] <= ($item->reorder_level ?? 0);
                         $needOrder = $fc['recommend_qty'] > 0;
                     @endphp
-                <tr class="{{ $needOrder ? 'table-warning' : '' }}" style="cursor:pointer" onclick="forecastToggle(this, {{ $loop->index }})">
+                <tr class="fc-row {{ $needOrder ? 'table-warning' : '' }}" style="cursor:pointer" data-idx="{{ $loop->index }}" onclick="forecastToggle(this, {{ $loop->index }})">
                     <td class="ps-3">
                         <span class="fw-semibold">{{ $item->item_name }}</span>
                         <span class="text-muted small ms-1">({{ $item->unit }})</span>
@@ -171,6 +183,48 @@ function forecastToggle(row, idx) {
         if (chev) { chev.classList.remove('ph-caret-down'); chev.classList.add('ph-caret-up'); }
     }
 }
+
+/* Product search + sort over the forecast table (client-side). Branch is a
+   server navigation handled by the Branch dropdown. */
+(function () {
+    var table = document.getElementById('forecastTable');
+    var search = document.getElementById('fcSearch');
+    var sort = document.getElementById('fcSort');
+    var clear = document.getElementById('fcClear');
+    if (!table || !search || !sort) { return; }
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr.fc-row'));
+    function detailFor(r) { return document.getElementById('detail-' + r.dataset.idx); }
+    function collapse(r) {
+        var d = detailFor(r);
+        if (d) { d.style.display = 'none'; }
+        var chev = r.querySelector('.chevron');
+        if (chev) { chev.classList.add('ph-caret-down'); chev.classList.remove('ph-caret-up'); }
+    }
+    function applySearch() {
+        var q = (search.value || '').trim().toLowerCase();
+        rows.forEach(function (r) {
+            var hit = !q || (r.cells[0].textContent + ' ' + r.cells[1].textContent).toLowerCase().indexOf(q) !== -1;
+            r.style.display = hit ? '' : 'none';
+            collapse(r);
+        });
+    }
+    function applySort() {
+        var dir = sort.value === 'za' ? -1 : 1;
+        rows.slice().sort(function (a, b) {
+            return dir * a.cells[0].textContent.trim().localeCompare(b.cells[0].textContent.trim());
+        }).forEach(function (r) {
+            tbody.appendChild(r);
+            var d = detailFor(r);
+            if (d) { tbody.appendChild(d); }
+        });
+    }
+    search.addEventListener('input', applySearch);
+    sort.addEventListener('change', function () { applySort(); applySearch(); });
+    if (clear) {
+        clear.addEventListener('click', function () { search.value = ''; sort.value = 'az'; applySort(); applySearch(); });
+    }
+})();
 </script>
 @endpush
 

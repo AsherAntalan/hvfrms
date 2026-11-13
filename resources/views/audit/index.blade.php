@@ -14,15 +14,15 @@
     <form method="GET" class="row g-2 align-items-end">
         <div class="col-md-2">
             <label class="form-label small fw-semibold mb-1">From</label>
-            <input type="date" class="form-control form-control-sm" name="from" value="{{ $filterFrom }}">
+            <input type="date" class="form-control form-control-sm" name="from" value="{{ $filterFrom }}" onchange="this.form.submit()">
         </div>
         <div class="col-md-2">
             <label class="form-label small fw-semibold mb-1">To</label>
-            <input type="date" class="form-control form-control-sm" name="to" value="{{ $filterTo }}">
+            <input type="date" class="form-control form-control-sm" name="to" value="{{ $filterTo }}" onchange="this.form.submit()">
         </div>
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">User</label>
-            <select class="form-select form-select-sm" name="user">
+            <select class="form-select form-select-sm" name="user" onchange="this.form.submit()">
                 <option value="0">All Users</option>
                 @foreach($users as $u)
                     <option value="{{ $u->id }}" {{ $filterUser === $u->id ? 'selected' : '' }}>
@@ -33,7 +33,7 @@
         </div>
         <div class="col-md-3">
             <label class="form-label small fw-semibold mb-1">Action</label>
-            <select class="form-select form-select-sm" name="action_type">
+            <select class="form-select form-select-sm" name="action_type" onchange="this.form.submit()">
                 <option value="">All Actions</option>
                 @foreach($actions as $act)
                     <option value="{{ $act }}" {{ $filterAction === $act ? 'selected' : '' }}>
@@ -43,8 +43,9 @@
             </select>
         </div>
         <div class="col-md-2">
-            <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="ph ph-funnel me-1"></i> Filter
+            <label class="form-label small fw-semibold mb-1 d-block">&nbsp;</label>
+            <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="window.location.href=location.pathname">
+                <i class="ph ph-x" aria-hidden="true"></i> Clear Filters
             </button>
         </div>
     </form>
@@ -100,22 +101,42 @@
     </div>
 </div>
 
-{{-- ═══ PAGINATION ═══════════════════════════════════════ --}}
-@if($logs->hasPages())
-<nav class="mt-3">
-    <ul class="pagination pagination-sm justify-content-center">
-        @foreach($logs->getUrlRange(1, $logs->lastPage()) as $page => $url)
-            <li class="page-item {{ $page === $logs->currentPage() ? 'active' : '' }}">
-                <a class="page-link" href="{{ $url }}">{{ $page }}</a>
-            </li>
+{{-- ═══ PAGINATION (matches the All-Branches Inventory pager) ═══ --}}
+@php
+    $cur = $logs->currentPage(); $last = $logs->lastPage(); $w = 2;
+    $start = max(1, $cur - $w); $end = min($last, $cur + $w);
+    $seq = [];
+    if ($start > 1) { $seq[] = 1; if ($start > 2) { $seq[] = '…'; } }
+    for ($p = $start; $p <= $end; $p++) { $seq[] = $p; }
+    if ($end < $last) { if ($end < $last - 1) { $seq[] = '…'; } $seq[] = $last; }
+@endphp
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 px-1">
+    <div class="text-muted small">
+        Showing {{ number_format($logs->firstItem() ?? 0) }}&ndash;{{ number_format($logs->lastItem() ?? 0) }} of {{ number_format($totalRows) }} match{{ $totalRows === 1 ? '' : 'es' }}
+    </div>
+    @if($logs->hasPages())
+    <nav class="hv-inv-pager" aria-label="Audit log pagination">
+        @if($logs->onFirstPage())
+            <span class="hv-page-btn" aria-disabled="true" style="opacity:.45;cursor:not-allowed;"><i class="ph ph-caret-left"></i> Prev</span>
+        @else
+            <a class="hv-page-btn" href="{{ $logs->previousPageUrl() }}"><i class="ph ph-caret-left"></i> Prev</a>
+        @endif
+        @foreach($seq as $p)
+            @if($p === '…')
+                <span class="hv-page-gap" aria-hidden="true">…</span>
+            @elseif($p === $cur)
+                <span class="hv-page-btn active" aria-current="page">{{ $p }}</span>
+            @else
+                <a class="hv-page-btn" href="{{ $logs->url($p) }}">{{ $p }}</a>
+            @endif
         @endforeach
-    </ul>
-</nav>
-@endif
-
-<div class="text-muted small mt-2 text-center">
-    Showing {{ $logs->count() }} of {{ number_format($totalRows) }} entries
-    (page {{ $logs->currentPage() }} of {{ $logs->lastPage() }}).
+        @if($logs->hasMorePages())
+            <a class="hv-page-btn" href="{{ $logs->nextPageUrl() }}">Next <i class="ph ph-caret-right"></i></a>
+        @else
+            <span class="hv-page-btn" aria-disabled="true" style="opacity:.45;cursor:not-allowed;">Next <i class="ph ph-caret-right"></i></span>
+        @endif
+    </nav>
+    @endif
 </div>
 
 @endsection

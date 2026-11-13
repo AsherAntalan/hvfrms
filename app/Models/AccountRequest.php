@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AccountRequest extends Model
 {
     protected $fillable = [
-        'requested_by', 'branch_id', 'full_name', 'username', 'requested_role', 'origin', 'status',
+        'requested_by', 'branch_id', 'full_name', 'email', 'password_hash', 'username', 'requested_role', 'origin', 'status',
         'reviewed_by', 'user_id', 'rejection_reason', 'temporary_password',
         'credential_expires_at', 'credential_revealed_at', 'reviewed_at',
     ];
 
-    protected $hidden = ['temporary_password'];
+    protected $hidden = ['temporary_password', 'password_hash'];
 
     protected function casts(): array
     {

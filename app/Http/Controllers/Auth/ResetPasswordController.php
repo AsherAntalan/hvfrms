@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class ResetPasswordController extends Controller
 {
@@ -19,7 +20,7 @@ class ResetPasswordController extends Controller
     private function userForToken(string $rawToken): ?User
     {
         return User::where('reset_token', hash('sha256', $rawToken))
-            ->whereHas('role', fn ($query) => $query->where('role_name', 'super_admin'))
+            ->whereHas('role', fn ($query) => $query->where('role_name', 'admin'))
             ->where('reset_token_expires', '>', now())
             ->where('status', 'active')
             ->first();
@@ -40,7 +41,7 @@ class ResetPasswordController extends Controller
     {
         $request->validate([
             'token' => 'required|string',
-            'password' => 'required|string|min:8',
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()->symbols()],
             'confirm_password' => 'required|string|same:password',
         ]);
 
@@ -48,7 +49,7 @@ class ResetPasswordController extends Controller
         // succeed: the first to clear reset_token for this row wins.
         $user = DB::transaction(function () use ($request) {
             $user = User::where('reset_token', hash('sha256', $request->token))
-                ->whereHas('role', fn ($query) => $query->where('role_name', 'super_admin'))
+                ->whereHas('role', fn ($query) => $query->where('role_name', 'admin'))
                 ->where('reset_token_expires', '>', now())
                 ->where('status', 'active')
                 ->lockForUpdate()

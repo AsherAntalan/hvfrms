@@ -194,10 +194,10 @@ class CreateBranchUserFlowTest extends TestCase
         $this->post(route('login.submit'), ['login' => 'first.login', 'password' => $password])->assertRedirect(route('password.initial'));
         $this->get(route('qr'))->assertRedirect(route('password.initial'));
         $this->post(route('password.initial.update'), [
-            'current_password' => $password, 'password' => 'my-own-password-1', 'password_confirmation' => 'my-own-password-1',
+            'current_password' => $password, 'password' => 'My-Own-Password1!', 'password_confirmation' => 'My-Own-Password1!',
         ])->assertRedirect(route('login'));
         $this->assertFalse($user->fresh()->must_change_password);
-        $this->post(route('login.submit'), ['login' => 'first.login', 'password' => 'my-own-password-1'])->assertRedirect(route('qr'));
+        $this->post(route('login.submit'), ['login' => 'first.login', 'password' => 'My-Own-Password1!'])->assertRedirect(route('qr'));
     }
 
     // 11: reveal is admin-only, one-time, current-password gated, expiring, and

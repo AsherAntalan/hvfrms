@@ -9,16 +9,19 @@
 <form method="POST" action="{{ route('account-requests.store') }}" class="hv-card p-3 mb-3">
     @csrf
     <h6>Request a new staff account</h6>
-    <p class="small text-muted">For {{ $actor->branch?->branch_name }} only. Admin approval is required. The employee will set their own password on first login.</p>
+    <p class="small text-muted">For {{ $actor->branch?->branch_name }} only. Admin approval is required. On approval, the employee signs in with the email and password you set here.</p>
+    @if($errors->any())<div class="alert alert-danger py-2 small">{{ $errors->first() }}</div>@endif
     <div class="row g-3 align-items-end">
-        <div class="col-md-5"><label for="full_name" class="form-label">Employee full name</label><input id="full_name" name="full_name" class="form-control" value="{{ old('full_name') }}" required maxlength="150"></div>
-        <div class="col-md-4"><label for="username" class="form-label">Requested username</label><input id="username" name="username" class="form-control" value="{{ old('username') }}" required maxlength="50" pattern="[A-Za-z0-9_.-]+" autocomplete="off"></div>
-        <div class="col-md-3"><button class="btn btn-maroon w-100">Submit request</button></div>
+        <div class="col-md-6"><label for="full_name" class="form-label">Employee full name</label><input id="full_name" name="full_name" class="form-control" value="{{ old('full_name') }}" required maxlength="150"></div>
+        <div class="col-md-6"><label for="username" class="form-label">Requested username</label><input id="username" name="username" class="form-control" value="{{ old('username') }}" required maxlength="50" pattern="[A-Za-z0-9_.-]+" autocomplete="off"></div>
+        <div class="col-md-6"><label for="req_email" class="form-label">Email</label><input id="req_email" name="email" type="email" class="form-control" value="{{ old('email') }}" required maxlength="255" autocomplete="off" placeholder="employee@example.com"></div>
+        <div class="col-md-6"><label for="req_password" class="form-label">Password</label><input id="req_password" name="password" type="password" class="form-control" required autocomplete="new-password" placeholder="At least 8 chars, mixed case, number, symbol"></div>
+        <div class="col-md-12"><button class="btn btn-maroon">Submit request</button></div>
     </div>
 </form>
 @endif
 <div class="hv-card table-responsive"><table class="table align-middle mb-0">
-<thead><tr><th>Employee</th><th>Branch / role</th><th>Requested by</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+<thead><tr><th>Employee</th><th>Branch / role</th><th>Requested by</th><th>Status</th><th>Actions</th></tr></thead><tbody id="accountRequestsBody">
 @forelse($entries as $entry)
 <tr id="account-request-{{ $entry->id }}" @class(['table-warning' => (int) request('request') === $entry->id])>
     <td><strong>{{ $entry->full_name }}</strong><div class="small text-muted">{{ $entry->username }}</div></td>
@@ -75,8 +78,12 @@
     </div>
 </div></div></div>
 @endsection
+@include('partials.list-pager')
 @push('scripts')
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.hvListPager) { window.hvListPager.attach({ tbody: '#accountRequestsBody', noun: 'request', nounPlural: 'requests' }); }
+});
 (function () {
     const api = @json(route('account-requests.api'));
     const csrf = document.querySelector('meta[name="csrf-token"]').content;

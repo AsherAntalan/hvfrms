@@ -168,14 +168,14 @@ class AccountRequestTest extends TestCase
         $this->get('/qr')->assertRedirect(route('password.initial'));
         $this->postJson('/orders/api', ['action' => 'view', 'id' => 1])->assertForbidden();
         $this->get('/initial-password')->assertOk()->assertSee('Set your own password');
-        $this->post('/initial-password', ['current_password' => 'wrong', 'password' => 'personal-password-999', 'password_confirmation' => 'personal-password-999'])->assertSessionHasErrors('current_password');
+        $this->post('/initial-password', ['current_password' => 'wrong', 'password' => 'Personal-Password999!', 'password_confirmation' => 'Personal-Password999!'])->assertSessionHasErrors('current_password');
         $this->post('/initial-password', ['current_password' => $password, 'password' => $password, 'password_confirmation' => $password])->assertSessionHasErrors('password');
-        $this->post('/initial-password', ['current_password' => $password, 'password' => 'personal-password-999', 'password_confirmation' => 'personal-password-999'])->assertRedirect(route('login'));
+        $this->post('/initial-password', ['current_password' => $password, 'password' => 'Personal-Password999!', 'password_confirmation' => 'Personal-Password999!'])->assertRedirect(route('login'));
         $this->assertGuest();
         $this->assertFalse($entry->user()->first()->must_change_password);
-        $this->assertTrue(Hash::check('personal-password-999', $entry->user()->first()->password_hash));
+        $this->assertTrue(Hash::check('Personal-Password999!', $entry->user()->first()->password_hash));
         $this->post('/login', ['login' => 'newstaff', 'password' => $password])->assertSessionHas('error');
-        $this->post('/login', ['login' => 'newstaff', 'password' => 'personal-password-999'])->assertRedirect(route('qr'));
+        $this->post('/login', ['login' => 'newstaff', 'password' => 'Personal-Password999!'])->assertRedirect(route('qr'));
         $this->action($this->people['admin'], $entry, 'replace')->assertUnprocessable();
     }
 
@@ -219,5 +219,31 @@ class AccountRequestTest extends TestCase
         $this->action($this->people['manager'], $entry, 'reveal', ['current_password' => 'manager-secret-123'])->assertUnprocessable();
         $this->action($this->people['admin'], $entry, 'replace')->assertUnprocessable();
         $this->assertNull($entry->fresh()->credential_revealed_at);
+    }
+
+    public function test_manager_set_email_and_password_create_a_ready_account_without_temp_password(): void
+    {
+        $this->actingAs($this->people['manager'])->post(route('account-requests.store'), [
+            'full_name' => 'Ready Staff', 'username' => 'readystaff',
+            'email' => 'ready@yopmail.com', 'password' => 'Ready_pass1!',
+        ])->assertRedirect(route('account-requests'));
+
+        $entry = AccountRequest::where('username', 'readystaff')->firstOrFail();
+        $this->assertSame('ready@yopmail.com', $entry->email);
+        $this->assertNotNull($entry->password_hash);
+
+        $this->action($this->people['admin'], $entry, 'approve')->assertOk()->assertJsonMissingPath('temporary_password');
+        $user = $entry->fresh()->user;
+        $this->assertSame('ready@yopmail.com', $user->email);
+        $this->assertFalse((bool) $user->must_change_password);
+        $this->assertTrue(Hash::check('Ready_pass1!', $user->password_hash));
+        $this->assertNull($entry->fresh()->temporary_password);
+    }
+
+    public function test_email_and_password_must_be_provided_together(): void
+    {
+        $this->actingAs($this->people['manager'])->post(route('account-requests.store'), [
+            'full_name' => 'Half Staff', 'username' => 'halfstaff', 'email' => 'half@yopmail.com',
+        ])->assertSessionHasErrors('password');
     }
 }

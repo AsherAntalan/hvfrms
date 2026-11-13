@@ -75,7 +75,7 @@
         @else
             {{-- ── Request-link form state ── --}}
             <h1>Forgot your password?</h1>
-            <p class="hv-recover-desc">Enter your registered email and we&rsquo;ll send you a reset link.</p>
+            <p class="hv-recover-desc">Enter your registered email and we&rsquo;ll send you a verification code to reset your password.</p>
 
             <form method="POST" action="{{ route('password.email') }}" novalidate>
                 @csrf
@@ -93,7 +93,7 @@
                     @enderror
                 </div>
                 <button type="submit" class="hv-recover-btn">
-                    <i class="ph ph-paper-plane-tilt"></i> Send reset link
+                    <i class="ph ph-paper-plane-tilt"></i> Send verification code
                 </button>
             </form>
 

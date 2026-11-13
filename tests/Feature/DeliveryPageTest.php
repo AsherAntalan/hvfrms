@@ -67,19 +67,14 @@ class DeliveryPageTest extends TestCase
         $this->get('/orders')->assertOk()->assertSee('ORD-S-1')->assertSee('ORD-D-1');
     }
 
-    public function test_branch_scoped_user_sees_only_their_branch(): void
+    public function test_branch_manager_cannot_access_active_shipments(): void
     {
         $main = $this->branch('Tanza', 'main');
         $silang = $this->branch('Silang');
-        $dasma = $this->branch('Dasma');
         $sb = $this->user($this->role('branch_manager'), $silang, 'bm@t.com');
 
-        $this->order($silang, 'ORD-S-9', 'delivering', $sb->id);
-        $this->order($dasma, 'ORD-D-9', 'delivering', $sb->id);
-
-        $this->actingAs($sb)->get('/delivery')->assertOk()
-            ->assertViewHas('branches', fn ($branches) => $branches->count() === 1
-                && $branches->first()['branch_id'] === $silang->id);
+        // Branch managers receive from the order modal, not the Active Shipments page.
+        $this->actingAs($sb)->get('/delivery')->assertForbidden();
     }
 
     public function test_history_tab_shows_closed_orders(): void

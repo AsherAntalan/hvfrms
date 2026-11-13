@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-11-10T02:42:17.915Z",
+        "reason": "pre-existing established app UI font (--font-ui: Arial), not introduced this session"
+      }
+    ]
+  }
+}

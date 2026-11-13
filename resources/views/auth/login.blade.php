@@ -80,6 +80,19 @@
 .hv-login-forgot:hover { text-decoration: underline; }
 .hv-login-forgot:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
 .hv-login-alert { text-align: left; margin-bottom: 16px; }
+/* Inline reset panels (forgot / OTP) share the login card */
+.hv-panel-title { color: var(--maroon); font-size: 22px; font-weight: 800; margin: 0 0 6px; text-align: left; }
+.hv-panel-sub { color: var(--muted, #6E635C); font-size: 13.5px; line-height: 1.5; margin: 0 0 18px; text-align: left; }
+.hv-panel-sub strong { color: var(--ink, #2B2B2B); }
+.hv-panel-hint { font-size: 11.5px; color: var(--muted, #6E635C); margin: 6px 2px 0; text-align: left; }
+.hv-login-back { display: block; width: 100%; margin-top: 14px; border: none; background: none; color: var(--maroon); font-weight: 700; font-size: 14px; cursor: pointer; }
+.hv-login-back:hover { text-decoration: underline; }
+.hv-link-btn { border: none; background: none; color: var(--maroon); font-weight: 700; font-size: 14px; cursor: pointer; padding: 0; }
+.hv-link-btn:hover { text-decoration: underline; }
+.hv-otp-code { text-align: center; letter-spacing: .5em; font-size: 22px; font-weight: 700; }
+.hv-otp-success-mark { display: grid; place-items: center; width: 76px; height: 76px; margin: 4px auto 18px;
+  border-radius: 50%; background: #eaf5ed; color: #28743a; font-size: 44px; animation: hvPop .3s ease; }
+@keyframes hvPop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .hv-reset-success .modal-content { border: 1px solid var(--gold); border-radius: 22px;
   padding: 32px 24px; text-align: center; box-shadow: 0 24px 70px rgba(60,8,8,.25); }
 .hv-reset-success-mark { display: grid; place-items: center; width: 76px; height: 76px;
@@ -174,6 +187,7 @@
                  onerror="this.src='https://placehold.co/120x120/5C1010/D4A94A?text=HV'">
             <h1 id="loginTitle">WELCOME</h1>
             <p class="hv-login-sub">Login to your account</p>
+            <p class="small text-muted mb-3"><strong>Note:</strong> Too many failed attempts will temporarily lock access.</p>
 
             @if(session('success'))
                 <div id="resetSuccessNotice" class="alert alert-success py-2 small hv-login-alert" role="status">{{ session('success') }}</div>
@@ -188,36 +202,107 @@
                 <div class="alert alert-danger py-2 small hv-login-alert" role="alert">{{ $errors->first() }}</div>
             @endif
 
-            <div class="hv-login-card">
-                <form method="POST" action="{{ route('login.submit') }}" id="loginForm">
-                    @csrf
+            <div class="hv-login-card" id="loginCard"
+                 data-url-email="{{ route('password.email') }}"
+                 data-url-check="{{ route('password.otp.check') }}"
+                 data-url-otp="{{ route('password.otp.update') }}"
+                 data-url-resend="{{ route('password.otp.resend') }}">
+
+                {{-- ── Panel: sign in ── --}}
+                <div id="panelLogin">
+                    <form method="POST" action="{{ route('login.submit') }}" id="loginForm">
+                        @csrf
+                        <div class="mb-3">
+                            <label for="loginUsername" class="form-label">Username or email</label>
+                            <div class="hv-input-icon">
+                                <i class="ph ph-user" aria-hidden="true"></i>
+                                <input id="loginUsername" type="text" name="login" class="form-control"
+                                       placeholder="Enter your username or email" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="loginPassword" class="form-label">Password</label>
+                            <div class="hv-input-icon hv-password-field">
+                                <i class="ph ph-lock" aria-hidden="true"></i>
+                                <input id="loginPassword" type="password" name="password" class="form-control"
+                                       placeholder="Enter your password" autocomplete="current-password" required>
+                                <button type="button" class="hv-password-toggle" id="toggleLoginPassword" aria-controls="loginPassword" aria-label="Show password" aria-pressed="false">Show</button>
+                            </div>
+                        </div>
+                        <div class="hv-login-extras">
+                            <label for="loginRemember"><input id="loginRemember" type="checkbox" name="remember" class="form-check-input"> Remember me</label>
+                            @if(session('show_recovery'))
+                            <a href="#" class="hv-login-forgot" id="forgotToggle">Forgot password?</a>
+                            @endif
+                        </div>
+                        <button type="submit" class="btn btn-maroon w-100">LOGIN</button>
+                    </form>
+                </div>
+
+                {{-- ── Panel: forgot (email → code) ── --}}
+                <div id="panelForgot" hidden>
+                    <h2 class="hv-panel-title">Reset your password</h2>
+                    <p class="hv-panel-sub">Enter your registered email and we&rsquo;ll send you a 6-digit verification code.</p>
+                    <div id="forgotMsg" class="alert py-2 small hv-login-alert" role="alert" hidden></div>
                     <div class="mb-3">
-                        <label for="loginUsername" class="form-label">Username</label>
+                        <label for="forgotEmail" class="form-label">Email address</label>
                         <div class="hv-input-icon">
-                            <i class="ph ph-user" aria-hidden="true"></i>
-                            <input id="loginUsername" type="text" name="login" class="form-control"
-                                   placeholder="Enter your username" value="{{ old('login') }}" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+                            <i class="ph ph-envelope-simple" aria-hidden="true"></i>
+                            <input id="forgotEmail" type="email" class="form-control" placeholder="you@example.com" autocomplete="email">
                         </div>
                     </div>
-                    <div>
-                        <label for="loginPassword" class="form-label">Password</label>
-                        <div class="hv-input-icon hv-password-field">
-                            <i class="ph ph-lock" aria-hidden="true"></i>
-                            <input id="loginPassword" type="password" name="password" class="form-control"
-                                   placeholder="Enter your password" autocomplete="current-password" required>
-                            <button type="button" class="hv-password-toggle" id="toggleLoginPassword" aria-controls="loginPassword" aria-label="Show password" aria-pressed="false">Show</button>
+                    <button type="button" class="btn btn-maroon w-100" id="sendCodeBtn">Send verification code</button>
+                    <button type="button" class="hv-login-back" id="forgotBack">&larr; Back to sign in</button>
+                </div>
+
+                {{-- ── Panel: code + new password ── --}}
+                <div id="panelOtp" hidden>
+                    <h2 class="hv-panel-title">Enter your code</h2>
+                    <p class="hv-panel-sub">We sent a 6-digit code to <strong id="otpEmailLabel"></strong>. It expires in 10 minutes.</p>
+                    <div id="otpMsg" class="alert py-2 small hv-login-alert" role="alert" hidden></div>
+                    <div class="mb-3">
+                        <label for="otpCode" class="form-label">Verification code</label>
+                        <input id="otpCode" type="text" inputmode="numeric" maxlength="6" class="form-control hv-otp-code" placeholder="000000" autocomplete="one-time-code">
+                    </div>
+                    {{-- Step 1: verify the code. New-password fields stay hidden until the code is valid. --}}
+                    <button type="button" class="btn btn-maroon w-100" id="verifyCodeBtn">Verify code</button>
+                    {{-- Step 2: only revealed after a valid code. --}}
+                    <div id="otpPwStep" hidden>
+                        <div class="mb-3 mt-3">
+                            <label for="otpPassword" class="form-label">New password</label>
+                            <div class="hv-input-icon hv-password-field">
+                                <i class="ph ph-lock" aria-hidden="true"></i>
+                                <input id="otpPassword" type="password" class="form-control" placeholder="New password" autocomplete="new-password">
+                                <button type="button" class="hv-password-toggle" data-target="otpPassword" aria-label="Show password" aria-pressed="false">Show</button>
+                            </div>
+                            <p class="hv-panel-hint">8+ chars with upper &amp; lower case, a number, and a symbol.</p>
                         </div>
+                        <div class="mb-3">
+                            <label for="otpConfirm" class="form-label">Confirm new password</label>
+                            <div class="hv-input-icon">
+                                <i class="ph ph-lock" aria-hidden="true"></i>
+                                <input id="otpConfirm" type="password" class="form-control" placeholder="Re-enter new password" autocomplete="new-password">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-maroon w-100" id="resetBtn">Reset password</button>
                     </div>
-                    <div class="hv-login-extras">
-                        <label for="loginRemember"><input id="loginRemember" type="checkbox" name="remember" class="form-check-input"> Remember me</label>
+                    <div class="hv-login-extras" style="justify-content:space-between;">
+                        <button type="button" class="hv-link-btn" id="resendBtn">Resend code</button>
+                        <button type="button" class="hv-link-btn" id="otpBack">Back to sign in</button>
                     </div>
-                    <button type="submit" class="btn btn-maroon w-100">LOGIN</button>
-                </form>
+                </div>
+
+                {{-- ── Panel: success ── --}}
+                <div id="panelSuccess" hidden style="text-align:center;">
+                    <div class="hv-otp-success-mark" aria-hidden="true"><i class="ph ph-check-circle"></i></div>
+                    <h2 class="hv-panel-title" style="text-align:center;">Password reset!</h2>
+                    <p class="hv-panel-sub" id="successMsg" style="text-align:center;">You can now sign in with your new password.</p>
+                    <button type="button" class="btn btn-maroon w-100" id="successBack">Go to sign in</button>
+                </div>
             </div>
 
             <p class="hv-login-help">
-                <a href="{{ route('password.code.request') }}" class="hv-login-forgot">Forgot password?</a>
-                <br>Use your assigned recovery code after your manager or admin has arranged reset approval.
+                Login with your Hidden Vietnam credentials. Contact your manager or admin if you need access or an account.
             </p>
         </div>
     </section>
@@ -332,6 +417,156 @@
         var btn = form.querySelector('[type=submit]');
         if (btn) { btn.disabled = true; }
         // No preventDefault: the normal POST proceeds with all fields intact.
+    });
+})();
+
+/* ── Inline password reset: forgot → OTP → new password, all on this page.
+   No navigation, no new tab — panels swap and submit over fetch. ── */
+(function () {
+    var card = document.getElementById('loginCard');
+    if (!card) { return; }
+    var tokenEl = document.querySelector('#loginForm input[name="_token"]');
+    var CSRF = tokenEl ? tokenEl.value : '';
+    var panels = { login: document.getElementById('panelLogin'), forgot: document.getElementById('panelForgot'), otp: document.getElementById('panelOtp'), success: document.getElementById('panelSuccess') };
+    function show(name) { Object.keys(panels).forEach(function (k) { panels[k].hidden = (k !== name); }); }
+    function msg(el, text, type) {
+        if (!text) { el.hidden = true; return; }
+        el.textContent = text;
+        el.className = 'alert py-2 small hv-login-alert alert-' + (type || 'info');
+        el.hidden = false;
+    }
+    function errText(j) {
+        if (j && j.errors) { return Object.keys(j.errors).map(function (k) { return j.errors[k][0]; }).join(' '); }
+        return (j && (j.error || j.message)) || 'Something went wrong. Please try again.';
+    }
+    function post(url, data) {
+        var body = new FormData();
+        Object.keys(data).forEach(function (k) { body.append(k, data[k]); });
+        body.append('_token', CSRF);
+        return fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: body })
+            .then(function (r) {
+                // Parse via text so a non-JSON response (419 session expiry, 429
+                // throttle, 500) shows a clear message instead of "Network error".
+                return r.text().then(function (t) {
+                    var j;
+                    try { j = JSON.parse(t); } catch (e) {
+                        j = { ok: false, error: r.status === 419 ? 'Your session expired. Reload the page and try again.'
+                            : r.status === 429 ? 'Too many attempts. Please wait a moment and try again.'
+                            : 'Unexpected server response (' + r.status + '). Please try again.' };
+                    }
+                    return { status: r.status, json: j };
+                });
+            });
+    }
+
+    var forgotToggle = document.getElementById('forgotToggle');
+    if (forgotToggle) {
+        forgotToggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            msg(document.getElementById('forgotMsg'), '', '');
+            show('forgot');
+            document.getElementById('forgotEmail').focus();
+        });
+    }
+    document.getElementById('forgotBack').addEventListener('click', function () { show('login'); });
+    document.getElementById('otpBack').addEventListener('click', function () { show('login'); });
+    document.getElementById('successBack').addEventListener('click', function () {
+        show('login');
+        var lu = document.getElementById('loginUsername'); if (lu) { lu.focus(); }
+    });
+
+    card.querySelectorAll('.hv-password-toggle[data-target]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var inp = document.getElementById(btn.getAttribute('data-target'));
+            var vis = inp.type === 'password';
+            inp.type = vis ? 'text' : 'password';
+            btn.textContent = vis ? 'Hide' : 'Show';
+            btn.setAttribute('aria-pressed', vis ? 'true' : 'false');
+        });
+    });
+
+    var sendBtn = document.getElementById('sendCodeBtn');
+    sendBtn.addEventListener('click', function () {
+        var email = document.getElementById('forgotEmail').value.trim();
+        var fm = document.getElementById('forgotMsg');
+        if (!email) { msg(fm, 'Enter your email address.', 'danger'); return; }
+        var orig = sendBtn.textContent; sendBtn.disabled = true; sendBtn.textContent = 'Sending...';
+        post(card.dataset.urlEmail, { email: email }).then(function (r) {
+            sendBtn.disabled = false; sendBtn.textContent = orig;
+            if (r.json && r.json.ok) {
+                if (r.json.mode === 'link') {
+                    msg(fm, 'If this is an admin account, a reset link was emailed. Check your inbox.', 'success');
+                } else {
+                    document.getElementById('otpEmailLabel').textContent = r.json.email || email;
+                    msg(document.getElementById('otpMsg'), '', '');
+                    document.getElementById('otpCode').value = '';
+                    resetOtpSteps();
+                    show('otp');
+                    document.getElementById('otpCode').focus();
+                }
+            } else { msg(fm, errText(r.json), 'danger'); }
+        }).catch(function () { sendBtn.disabled = false; sendBtn.textContent = orig; msg(fm, 'Network error. Please try again.', 'danger'); });
+    });
+
+    var pwStep = document.getElementById('otpPwStep');
+    var verifyBtn = document.getElementById('verifyCodeBtn');
+    // Return the OTP panel to step 1 (code only); new-password fields stay hidden.
+    function resetOtpSteps() {
+        pwStep.hidden = true;
+        verifyBtn.hidden = false;
+        document.getElementById('otpPassword').value = '';
+        document.getElementById('otpConfirm').value = '';
+    }
+
+    // Step 1: verify the code. New-password fields appear ONLY if the code is valid.
+    verifyBtn.addEventListener('click', function () {
+        var om = document.getElementById('otpMsg');
+        var code = document.getElementById('otpCode').value.trim();
+        if (!/^\d{6}$/.test(code)) { msg(om, 'Enter the 6-digit code.', 'danger'); return; }
+        var orig = verifyBtn.textContent; verifyBtn.disabled = true; verifyBtn.textContent = 'Verifying...';
+        post(card.dataset.urlCheck, { code: code }).then(function (r) {
+            verifyBtn.disabled = false; verifyBtn.textContent = orig;
+            if (r.json && r.json.ok) {
+                msg(om, '', '');
+                verifyBtn.hidden = true;
+                pwStep.hidden = false;
+                document.getElementById('otpPassword').focus();
+            } else {
+                pwStep.hidden = true;           // keep new-password hidden on a bad code
+                msg(om, errText(r.json), 'danger');
+            }
+        }).catch(function () { verifyBtn.disabled = false; verifyBtn.textContent = orig; msg(om, 'Network error. Please try again.', 'danger'); });
+    });
+
+    var resetBtn = document.getElementById('resetBtn');
+    resetBtn.addEventListener('click', function () {
+        var om = document.getElementById('otpMsg');
+        var code = document.getElementById('otpCode').value.trim();
+        var pw = document.getElementById('otpPassword').value;
+        var cf = document.getElementById('otpConfirm').value;
+        if (!/^\d{6}$/.test(code)) { msg(om, 'Enter the 6-digit code.', 'danger'); return; }
+        if (pw !== cf) { msg(om, 'Passwords do not match.', 'danger'); return; }
+        var orig = resetBtn.textContent; resetBtn.disabled = true; resetBtn.textContent = 'Resetting...';
+        post(card.dataset.urlOtp, { code: code, password: pw, confirm_password: cf }).then(function (r) {
+            resetBtn.disabled = false; resetBtn.textContent = orig;
+            if (r.json && r.json.ok) {
+                document.getElementById('successMsg').textContent = r.json.message || 'You can now sign in with your new password.';
+                show('success');
+                document.getElementById('successBack').focus();
+            } else { msg(om, errText(r.json), 'danger'); }
+        }).catch(function () { resetBtn.disabled = false; resetBtn.textContent = orig; msg(om, 'Network error. Please try again.', 'danger'); });
+    });
+
+    var resendBtn = document.getElementById('resendBtn');
+    resendBtn.addEventListener('click', function () {
+        var om = document.getElementById('otpMsg');
+        resendBtn.disabled = true;
+        post(card.dataset.urlResend, {}).then(function (r) {
+            resendBtn.disabled = false;
+            var ok = r.json && r.json.ok;
+            if (ok) { document.getElementById('otpCode').value = ''; resetOtpSteps(); }
+            msg(om, ok ? 'A new code was sent. Enter it to continue.' : errText(r.json), ok ? 'success' : 'danger');
+        }).catch(function () { resendBtn.disabled = false; msg(om, 'Network error. Please try again.', 'danger'); });
     });
 })();
 </script>

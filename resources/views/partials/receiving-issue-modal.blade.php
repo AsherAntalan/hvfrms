@@ -1,35 +1,54 @@
-@if(auth()->user()->isAdmin() || auth()->user()->isBranchManager())
+@if(auth()->user()->isAdmin() || auth()->user()->isCommissaryManager() || auth()->user()->isBranchManager())
 @push('styles')
 <style>
 .receiving-issue-open .modal-backdrop { background: rgba(45, 15, 15, .35); opacity: 1; backdrop-filter: blur(5px); }
 #receivingIssueModal .modal-content { border-radius: 18px; }
+#receivingIssuePhotoView img { max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 10px; border: 1px solid #e9ecef; }
 </style>
 @endpush
 <div class="modal fade" id="receivingIssueModal" tabindex="-1" aria-labelledby="receivingIssueTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
-        <form id="receivingIssueForm">
+        <form id="receivingIssueForm" enctype="multipart/form-data">
             <div class="modal-header">
-                <h5 class="modal-title" id="receivingIssueTitle">Receiving assistance</h5>
+                <h5 class="modal-title" id="receivingIssueTitle">Request Refund</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div id="receivingIssueError" class="alert alert-danger" role="alert" hidden></div>
                 <p id="receivingIssueSummary" class="small"></p>
-                <div class="table-responsive"><table class="table table-sm">
-                    <thead><tr><th>Product</th><th>Awaiting receipt</th><th>Actual accepted</th><th>Discrepancy reason</th></tr></thead>
-                    <tbody id="receivingIssueLines"></tbody>
-                </table></div>
-                <label class="form-label" for="receivingIssueReason">Reason / technical error and evidence reference</label>
-                <textarea id="receivingIssueReason" class="form-control" minlength="10" maxlength="2000" rows="3" required></textarea>
-                <div class="form-check mt-3">
-                    <input id="receivingIssueConfirmed" class="form-check-input" type="checkbox" required>
-                    <label id="receivingIssueConfirmationLabel" class="form-check-label small" for="receivingIssueConfirmed"></label>
+
+                {{-- Branch manager: mark damaged quantities + describe + photo. --}}
+                <div id="refundFields">
+                    <label class="form-label">Damaged items (enter the damaged quantity)</label>
+                    <div class="table-responsive"><table class="table table-sm align-middle">
+                        <thead><tr><th>Product</th><th class="text-center">Delivered</th><th style="width:140px;">Damaged qty</th></tr></thead>
+                        <tbody id="refundLines"></tbody>
+                    </table></div>
+                    <label class="form-label mt-2" for="receivingIssueReason">Describe the problem</label>
+                    <textarea id="receivingIssueReason" class="form-control" minlength="10" maxlength="2000" rows="3" placeholder="e.g. 3 bottles arrived cracked and leaking." required></textarea>
+                    <label class="form-label mt-3" for="refundPhoto">Attach a photo as evidence</label>
+                    <input id="refundPhoto" class="form-control" type="file" accept="image/*" capture="environment" required>
+                    <p class="small text-muted mt-2 mb-0">On approval, the damaged quantities are removed from your branch inventory.</p>
                 </div>
-                <p class="small text-muted mt-2 mb-0">Only remaining released goods can be processed. Short or rejected goods are recorded as discrepancies. Existing receipts are never added again.</p>
+
+                {{-- Reviewer (admin / commissary manager): review + confirm. --}}
+                <div id="adminReview" hidden>
+                    <div class="table-responsive"><table class="table table-sm align-middle">
+                        <thead><tr><th>Product</th><th class="text-center">Damaged qty to remove</th></tr></thead>
+                        <tbody id="reviewLines"></tbody>
+                    </table></div>
+                    <div id="receivingIssuePhotoView" class="mb-3"></div>
+                    <label class="form-label" for="resolveReason">Resolution note</label>
+                    <textarea id="resolveReason" class="form-control" minlength="10" maxlength="2000" rows="3" placeholder="How was this refund handled?"></textarea>
+                    <div class="form-check mt-3">
+                        <input id="receivingIssueConfirmed" class="form-check-input" type="checkbox">
+                        <label class="form-check-label small" for="receivingIssueConfirmed">I reviewed the reason and photo. Confirming removes the damaged quantities from the branch's inventory.</label>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-maroon" id="receivingIssueSubmit">Submit</button>
+                <button type="submit" class="btn btn-maroon" id="receivingIssueSubmit">Submit Request Refund</button>
             </div>
         </form>
     </div></div>
@@ -41,93 +60,133 @@ window.HVReceivingIssue = (function () {
     const form = document.getElementById('receivingIssueForm');
     const error = document.getElementById('receivingIssueError');
     const reason = document.getElementById('receivingIssueReason');
+    const photo = document.getElementById('refundPhoto');
+    const resolveReason = document.getElementById('resolveReason');
     const confirmed = document.getElementById('receivingIssueConfirmed');
     const submit = document.getElementById('receivingIssueSubmit');
+    const refundFields = document.getElementById('refundFields');
+    const adminReview = document.getElementById('adminReview');
+    const photoView = document.getElementById('receivingIssuePhotoView');
     const modal = new bootstrap.Modal(el);
-    const isAdmin = @json(auth()->user()->isAdmin());
-    const reasons = ['Missing Quantity', 'Damaged in Transit', 'Incorrect Quantity', 'Incorrect Item', 'Other'];
+    const isReviewer = @json(auth()->user()->isAdmin() || auth()->user()->isCommissaryManager());
+    const API = @json(route('orders.api'));
+    const CSRF = document.querySelector('meta[name="csrf-token"]').content;
     let order = null;
     let busy = false;
-    async function post(payload) {
-        const res = await fetch(@json(route('orders.api')), {
-            method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content},
-            body: JSON.stringify(payload)
-        });
+
+    function showError(message) { error.textContent = message; error.hidden = false; }
+    function setBusy(value) {
+        busy = value;
+        form.querySelectorAll('button, textarea, input').forEach(c => c.disabled = value);
+    }
+    async function postJson(payload) {
+        const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify(payload) });
         const data = await res.json();
         if (!res.ok || !data.ok) { throw new Error(data.error || Object.values(data.errors || {}).flat().join(' ') || data.message || 'Could not process this request.'); }
         return data;
     }
-    function showError(message) { error.textContent = message; error.hidden = false; }
-    function setBusy(value) {
-        busy = value;
-        form.querySelectorAll('button, textarea, input, select').forEach(control => control.disabled = value);
+    async function postForm(fd) {
+        fd.append('_token', CSRF);
+        const res = await fetch(API, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) { throw new Error(data.error || Object.values(data.errors || {}).flat().join(' ') || data.message || 'Could not submit the request.'); }
+        return data;
     }
     function render(current) {
         order = current;
-        document.getElementById('receivingIssueTitle').textContent = isAdmin ? 'Resolve Receiving Issue' : 'Report Receiving Issue';
         const issue = current.receiving_issue;
-        document.getElementById('receivingIssueSummary').textContent = current.order_number + ' — ' + current.branch_name + (isAdmin && issue ? '\nConfirmed by ' + issue.reported_by + ' on ' + issue.reported_at + '. Branch report: ' + issue.reason : '. Enter only goods physically received and accepted. This report does not change stock.');
-        const tbody = document.getElementById('receivingIssueLines');
-        tbody.replaceChildren();
-        current.items.forEach(item => {
-            const row = document.createElement('tr');
-            const expected = item.receivable_quantity ?? (item.released_quantity || item.fulfilled_quantity || item.quantity);
-            const stored = issue?.receipt.find(line => Number(line.order_item_id) === Number(item.id));
-            const name = row.insertCell(); name.textContent = item.item_name + ' (' + item.unit + ')';
-            row.insertCell().textContent = expected;
-            const quantityCell = row.insertCell();
-            const reasonCell = row.insertCell();
-            if (isAdmin) {
-                quantityCell.textContent = stored?.received_quantity ?? 'Not confirmed';
-                reasonCell.textContent = stored?.reason || 'None';
-            } else {
-                const input = document.createElement('input');
-                input.type = 'number'; input.min = 0; input.max = expected; input.step = 1; input.required = true;
-                input.className = 'form-control form-control-sm'; input.dataset.lineId = item.id;
-                input.setAttribute('aria-label', 'Actual accepted quantity for ' + item.item_name);
-                quantityCell.append(input);
-                const select = document.createElement('select'); select.className = 'form-select form-select-sm';
-                select.setAttribute('aria-label', 'Discrepancy reason for ' + item.item_name);
-                select.add(new Option('No discrepancy', ''));
-                reasons.forEach(value => select.add(new Option(value, value)));
-                input.addEventListener('input', () => { select.required = input.value !== '' && Number(input.value) < expected; });
-                reasonCell.append(select);
+        document.getElementById('receivingIssueTitle').textContent = isReviewer ? 'Review Refund Request' : 'Request Refund';
+        if (isReviewer) {
+            refundFields.hidden = true;
+            adminReview.hidden = false;
+            submit.textContent = 'Confirm refund — remove from inventory';
+            document.getElementById('receivingIssueSummary').textContent = current.order_number + ' — ' + current.branch_name
+                + (issue ? '  ·  Reported by ' + issue.reported_by + ' on ' + issue.reported_at : '');
+            const names = {};
+            current.items.forEach(i => { names[i.id] = i.item_name + ' (' + i.unit + ')'; });
+            const tbody = document.getElementById('reviewLines');
+            tbody.replaceChildren();
+            (issue && issue.receipt ? issue.receipt : []).forEach(line => {
+                const row = document.createElement('tr');
+                row.insertCell().textContent = names[line.order_item_id] || ('Item #' + line.item_id);
+                const q = row.insertCell(); q.className = 'text-center fw-semibold'; q.textContent = line.quantity;
+                tbody.append(row);
+            });
+            photoView.replaceChildren();
+            if (issue && issue.reason) {
+                const p = document.createElement('p'); p.className = 'mb-2'; p.innerHTML = '<strong>Reason:</strong> ' + issue.reason;
+                photoView.append(p);
             }
-            tbody.append(row);
-        });
-        document.getElementById('receivingIssueConfirmationLabel').textContent = isAdmin
-            ? 'I reviewed the branch-confirmed quantities and supporting evidence. Reprocess this stored receipt without changing its quantities.'
-            : 'I physically verified these accepted quantities at my branch and request admin assistance for the receiving error.';
-        submit.textContent = isAdmin ? 'Reprocess confirmed receipt' : 'Submit branch confirmation';
+            if (issue && issue.photo_url) {
+                const a = document.createElement('a'); a.href = issue.photo_url; a.target = '_blank'; a.rel = 'noopener';
+                const img = document.createElement('img'); img.src = issue.photo_url; img.alt = 'Refund evidence photo';
+                a.append(img); photoView.append(a);
+            } else {
+                const n = document.createElement('p'); n.className = 'small text-muted'; n.textContent = 'No photo attached.';
+                photoView.append(n);
+            }
+        } else {
+            refundFields.hidden = false;
+            adminReview.hidden = true;
+            submit.textContent = 'Submit Request Refund';
+            document.getElementById('receivingIssueSummary').textContent = current.order_number + ' — ' + current.branch_name + '. Mark the damaged quantities, describe the problem, and attach a photo.';
+            const tbody = document.getElementById('refundLines');
+            tbody.replaceChildren();
+            current.items.forEach(item => {
+                const delivered = item.fulfilled_quantity ?? item.quantity;
+                const row = document.createElement('tr');
+                row.insertCell().textContent = item.item_name + ' (' + item.unit + ')';
+                const d = row.insertCell(); d.className = 'text-center'; d.textContent = delivered;
+                const cell = row.insertCell();
+                const input = document.createElement('input');
+                input.type = 'number'; input.min = 0; input.max = delivered; input.step = 1; input.value = 0;
+                input.className = 'form-control form-control-sm'; input.dataset.lineId = item.id;
+                input.setAttribute('aria-label', 'Damaged quantity for ' + item.item_name);
+                cell.append(input);
+                tbody.append(row);
+            });
+        }
     }
     async function open(id) {
         form.reset(); error.hidden = true; order = null; setBusy(true);
-        document.getElementById('receivingIssueLines').replaceChildren();
-        document.getElementById('receivingIssueSummary').textContent = 'Loading branch receipt details…';
+        document.getElementById('receivingIssueSummary').textContent = 'Loading order details…';
         document.body.classList.add('receiving-issue-open'); modal.show();
         try {
-            const data = await post({action: 'view', id: id});
-            if (!(isAdmin ? data.order.actions.can_resolve_receiving_issue : data.order.actions.can_report_receiving_issue)) { throw new Error('This order is no longer eligible for receiving assistance.'); }
+            const data = await postJson({ action: 'view', id: id });
+            if (!(isReviewer ? data.order.actions.can_resolve_receiving_issue : data.order.actions.can_request_refund)) { throw new Error('This order is no longer eligible.'); }
             render(data.order); setBusy(false);
         } catch (e) { setBusy(false); submit.disabled = true; showError(e.message); }
     }
     form.addEventListener('submit', async function (event) {
         event.preventDefault();
-        if (busy || !order || !form.reportValidity()) { return; }
-        const payload = {action: isAdmin ? 'resolve_receiving_issue' : 'report_receiving_issue', reason: reason.value};
-        if (isAdmin) { payload.issue_id = order.receiving_issue.id; payload.review_confirmed = confirmed.checked; }
-        else {
-            payload.id = order.id; payload.branch_confirmed = confirmed.checked;
-            payload.receipt = [...document.querySelectorAll('#receivingIssueLines input')].map(input => ({order_item_id: Number(input.dataset.lineId), received_quantity: Number(input.value), reason: input.closest('tr').querySelector('select').value || null}));
-        }
+        if (busy || !order) { return; }
         setBusy(true); error.hidden = true;
         try {
-            const data = await post(payload);
+            let data;
+            if (isReviewer) {
+                if (!resolveReason.value || resolveReason.value.trim().length < 10) { throw new Error('Enter a resolution note (at least 10 characters).'); }
+                if (!confirmed.checked) { throw new Error('Please confirm you reviewed the request.'); }
+                data = await postJson({ action: 'resolve_receiving_issue', issue_id: order.receiving_issue.id, reason: resolveReason.value, review_confirmed: true });
+            } else {
+                if (!reason.value || reason.value.trim().length < 10) { throw new Error('Describe the problem (at least 10 characters).'); }
+                if (!photo.files || !photo.files[0]) { throw new Error('Attach a photo as evidence.'); }
+                const lines = [...document.querySelectorAll('#refundLines input')]
+                    .map(i => ({ order_item_id: Number(i.dataset.lineId), quantity: Number(i.value) }))
+                    .filter(l => l.quantity > 0);
+                if (!lines.length) { throw new Error('Enter the damaged quantity for at least one item.'); }
+                const fd = new FormData();
+                fd.append('action', 'request_refund');
+                fd.append('id', order.id);
+                fd.append('reason', reason.value);
+                fd.append('items', JSON.stringify(lines));
+                fd.append('photo', photo.files[0]);
+                data = await postForm(fd);
+            }
             setBusy(false);
             el.addEventListener('hidden.bs.modal', async function () {
-                if (window.hvModal) { await window.hvModal.success({title: isAdmin ? 'Receiving issue resolved' : 'Report submitted', message: data.message}); }
+                if (window.hvModal) { await window.hvModal.success({ title: isReviewer ? 'Refund confirmed' : 'Refund request submitted', message: data.message }); }
                 window.location.reload();
-            }, {once: true});
+            }, { once: true });
             modal.hide();
         } catch (e) { setBusy(false); showError(e.message); }
     });
@@ -135,13 +194,13 @@ window.HVReceivingIssue = (function () {
     el.addEventListener('hidden.bs.modal', () => document.body.classList.remove('receiving-issue-open'));
     return {
         addAction: function (footer, current) {
-            if (!(isAdmin ? current?.actions?.can_resolve_receiving_issue : current?.actions?.can_report_receiving_issue)) { return; }
+            if (!(isReviewer ? current?.actions?.can_resolve_receiving_issue : current?.actions?.can_request_refund)) { return; }
             const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline-warning';
-            button.textContent = isAdmin ? 'Resolve Receiving Issue' : 'Report Receiving Issue';
+            button.textContent = isReviewer ? 'Review Refund Request' : 'Report Receiving Issue';
             button.onclick = function () {
                 const parent = footer.closest('.modal');
                 if (parent) {
-                    parent.addEventListener('hidden.bs.modal', () => open(current.id), {once: true});
+                    parent.addEventListener('hidden.bs.modal', () => open(current.id), { once: true });
                     bootstrap.Modal.getInstance(parent).hide();
                 } else { open(current.id); }
             };

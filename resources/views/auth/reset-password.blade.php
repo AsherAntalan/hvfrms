@@ -44,6 +44,16 @@
 .hv-recover-warn{ width:84px; height:84px; margin:0 auto 18px; display:flex; align-items:center; justify-content:center;
   background:#F6DED9; border-radius:50%; }
 .hv-recover-warn .ph{ font-size:38px; color:#C0392B; }
+.hv-pw-meter{ margin:10px 2px 2px; }
+.hv-pw-bar{ height:7px; border-radius:6px; background:#EEE7DC; overflow:hidden; }
+.hv-pw-bar > span{ display:block; height:100%; width:0; border-radius:6px; background:#C0392B; transition:width .2s, background .2s; }
+.hv-pw-label{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--hv-muted); margin-top:6px; }
+.hv-pw-label b{ font-weight:700; color:var(--hv-muted); }
+.hv-pw-list{ list-style:none; margin:12px 0 0; padding:0; text-align:left; }
+.hv-pw-list li{ display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--hv-muted); margin:6px 0; }
+.hv-pw-list li > .ph{ font-size:16px; color:#C9BFAE; flex-shrink:0; }
+.hv-pw-list li.ok{ color:#1F7A3D; }
+.hv-pw-list li.ok > .ph{ color:#1F7A3D; }
 @media (max-width:480px){ .hv-recover-card{ padding:28px 20px 24px; border-radius:18px; } .hv-recover h1{ font-size:20px; } }
 </style>
 @endpush
@@ -76,7 +86,16 @@
                             <i class="ph ph-eye"></i>
                         </button>
                     </div>
-                    <p class="hv-recover-hint" id="newPasswordHint">At least 8 characters.</p>
+                    <div class="hv-pw-meter" id="pwMeter" aria-live="polite">
+                        <div class="hv-pw-bar"><span id="pwBar"></span></div>
+                        <div class="hv-pw-label"><span>Password strength</span><b id="pwLabel">—</b></div>
+                        <ul class="hv-pw-list" id="pwList">
+                            <li data-rule="len"><i class="ph ph-circle" aria-hidden="true"></i> A minimum of 8 characters</li>
+                            <li data-rule="case"><i class="ph ph-circle" aria-hidden="true"></i> Lower and uppercase letters</li>
+                            <li data-rule="num"><i class="ph ph-circle" aria-hidden="true"></i> At least 1 number</li>
+                            <li data-rule="sym"><i class="ph ph-circle" aria-hidden="true"></i> At least 1 symbol</li>
+                        </ul>
+                    </div>
                     @error('password')<p class="hv-recover-error" role="alert">{{ $message }}</p>@enderror
                 </div>
 
@@ -124,5 +143,48 @@ document.querySelectorAll('.hv-recover-toggle').forEach(function(btn){
         btn.querySelector('i').className = show ? 'ph ph-eye-slash' : 'ph ph-eye';
     });
 });
+
+(function(){
+    var input = document.getElementById('newPassword');
+    var bar = document.getElementById('pwBar');
+    var label = document.getElementById('pwLabel');
+    var list = document.getElementById('pwList');
+    if (!input || !bar || !list) { return; }
+    var items = {
+        len:  list.querySelector('[data-rule=len]'),
+        case: list.querySelector('[data-rule=case]'),
+        num:  list.querySelector('[data-rule=num]'),
+        sym:  list.querySelector('[data-rule=sym]')
+    };
+    var levels = [
+        { w: '0%',   c: '#C0392B', t: '—' },
+        { w: '25%',  c: '#C0392B', t: 'Weak' },
+        { w: '50%',  c: '#E08A1E', t: 'Fair' },
+        { w: '75%',  c: '#D4A94A', t: 'Strong' },
+        { w: '100%', c: '#1F7A3D', t: 'Very Strong' }
+    ];
+    function mark(li, ok){
+        li.classList.toggle('ok', ok);
+        li.querySelector('.ph').className = ok ? 'ph ph-check-circle' : 'ph ph-circle';
+    }
+    function update(){
+        var v = input.value;
+        var rules = {
+            len: v.length >= 8,
+            case: /[a-z]/.test(v) && /[A-Z]/.test(v),
+            num: /[0-9]/.test(v),
+            sym: /[^A-Za-z0-9]/.test(v)
+        };
+        var score = 0;
+        Object.keys(rules).forEach(function(k){ mark(items[k], rules[k]); if (rules[k]) { score++; } });
+        var lvl = v.length === 0 ? levels[0] : levels[score];
+        bar.style.width = lvl.w;
+        bar.style.background = lvl.c;
+        label.textContent = lvl.t;
+        label.style.color = v.length === 0 ? '' : lvl.c;
+    }
+    input.addEventListener('input', update);
+    update();
+})();
 </script>
 @endpush

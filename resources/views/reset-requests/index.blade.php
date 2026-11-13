@@ -58,7 +58,7 @@
                     <th class="text-end pe-3">Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="resetRequestsBody">
             @forelse($requests as $r)
                 @php
                     $target = $r->user;
@@ -159,8 +159,12 @@
 </div>
 @endsection
 
+@include('partials.list-pager')
 @push('scripts')
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.hvListPager) { window.hvListPager.attach({ tbody: '#resetRequestsBody', noun: 'request', nounPlural: 'requests' }); }
+});
 var CSRF = document.querySelector('meta[name="csrf-token"]').content;
 var API = '{{ route('reset-requests.api') }}';
 

@@ -136,9 +136,6 @@
 @if($isOwner || $user->canManageInventory() || $isWarehouse)
 @php
     $attention = [];
-    if (($stats['recovery_requests'] ?? 0) > 0) {
-        $attention[] = ['text' => $stats['recovery_requests'] . ' account recovery request' . ($stats['recovery_requests'] > 1 ? 's' : '') . ' to review', 'link' => route('reset-requests', ['actionable' => 1])];
-    }
     if (($stats['receiving_issues'] ?? 0) > 0) {
         $attention[] = ['text' => $stats['receiving_issues'] . ' receiving issue' . ($stats['receiving_issues'] > 1 ? 's' : '') . ' awaiting assistance', 'link' => route('orders', ['queue' => 'active', 'receiving_issues' => 1])];
     }

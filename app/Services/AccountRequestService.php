@@ -73,6 +73,7 @@ class AccountRequestService
             'type' => 'account_request', 'category' => 'accounts', 'severity' => 'info',
             'message' => ($entry->status === 'pending' ? 'New account approval needed: ' : 'Account request approved: ').$entry->full_name,
             'context' => $entry->branch?->branch_name ?? '', 'time' => $entry->updated_at->diffForHumans(),
+            'ts' => $entry->updated_at->timestamp,
             'branch_id' => $entry->branch_id,
             'link' => route('account-requests', ['request' => $entry->id]),
         ])->all();

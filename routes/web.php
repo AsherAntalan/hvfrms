@@ -3,7 +3,6 @@
 use App\Http\Controllers\AccountRequestController;
 use App\Http\Controllers\AlertController;
 use App\Http\Controllers\AuditController;
-use App\Http\Controllers\Auth\CodeResetController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\InitialPasswordController;
 use App\Http\Controllers\Auth\LoginController;
@@ -16,10 +15,10 @@ use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderingController;
 use App\Http\Controllers\OrderPaymentController;
+use App\Http\Controllers\PaymentAccountController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\ResetRequestController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\UserController;
@@ -59,30 +58,20 @@ Route::middleware('guest')->group(function () {
     Route::post('reset-password', [ResetPasswordController::class, 'reset'])
         ->middleware('throttle:password-reset')
         ->name('password.update');
-});
 
-// -------------------------------------------------------------------------
-// Hierarchical account recovery — token/code gated, open to any visitor.
-// These must work even when a different account is signed in (for example,
-// recovering one account from a browser already logged into another). The
-// emailed token/one-time code is the authorization, so these are deliberately
-// NOT behind the 'guest' gate: a signed-in session grants no extra power here.
-// Email verification only confirms inbox access; a separate authorizer still
-// approves, and the final password change still requires the emailed reset link.
-// -------------------------------------------------------------------------
-Route::group([], function () {
-    // Hierarchical recovery: public entry with a username + one-time code.
-    Route::get('account-recovery', [CodeResetController::class, 'showForm'])
-        ->name('password.code.request');
-    Route::post('account-recovery', [CodeResetController::class, 'reset'])
+    // Self-service OTP reset for non-admin accounts: email a 6-digit code, then
+    // enter the code + a new password on one page. No approval step.
+    Route::get('reset-password-code', [ForgotPasswordController::class, 'showOtpForm'])
+        ->name('password.otp');
+    Route::post('reset-password-code/check', [ForgotPasswordController::class, 'checkOtp'])
         ->middleware('throttle:password-reset')
-        ->name('password.code.update');
-    Route::get('account-recovery/verify/{token}', [CodeResetController::class, 'showVerification'])->name('password.code.verify');
-    Route::post('account-recovery/verify/{token}', [CodeResetController::class, 'verifyEmail'])
-        ->middleware('throttle:password-reset')->name('password.code.verify-confirm');
-    Route::get('account-recovery/reset/{token}', [CodeResetController::class, 'showResetForm'])->name('password.code.link');
-    Route::post('account-recovery/reset', [CodeResetController::class, 'completeReset'])
-        ->middleware('throttle:password-reset')->name('password.code.complete');
+        ->name('password.otp.check');
+    Route::post('reset-password-code', [ForgotPasswordController::class, 'verifyOtp'])
+        ->middleware('throttle:password-reset')
+        ->name('password.otp.update');
+    Route::post('reset-password-code/resend', [ForgotPasswordController::class, 'resendOtp'])
+        ->middleware('throttle:password-reset')
+        ->name('password.otp.resend');
 });
 
 // -------------------------------------------------------------------------
@@ -199,10 +188,14 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         Route::get('orders/{order}/labels', [OrderController::class, 'labels'])
             ->name('orders.labels');
 
-        Route::get('delivery', [DeliveryController::class, 'index'])
-            ->name('delivery');
-        Route::get('delivery/history', [DeliveryController::class, 'history'])
-            ->name('delivery.history');
+        // Active Shipments is no longer used by branch managers (they receive from
+        // the order modal), so the delivery pages exclude them.
+        Route::middleware('role:super_admin,owner,admin,commissary_manager,commissary_staff')->group(function () {
+            Route::get('delivery', [DeliveryController::class, 'index'])
+                ->name('delivery');
+            Route::get('delivery/history', [DeliveryController::class, 'history'])
+                ->name('delivery.history');
+        });
     });
 
     // ---------------------------------------------------------------
@@ -227,10 +220,6 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
         Route::get('account-requests', [AccountRequestController::class, 'index'])->name('account-requests');
         Route::post('account-requests', [AccountRequestController::class, 'store'])->middleware('throttle:10,1')->name('account-requests.store');
         Route::post('account-requests/api', [AccountRequestController::class, 'api'])->middleware('throttle:10,1')->name('account-requests.api');
-        Route::get('reset-requests', [ResetRequestController::class, 'index'])
-            ->name('reset-requests');
-        Route::post('reset-requests/api', [ResetRequestController::class, 'api'])
-            ->name('reset-requests.api');
     });
 
     // ---------------------------------------------------------------
@@ -255,6 +244,11 @@ Route::middleware(['auth', 'idle.timeout', 'branch.scope'])->group(function () {
             ->name('settings.update');
 
         Route::post('settings/gcash-qr', [OrderPaymentController::class, 'updateReceivingQr'])->name('settings.gcash-qr');
+
+        // Payment methods (Bank / E-Wallet accounts) — admin/owner editable.
+        Route::get('payment-accounts', [PaymentAccountController::class, 'index'])->name('payment-accounts');
+        Route::post('payment-accounts', [PaymentAccountController::class, 'store'])->name('payment-accounts.store');
+        Route::post('payment-accounts/{paymentAccount}', [PaymentAccountController::class, 'update'])->name('payment-accounts.update');
 
         // Database backup
         Route::post('backup', [SettingsController::class, 'backup'])

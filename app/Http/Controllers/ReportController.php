@@ -711,6 +711,32 @@ class ReportController extends Controller
             }, "report_sales_{$dateFrom}_to_{$dateTo}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
         }
 
+        // Commissary Manager: Product Summary / Product Movement export the
+        // order-bound production workflow (requested → prepared → released),
+        // scoped by destination branch — matching the on-screen tables, not the
+        // branch batch-stock queries below.
+        if ($user->isCommissaryManager() && in_array($type, ['stock', 'movements'], true)) {
+            [$dateFrom, $dateTo] = $this->dateRange($request);
+            $destFilter = $this->resolveSalesBranchFilter($request);
+            [$summary, $movements] = $this->buildCommissaryReportData($destFilter, $dateFrom, $dateTo);
+
+            return response()->streamDownload(function () use ($type, $summary, $movements): void {
+                $handle = fopen('php://output', 'w');
+                if ($type === 'stock') {
+                    fputcsv($handle, ['Product', 'Unit', 'Requested', 'Prepared', 'Released', 'Remaining for Release']);
+                    foreach ($summary as $r) {
+                        fputcsv($handle, [$r->item_name, $r->unit, (int) $r->requested, (int) $r->prepared, (int) $r->released, (int) $r->remaining]);
+                    }
+                } else {
+                    fputcsv($handle, ['Date', 'Action', 'Product', 'Unit', 'Order', 'Destination Branch', 'Quantity']);
+                    foreach ($movements as $r) {
+                        fputcsv($handle, [$r->moved_at, $r->action, $r->item_name, $r->unit, $r->order_number, $r->destination, (int) $r->quantity]);
+                    }
+                }
+                fclose($handle);
+            }, "report_commissary_{$type}_{$dateFrom}_to_{$dateTo}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
+        }
+
         [$dateFrom, $dateTo] = $this->dateRange($request);
         $branchFilter = $this->resolveBranchFilter($request, $user);
 

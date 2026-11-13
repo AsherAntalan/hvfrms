@@ -68,4 +68,24 @@
         </div>
     </div>
 </div>
+@push('scripts')
+<script>
+// Pager loads in place (no full reload), so scroll position stays fixed.
+document.addEventListener('click', function (e) {
+    var link = e.target.closest('.production-records-pagination a.page-link');
+    if (!link) { return; }
+    var url = link.getAttribute('href');
+    var container = document.getElementById('productionDeliveryRecords');
+    if (!url || !container) { return; }
+    e.preventDefault();
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+            var fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('productionDeliveryRecords');
+            if (fresh) { container.innerHTML = fresh.innerHTML; }
+        })
+        .catch(function () { window.location.href = url; });
+});
+</script>
+@endpush
 @endif

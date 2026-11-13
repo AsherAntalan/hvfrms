@@ -178,7 +178,9 @@ class CommissaryOrdersOrganizationTest extends TestCase
         $partial = Order::where('order_number', 'ORD-UI-005')->firstOrFail();
 
         foreach ($world['users'] as $role => $user) {
-            foreach (['/orders', '/delivery'] as $path) {
+            // Branch managers no longer use the Active Shipments (/delivery) page.
+            $paths = $role === 'branch_manager' ? ['/orders'] : ['/orders', '/delivery'];
+            foreach ($paths as $path) {
                 $response = $this->actingAs($user)->get($path)->assertOk();
                 $document = new \DOMDocument;
                 @$document->loadHTML($response->getContent());
@@ -221,12 +223,13 @@ class CommissaryOrdersOrganizationTest extends TestCase
         $w = $this->world();
         $this->actingAs($w['users']['branch_manager'])->get('/orders')->assertOk()->assertViewHas('organizeCommissaryOrders', false)
             ->assertViewHas('orders', fn ($orders) => $orders->every(fn ($order) => $order->branch_id === $w['baguio']->id))
-            ->assertDontSee('data-order-queue=', false)->assertSee('onclick="openOrderModal()"', false);
+            ->assertDontSee('data-order-queue=', false)->assertSee(route('ordering'), false);
         // Owner/Admin get a simple Active / History / All grouping (commissary
         // staff keep the granular operational queues).
         $this->actingAs($w['users']['owner'])->get('/orders')->assertOk()->assertViewHas('organizeCommissaryOrders', true)
             ->assertViewHas('orders', fn ($orders) => $orders->count() === 11)
-            ->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'all', 'history'])
+            ->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'history'])
+            ->assertViewHas('orderQueueCounts', fn ($c) => $c['active'] === 11)
             ->assertSee('data-order-queue=', false);
     }
 
@@ -284,6 +287,13 @@ class CommissaryOrdersOrganizationTest extends TestCase
             $this->assertSame($expectedOrdersEntries, substr_count($sidebar[1], 'data-sidebar-orders'));
             $this->assertStringNotContainsString('Delivery Status', $sidebar[1]);
 
+            // Branch managers no longer have the Active Shipments page at all.
+            if ($role === 'branch_manager') {
+                $this->actingAs($user)->get('/delivery')->assertForbidden();
+
+                continue;
+            }
+
             // The shipments page: renamed heading, Back to Orders, no Delivery Status tab.
             $delivery = $this->actingAs($user)->get('/delivery')->assertOk();
             $deliveryHtml = $delivery->getContent();
@@ -318,10 +328,8 @@ class CommissaryOrdersOrganizationTest extends TestCase
                 ->assertSee('ready')->assertDontSee('awaiting approval');
         }
 
-        $this->actingAs($world['users']['branch_manager'])->get('/delivery')->assertOk()
-            ->assertViewHas('active', fn ($orders) => $orders->count() === 2 && $orders->every(fn ($order) => $order->branch_id === $world['baguio']->id))
-            ->assertViewHas('history', fn ($orders) => $orders->every(fn ($order) => $order->branch_id === $world['baguio']->id))
-            ->assertViewHas('archived', fn ($orders) => $orders->every(fn ($order) => $order->branch_id === $world['baguio']->id));
+        // Branch managers no longer access the Active Shipments page.
+        $this->actingAs($world['users']['branch_manager'])->get('/delivery')->assertForbidden();
 
         $this->assertSame($before, Order::pluck('status', 'id')->all());
     }

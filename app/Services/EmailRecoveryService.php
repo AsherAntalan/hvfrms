@@ -27,24 +27,27 @@ class EmailRecoveryService
             return;
         }
         RateLimiter::hit($key, 900);
-        $normalized = $this->codes->normalize($code);
-        if (! $this->codes->isWellFormed($normalized)) {
-            return;
-        }
-        DB::transaction(function () use ($username, $normalized, $email, $contactNumber): void {
+        DB::transaction(function () use ($username, $code, $email, $contactNumber): void {
             $user = User::with('role')->where('username', $username)->where('status', 'active')->lockForUpdate()->first();
-            if (! $user || $user->retired_at || $user->isSuperAdmin() || ! hash_equals($user->recovery_code_hash ?? '', $this->codes->hash($normalized))) {
+            if (! $user || $user->retired_at || $user->isSuperAdmin()) {
                 return;
             }
             if ($user->isAdmin()) {
-                // Auto self-service only when the submitted personal email matches the
-                // admin's own registered email. The link is always sent to the
-                // registered email; a non-matching email triggers nothing.
+                // Admin self-service needs no recovery code: the reset link is always
+                // sent to the admin's own registered email, and only when the
+                // submitted personal email matches it — possession of that inbox is
+                // the proof. A non-matching email triggers nothing.
                 if ($email !== null && $user->email !== null
                     && hash_equals(strtolower($user->email), strtolower(trim($email)))) {
                     $this->requestAdminReset($user);
                 }
 
+                return;
+            }
+            // Manager/Staff: a valid recovery code matched against the stored hash.
+            $normalized = $this->codes->normalize($code);
+            if (! $this->codes->isWellFormed($normalized)
+                || ! hash_equals($user->recovery_code_hash ?? '', $this->codes->hash($normalized))) {
                 return;
             }
             if (! $email) {

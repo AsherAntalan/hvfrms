@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\AdminNotifier;
 use App\Services\ForecastService;
 use App\Services\OrderPaymentService;
 use Illuminate\Http\Request;
@@ -219,6 +220,12 @@ class OrderingController extends Controller
                 ]);
 
                 DB::commit();
+
+                AdminNotifier::send(
+                    'New order request — '.$orderNumber,
+                    'New order waiting for approval',
+                    ["Order {$orderNumber} was placed by {$user->full_name} for {$user->branch?->branch_name}.", 'Total: PHP '.number_format($total, 2).'. It is now awaiting review and approval.'],
+                );
 
                 return response()->json([
                     'ok' => true,

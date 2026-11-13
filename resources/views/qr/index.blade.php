@@ -98,6 +98,20 @@
     <div id="scanFeed" class="mt-3"></div>
 </div>
 
+{{-- Success modal shown after a confirmed scan --}}
+<div class="modal fade" id="scanSuccessModal" tabindex="-1" aria-hidden="true" aria-labelledby="scanSuccessTitle">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-center">
+            <div class="modal-body p-4">
+                <div class="mb-3"><i class="ph-fill ph-check-circle" style="font-size:3.5rem;color:var(--success);"></i></div>
+                <h5 class="fw-bold mb-2" id="scanSuccessTitle">Recorded</h5>
+                <p class="text-muted mb-4" id="scanSuccessMsg">Saved successfully.</p>
+                <button type="button" class="btn btn-maroon w-100" data-bs-dismiss="modal">Scan next item</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @include('partials.commissary-group-scanner')
@@ -129,9 +143,20 @@
             c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    // Shared, user-gesture-unlocked audio so the beep works on phones (esp. iOS).
+    let audioCtx = null;
+    function unlockAudio() {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        } catch (e) {}
+    }
+
     function beep(good) {
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const ctx = audioCtx;
             const o = ctx.createOscillator(), g = ctx.createGain();
             o.connect(g); g.connect(ctx.destination);
             o.frequency.value = good ? 880 : 220;
@@ -139,6 +164,23 @@
             g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
             o.stop(ctx.currentTime + 0.2);
         } catch (e) {}
+    }
+
+    // Success modal after a confirmed scan.
+    function showSuccessModal(msg, title) {
+        var el = $('scanSuccessModal');
+        if (!el || typeof bootstrap === 'undefined') return false;
+        $('scanSuccessMsg').textContent = msg || 'Saved successfully.';
+        $('scanSuccessTitle').textContent = title || 'Recorded';
+        bootstrap.Modal.getOrCreateInstance(el).show();
+        return true;
+    }
+
+    // On phones the result sits below the camera, so bring it into view after a scan.
+    function scrollToResult() {
+        if (window.innerWidth >= 992) return;
+        var el = $('scanResult');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     async function postData(url, fields) {
@@ -417,6 +459,9 @@
             }
             beep(true);
             prependFeed(r.message || (qty + ' ' + escapeHtml(current.unit) + ' — ' + escapeHtml(current.item_name)));
+            if (mode === 'in') {
+                showSuccessModal(r.message || 'Stock In recorded.', 'Stock In recorded');
+            }
             $('scanResult').innerHTML =
                 '<div class="alert alert-success mt-3">' + escapeHtml(r.message || 'Saved!') +
                 ' Scan the next item.</div>';
@@ -446,10 +491,11 @@
         if (decodedText === lastCode && now - lastAt < 2500) return;
         lastCode = decodedText; lastAt = now;
         $('manualCode').value = decodedText;
-        lookup(decodedText.trim());
+        lookup(decodedText.trim()).then(scrollToResult);
     }
 
     $('btnStartCam').addEventListener('click', async () => {
+        unlockAudio();
         if (scanning) return;
         if (typeof Html5Qrcode === 'undefined') {
             $('scanResult').innerHTML =
@@ -488,8 +534,9 @@
     // -- Manual form --
     $('manualForm').addEventListener('submit', (e) => {
         e.preventDefault();
+        unlockAudio();
         const code = $('manualCode').value.trim();
-        if (code) { lookup(code); $('manualCode').value = ''; }
+        if (code) { lookup(code).then(scrollToResult); $('manualCode').value = ''; }
     });
 
     document.addEventListener('visibilitychange', () => {

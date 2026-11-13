@@ -6,13 +6,14 @@ use App\Models\Alert;
 use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Order;
+use App\Models\ReceivingIssue;
 use App\Services\AccountRequestService;
 use App\Services\AlertService;
-use App\Services\RecoveryApprovalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AlertController extends Controller
 {
@@ -40,10 +41,12 @@ class AlertController extends Controller
         // Auto-generate alerts
         app(AlertService::class)->generate();
 
-        // Filters
-        $filterType = $request->input('type', '');
-        $filterResolved = $request->input('resolved', '0');
-        $filterBranch = $request->input('branch', '');
+        // Filters. Cast to string because the global ConvertEmptyStringsToNull
+        // middleware turns an empty "branch="/"type=" query value into null, and a
+        // null would wrongly pass a `!== ''` guard and filter on branch_id = 0.
+        $filterType = (string) $request->input('type', '');
+        $filterResolved = (string) $request->input('resolved', '0');
+        $filterBranch = (string) $request->input('branch', '');
         $isNotificationCenter = $user->canAuthorizeResets() || $user->isManagerRole();
         $category = $isNotificationCenter ? $request->query('category', 'all') : 'all';
         if (! in_array($category, ['all', 'recovery', 'inventory', 'orders', 'accounts'], true)) {
@@ -117,15 +120,30 @@ class AlertController extends Controller
         }
         $operationalOrders = collect();
         $operationalOrderCount = 0;
+        $refundRequests = collect();
         if ($isNotificationCenter && in_array($category, ['all', 'orders'], true) && $filterResolved !== '1' && in_array($filterType, ['', 'operational'], true)) {
-            $orders = Order::with('branch')->whereIn('status', ['pending', 'approved', 'preparing', 'delivering']);
+            // In-progress orders, plus orders received (delivered/settled) in the
+            // last 7 days so a fresh scan-in shows as a "delivered" notification.
+            $orders = Order::with('branch')->where(function ($q) {
+                $q->whereIn('status', ['pending', 'approved', 'preparing', 'delivering'])
+                    ->orWhere(fn ($t) => $t->whereIn('status', ['delivered', 'settled'])->where('updated_at', '>=', now()->subDays(7)));
+            });
             if ($user->isBranchScoped() && ! $user->isCommissaryManager()) {
                 $orders->where('branch_id', $user->branch_id);
             } elseif ($filterBranch !== '') {
                 $orders->where('branch_id', (int) $filterBranch);
             }
             $operationalOrderCount = (clone $orders)->count();
-            $operationalOrders = $orders->latest('updated_at')->limit(20)->get();
+            $operationalOrders = $orders->latest('updated_at')->limit(25)->get();
+
+            // Pending branch refund requests.
+            $rq = ReceivingIssue::with('order.branch')->where('type', 'refund')->where('status', 'pending');
+            if ($user->isBranchScoped() && ! $user->isCommissaryRole()) {
+                $rq->whereHas('order', fn ($o) => $o->where('branch_id', $user->branch_id));
+            } elseif ($filterBranch !== '') {
+                $rq->whereHas('order', fn ($o) => $o->where('branch_id', (int) $filterBranch));
+            }
+            $refundRequests = $rq->latest('id')->limit(20)->get();
         }
 
         $sevBadges = [
@@ -134,13 +152,8 @@ class AlertController extends Controller
             'info' => 'hv-badge-info',
         ];
 
+        // Password recovery is now self-service OTP — there are no approval items.
         $recoveryRequests = collect();
-        if ($isNotificationCenter && in_array($category, ['all', 'recovery'], true) && $filterResolved !== '1') {
-            $recoveryRequests = app(RecoveryApprovalService::class)->actionableFor($user);
-            if ($filterBranch !== '' && ! $user->isBranchScoped()) {
-                $recoveryRequests = $recoveryRequests->filter(fn ($reset) => (int) $reset->user->branch_id === (int) $filterBranch);
-            }
-        }
 
         $accountNotices = [];
         if ($isNotificationCenter && in_array($category, ['all', 'accounts'], true) && $filterResolved !== '1') {
@@ -150,7 +163,7 @@ class AlertController extends Controller
             }
         }
 
-        return view('alerts.index', compact(
+        return response()->view('alerts.index', compact(
             'alerts',
             'countOpen',
             'countCritical',
@@ -165,11 +178,12 @@ class AlertController extends Controller
             'sevBadges',
             'operationalOrders',
             'operationalOrderCount',
+            'refundRequests',
             'recoveryRequests',
             'isNotificationCenter',
             'category',
             'accountNotices'
-        ));
+        ))->header('Cache-Control', 'no-store, private');
     }
 
     /**
@@ -204,8 +218,9 @@ class AlertController extends Controller
         // live, so an approval/rejection/supersede/delete by anyone, or a branch
         // or role change, updates every approver's bell on the next poll. Payloads
         // never carry codes, tokens, emails, contact numbers, or approval links.
-        $recoveryItems = app(RecoveryApprovalService::class)->notificationItemsFor($user);
-        $recoveryTotal = count($recoveryItems);
+        // Password recovery is now self-service OTP — no approval notifications.
+        $recoveryItems = [];
+        $recoveryTotal = 0;
         $accountItems = app(AccountRequestService::class)->notificationItemsFor($user);
 
         // Commissary roles (like Owner/Admin) oversee every branch's orders, so
@@ -240,37 +255,76 @@ class AlertController extends Controller
                 'message' => $declinedOrder ? 'Order '.$declinedOrder->order_number.' was declined. Reason: '.$declinedOrder->decline_reason : $a->message,
                 'context' => $a->branch_name ?? '',
                 'time' => $a->created_at->diffForHumans(),
+                'ts' => $a->created_at->timestamp,
                 'link' => $declinedOrder ? route('orders', array_filter(['order' => $declinedOrder->id, 'queue' => 'history', 'archived' => $declinedOrder->archived_at ? 1 : null])) : ($user->isCommissaryStaff() ? route('delivery') : route('alerts')),
             ];
         }
 
-        // Pending/delivering orders (up to 5)
+        // In-progress orders, plus recently received (delivered/settled) ones so a
+        // branch scan-in surfaces as a "delivered" bell notification.
         $orderQuery = Order::select('orders.*', 'branches.branch_name')
             ->join('branches', 'branches.id', '=', 'orders.branch_id')
-            ->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering']);
+            ->where(function ($q) {
+                $q->whereIn('orders.status', ['pending', 'approved', 'preparing', 'delivering'])
+                    ->orWhere(fn ($t) => $t->whereIn('orders.status', ['delivered', 'settled'])->where('orders.updated_at', '>=', now()->subDays(7)));
+            });
 
         if ($scopeOrders) {
             $orderQuery->where('orders.branch_id', $user->branch_id);
         }
 
-        $orders = $orderQuery->orderByDesc('orders.updated_at')->limit(5)->get();
+        // Orders placed for review (pending) are the priority, so pull them first
+        // and keep room for the other in-flight stages too.
+        $orders = $orderQuery
+            ->orderByRaw("CASE WHEN orders.status = 'pending' THEN 0 ELSE 1 END")
+            ->orderByDesc('orders.updated_at')
+            ->limit(8)->get();
 
         foreach ($orders as $o) {
+            $received = in_array($o->status, ['delivered', 'settled'], true);
             $msg = match ($o->status) {
-                'pending' => "Order {$o->order_number} awaiting approval",
+                'pending' => "Order {$o->order_number} waiting for approval",
                 'approved' => "Order {$o->order_number} approved, awaiting preparation",
                 'preparing' => "Order {$o->order_number} is being prepared",
                 'delivering' => "Order {$o->order_number} is being delivered",
+                'delivered', 'settled' => "Order {$o->order_number} delivered — received at branch",
                 default => "Order {$o->order_number} — {$o->status}",
             };
             $items[] = [
                 'id' => 'order-'.$o->id.'-'.$o->status,
                 'type' => 'delivery',
+                'title' => $o->status === 'pending' ? 'New Order' : ($received ? 'Delivered' : 'Order Update'),
                 'severity' => $o->status === 'pending' ? 'warning' : 'info',
+                // Pending orders placed for review bubble to the top of the bell.
+                'priority' => $o->status === 'pending' ? 1 : 0,
                 'message' => $msg,
                 'context' => $o->branch_name,
                 'time' => $o->updated_at->diffForHumans(),
-                'link' => $user->isCommissaryManager() || $user->isOwner() ? route('orders', ['order' => $o->id, 'queue' => 'active']) : route('delivery'),
+                'ts' => ($o->status === 'pending' ? $o->created_at : $o->updated_at)->timestamp,
+                'link' => $user->isCommissaryStaff() ? route('delivery') : route('orders', ['order' => $o->id, 'queue' => 'active']),
+            ];
+        }
+
+        // Pending branch refund requests (commissary/owner/admin see all; a
+        // branch manager sees their own branch).
+        $refundQuery = ReceivingIssue::with('order:id,order_number,branch_id', 'order.branch:id,branch_name')
+            ->where('type', 'refund')->where('status', 'pending');
+        if ($scopeOrders) {
+            $refundQuery->whereHas('order', fn ($o) => $o->where('branch_id', $user->branch_id));
+        }
+        $refundTotal = (clone $refundQuery)->count();
+        foreach ($refundQuery->latest('id')->limit(5)->get() as $rf) {
+            $items[] = [
+                'id' => 'refund-'.$rf->id,
+                'type' => 'refund',
+                'title' => 'Refund Request',
+                'severity' => 'warning',
+                'priority' => 1,
+                'message' => 'Refund requested for Order '.($rf->order?->order_number ?? '').($rf->reason ? ': '.Str::limit($rf->reason, 60) : ''),
+                'context' => $rf->order?->branch?->branch_name ?? '',
+                'time' => $rf->created_at->diffForHumans(),
+                'ts' => $rf->created_at->timestamp,
+                'link' => route('orders', ['order' => $rf->order_id, 'queue' => 'all']),
             ];
         }
 
@@ -298,7 +352,7 @@ class AlertController extends Controller
 
         return response()->json([
             'ok' => true,
-            'total' => $alertTotal + $orderTotal + $recoveryTotal + count($accountItems),
+            'total' => $alertTotal + $orderTotal + $recoveryTotal + $refundTotal + count($accountItems),
             'items' => $items,
             'sidebar' => [
                 'orders' => $pendingDeliveryCount->count(),
@@ -335,8 +389,10 @@ class AlertController extends Controller
                 'table_name' => 'alerts',
                 'record_id' => $resolveId,
             ]);
+        }
 
-            return redirect()->back()->with('success', 'Alert marked as reviewed.');
+        if ($request->ajax() || $request->expectsJson()) {
+            return response()->json(['ok' => $updated > 0]);
         }
 
         return redirect()->back();
@@ -383,6 +439,6 @@ class AlertController extends Controller
             ]);
         }
 
-        return redirect()->back()->with('success', "{$count} alert(s) marked as reviewed.");
+        return redirect()->back();
     }
 }

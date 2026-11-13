@@ -202,9 +202,11 @@ class CommissaryRolesLocationTest extends TestCase
         ]);
 
         $res = $this->actingAs($owner)->get('/orders')->assertOk();
-        $res->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'all', 'history']);
-        $res->assertViewHas('orderQueueCounts', fn ($c) => $c['active'] === 1 && $c['history'] === 1 && $c['all'] === 2);
-        $res->assertViewHas('defaultOrderQueue', 'active');   // opens on Active
+        // Active Orders lists every order (narrowed via the status filter); only
+        // Active Orders and History tabs remain.
+        $res->assertViewHas('orderQueues', fn ($q) => array_keys($q) === ['active', 'history']);
+        $res->assertViewHas('orderQueueCounts', fn ($c) => $c['active'] === 2 && $c['history'] === 1);
+        $res->assertViewHas('defaultOrderQueue', 'active');   // opens on Active Orders
     }
 
     public function test_commissary_is_excluded_from_inventory_monitor(): void

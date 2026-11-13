@@ -13,7 +13,12 @@ class LoginController extends Controller
     /**
      * Max failed login attempts before lockout.
      */
-    const MAX_LOGIN_ATTEMPTS = 3;
+    const MAX_LOGIN_ATTEMPTS = 5;
+
+    /**
+     * Failed attempts before the account-recovery link is surfaced on login.
+     */
+    const SHOW_RECOVERY_AFTER = 2;
 
     /**
      * Minutes to lock an account after max failed attempts.
@@ -70,7 +75,8 @@ class LoginController extends Controller
         if ($user->locked_until && $user->locked_until->isFuture()) {
             return back()
                 ->withInput($request->only('login'))
-                ->with('error', 'Account locked due to failed attempts. Try again later.');
+                ->with('error', 'Account locked due to failed attempts. Try again later.')
+                ->with('show_recovery', true);
         }
 
         // --- Wrong password ---
@@ -94,7 +100,8 @@ class LoginController extends Controller
 
             return back()
                 ->withInput($request->only('login'))
-                ->with('error', $error);
+                ->with('error', $error)
+                ->with('show_recovery', $attempts >= self::SHOW_RECOVERY_AFTER);
         }
 
         if ($user->must_change_password && ! $user->temporary_password_expires_at?->isFuture()) {

@@ -111,12 +111,6 @@
         </a>
 
         <a href="{{ route('users') }}" class="hv-nav-link {{ request()->routeIs('users*','account-requests*') ? 'active' : '' }}"><i class="ph ph-users hv-nav-icon"></i> <span>Users</span></a>
-        {{-- Commissary managers request their staff's password resets here. --}}
-        <a href="{{ route('reset-requests') }}"
-           class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
-            <i class="ph ph-key"></i> <span>Reset Requests</span>
-            <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
-        </a>
 
         <hr class="hv-sidebar-divider">
 
@@ -196,13 +190,9 @@
         </a>
 
         @if($u->isBranchManager())
-        {{-- Branch managers request staff password resets here. --}}
+        {{-- Branch managers can scan stock in/out like their staff. --}}
+        <a href="{{ route('qr') }}" class="hv-nav-link {{ request()->routeIs('qr*') ? 'active' : '' }}"><i class="ph ph-qr-code hv-nav-icon"></i> <span>QR Scan</span></a>
         <a href="{{ route('users') }}" class="hv-nav-link {{ request()->routeIs('users*','account-requests*') ? 'active' : '' }}"><i class="ph ph-users hv-nav-icon"></i> <span>Users</span></a>
-        <a href="{{ route('reset-requests') }}"
-           class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
-            <i class="ph ph-key hv-nav-icon"></i> <span>Reset Requests</span>
-            <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
-        </a>
         @endif
 
         <hr class="hv-sidebar-divider">
@@ -261,19 +251,14 @@
                     <span>Users</span>
                 </a>
                 <a href="{{ route('account-requests') }}" class="hv-nav-link {{ request()->routeIs('account-requests*') ? 'active' : '' }}"><span>Account Requests</span></a>
-                <a href="{{ route('reset-requests') }}"
-                   class="hv-nav-link {{ request()->routeIs('reset-requests*') ? 'active' : '' }}">
-                    <span>Reset Requests</span>
-                    <span class="hv-sidebar-badge" id="sidebarBadgeRecovery" style="display:none;">0</span>
-                </a>
             </div>
         </div>
         @endif
 
         {{-- ── System ────────────────────────────────────── --}}
         @if($isOwner)
-        @if($isSA)
-        {{-- Super admin has multiple system tools → keep the dropdown --}}
+        @if($isSA || $u->isAdmin())
+        {{-- Super admin and admin get the full system tools dropdown --}}
         @php
             $sysActive = request()->routeIs('audit*','settings*');
         @endphp
@@ -292,9 +277,9 @@
                    class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
                     <span>Settings</span>
                 </a>
-                <a href="{{ route('settings') }}#backup"
-                   class="hv-nav-link">
-                    <i class="ph ph-database"></i> <span>Database Backup</span>
+                <a href="{{ route('payment-accounts') }}"
+                   class="hv-nav-link {{ request()->routeIs('payment-accounts*') ? 'active' : '' }}">
+                    <span>Payment Methods</span>
                 </a>
             </div>
         </div>
@@ -303,6 +288,10 @@
         <a href="{{ route('settings') }}"
            class="hv-nav-link {{ request()->routeIs('settings*') ? 'active' : '' }}">
             <i class="ph ph-gear"></i> <span>System Settings</span>
+        </a>
+        <a href="{{ route('payment-accounts') }}"
+           class="hv-nav-link {{ request()->routeIs('payment-accounts*') ? 'active' : '' }}">
+            <i class="ph ph-bank"></i> <span>Payment Methods</span>
         </a>
         @endif
         @endif
@@ -361,11 +350,10 @@
                           style="font-size:10px;display:none;" id="notifBadge">0</span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end shadow-sm p-0" style="width:340px;max-height:420px;overflow-y:auto;">
-                    <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center" style="background:var(--gold-soft);">
-                        <span class="fw-bold small" style="color:var(--maroon);">
-                            <i class="ph ph-bell me-1"></i> Notifications
-                        </span>
-                        <span style="font-size:11px;color:#000 !important;" id="notifTotal"></span>
+                    <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center" style="background:#fff;">
+                        <span class="fw-bold" style="color:var(--ink);font-size:16px;">Notifications</span>
+                        <a href="{{ Auth::user()->isCommissaryStaff() ? route('delivery') : route('alerts') }}" class="text-decoration-none" style="font-size:12px;font-weight:600;color:var(--maroon);">See All</a>
+                        <span id="notifTotal" style="display:none;"></span>
                     </div>
                     <div id="notifList">
                         <div class="text-center text-muted small py-4">Loading...</div>
@@ -490,10 +478,10 @@ var HVSidebar = (function () {
         toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     }
 
-    // Restore persisted desktop state on load
-    try {
-        if (localStorage.getItem(STORE_KEY) === '1') document.body.classList.add('sidebar-collapsed');
-    } catch (e) {}
+    // Always open expanded on load (system open / login). Collapsing stays within
+    // the current page; it is not persisted across page loads.
+    try { localStorage.setItem(STORE_KEY, '0'); } catch (e) {}
+    document.body.classList.remove('sidebar-collapsed');
 
     if (toggle) {
         toggle.addEventListener('click', function () {
@@ -506,10 +494,15 @@ var HVSidebar = (function () {
     }
     if (backdrop) backdrop.addEventListener('click', closeMobile);
 
-    // Close drawer when a real link is tapped (mobile only)
+    // Mobile: close the drawer on tap. Desktop collapsed rail: a direct icon
+    // link first expands the sidebar (persisted), then navigates to its target,
+    // so the destination page loads with the sidebar enlarged.
     sidebar.querySelectorAll('.hv-nav-link').forEach(function (link) {
         link.addEventListener('click', function () {
-            if (!isDesktop()) closeMobile();
+            if (!isDesktop()) { closeMobile(); return; }
+            if (document.body.classList.contains('sidebar-collapsed') && link.getAttribute('href')) {
+                expandDesktop();
+            }
         });
     });
 
@@ -523,6 +516,17 @@ var HVSidebar = (function () {
     return { expandDesktop: expandDesktop, isDesktop: isDesktop };
 })();
 
+// Accordion: close every other open nav group, resetting its chevron.
+function closeOtherNavGroups(exceptSub) {
+    document.querySelectorAll('.hv-nav-submenu.open').forEach(function (s) {
+        if (s === exceptSub) { return; }
+        s.classList.remove('open');
+        var t = s.previousElementSibling;
+        var ch = t && t.querySelector('.ph-caret-down, .ph-caret-right');
+        if (ch) { ch.classList.add('ph-caret-right'); ch.classList.remove('ph-caret-down'); }
+    });
+}
+
 function toggleNav(btn) {
     // In the collapsed desktop rail, a dropdown parent first expands the
     // sidebar, then opens its own submenu — never navigates, never via hover.
@@ -531,6 +535,7 @@ function toggleNav(btn) {
         var sub = btn.nextElementSibling;
         var chevron = btn.querySelector('.ph-caret-down, .ph-caret-right');
         if (!sub.classList.contains('open')) {
+            closeOtherNavGroups(sub);
             sub.classList.add('open');
             if (chevron) { chevron.classList.add('ph-caret-down'); chevron.classList.remove('ph-caret-right'); }
         }
@@ -539,6 +544,7 @@ function toggleNav(btn) {
     var sub = btn.nextElementSibling;
     var chevron = btn.querySelector('.ph-caret-down, .ph-caret-right');
     var isOpen = sub.classList.contains('open');
+    if (!isOpen) { closeOtherNavGroups(sub); }
     sub.classList.toggle('open');
     if (chevron) {
         chevron.classList.toggle('ph-caret-down', !isOpen);
@@ -570,6 +576,19 @@ function toggleNav(btn) {
         showStartupNotifications = initialLoader && !initialLoader.hidden;
     }
     function notificationId(n) { return n.id || n.type + ':' + n.message; }
+
+    // Per-viewer read state (which rows lost the gray tint). Facebook-style:
+    // opening a notification clears its tint and that sticks across polls.
+    var READ_KEY = 'hv-notif-read';
+    function readSet() {
+        try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); } catch (e) { return new Set(); }
+    }
+    function markRead(id) {
+        try {
+            var s = readSet(); s.add(id);
+            localStorage.setItem(READ_KEY, JSON.stringify(Array.from(s).slice(-200)));
+        } catch (e) {}
+    }
 
     function startupNotifications(items) {
         var priorities = { critical: 0, warning: 1, info: 2 };
@@ -642,30 +661,31 @@ function toggleNav(btn) {
             if (data.items.length === 0) {
                 list.innerHTML = '<div class="text-center text-muted small py-4"><i class="ph ph-check-circle fs-4 d-block mb-2" style="color:var(--success);"></i>All clear!</div>';
             } else {
+                // Flat list, most recent first — no category headers.
+                // Priority (orders placed for review) first — oldest of those on
+                // top so the one that notified first is addressed first; everything
+                // else is newest-first.
+                var sorted = data.items.slice().sort(function(a, b) {
+                    var pa = a.priority || 0, pb = b.priority || 0;
+                    if (pa !== pb) { return pb - pa; }
+                    if (pa === 1) { return (a.ts || 0) - (b.ts || 0); }
+                    return (b.ts || 0) - (a.ts || 0);
+                });
+                var rset = readSet();
                 var html = '';
-                var categories = [
-                    {key: 'recovery', label: 'Account Recovery'},
-                    {key: 'accounts', label: 'Account Requests'},
-                    {key: 'inventory', label: 'Inventory Alerts'},
-                    {key: 'orders', label: 'Orders'}
-                ];
-                categories.forEach(function(category) {
-                    var entries = data.items.filter(function(n) {
-                        var key = n.category || (n.type === 'recovery' ? 'recovery' : (n.type === 'delivery' || n.type === 'order_declined' ? 'orders' : 'inventory'));
-                        return key === category.key;
-                    });
-                    if (!entries.length) return;
-                    html += '<div class="px-3 py-2 small fw-bold border-bottom" style="background:var(--gold-soft);">' + category.label + '</div>';
-                    entries.forEach(function(n) {
+                sorted.forEach(function(n) {
                     var s = sevIcons[n.severity] || sevIcons.info;
-                    html += '<a href="' + escHtml(notificationLink(n) || '#') + '" class="hv-notif-item">'
-                        + '<i class="ph ' + s.icon + ' hv-notif-icon" style="color:' + s.color + ';"></i>'
+                    var nid = notificationId(n);
+                    var unread = !rset.has(nid);
+                    html += '<a href="' + escHtml(notificationLink(n) || '#') + '" class="hv-notif-item' + (unread ? ' is-unread' : '') + '" data-nid="' + escHtml(nid) + '">'
+                        + '<span class="hv-notif-icon" style="color:' + s.color + ';background:color-mix(in srgb, ' + s.color + ' 14%, transparent);"><i class="ph ' + s.icon + '"></i></span>'
                         + '<div class="hv-notif-text">'
-                        + '<div>' + escHtml(n.message) + '</div>'
+                        + '<div class="hv-notif-msg">' + escHtml(n.message) + '</div>'
                         + '<div class="hv-notif-time">' + escHtml(n.context) + ' &middot; ' + escHtml(n.time) + '</div>'
                         + (n.type === 'recovery' || n.type === 'account_request' ? '<div class="small fw-semibold mt-1">Review request &rarr;</div>' : '')
-                        + '</div></a>';
-                    });
+                        + '</div>'
+                        + (unread ? '<span class="hv-notif-dot"></span>' : '')
+                        + '</a>';
                 });
                 list.innerHTML = html;
             }
@@ -673,16 +693,18 @@ function toggleNav(btn) {
             // Detect events by identity: a decline can replace a pending order
             // without changing the badge total.
             if (seenNotificationIds !== null) {
-                data.items.forEach(function(n) {
-                    if (!seenNotificationIds.has(notificationId(n))) showToast(n);
-                });
+                // Only the single most recent new notification pops a toast.
+                var newItems = data.items.filter(function(n) { return !seenNotificationIds.has(notificationId(n)); });
+                if (newItems.length) { showToast(newItems[0]); }
             } else {
                 seenNotificationIds = new Set();
                 if (showStartupNotifications) {
                     showStartupNotifications = false;
                     try { sessionStorage.setItem(startupStorageKey, currentUser); } catch (e) {}
                     var initialNotifications = startupNotifications(data.items);
-                    afterLoginReady(function() { initialNotifications.forEach(showToast); });
+                    if (initialNotifications.length) {
+                        afterLoginReady(function() { showToast(initialNotifications[0]); });
+                    }
                 }
             }
             data.items.forEach(function(n) { seenNotificationIds.add(notificationId(n)); });
@@ -700,9 +722,10 @@ function toggleNav(btn) {
     }
 
     function showToast(n) {
-        if (toastBox.children.length >= 4) return;
+        // Keep only the most recent toast on screen.
+        while (toastBox.firstChild) { toastBox.removeChild(toastBox.firstChild); }
         var s = sevIcons[n.severity] || sevIcons.info;
-        var typeLabel = n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : (n.type === 'account_request' ? 'Account Requests' : (n.type === 'recovery' ? 'Account Recovery' : 'Alert')));
+        var typeLabel = n.title || (n.type === 'order_declined' ? 'Order Declined' : (n.type === 'delivery' ? 'Order Update' : (n.type === 'account_request' ? 'Account Requests' : (n.type === 'recovery' ? 'Account Recovery' : 'Alert'))));
         var toast = document.createElement('div');
         toast.className = 'hv-toast severity-' + (sevIcons[n.severity] ? n.severity : 'info');
         toast.innerHTML = '<i class="ph ' + s.icon + ' hv-toast-icon" style="color:' + s.color + ';"></i>'
@@ -731,7 +754,9 @@ function toggleNav(btn) {
         }
         toast.querySelector('.hv-toast-close').addEventListener('click', dismiss);
         toastBox.appendChild(toast);
-        dismissTimer = setTimeout(dismiss, 7000);
+        // Phones auto-dismiss faster (3s); larger screens keep it 7s.
+        var quick = window.matchMedia('(max-width: 575.98px)').matches;
+        dismissTimer = setTimeout(dismiss, quick ? 3000 : 7000);
     }
 
     function updateSidebarBadge(id, count) {
@@ -751,11 +776,22 @@ function toggleNav(btn) {
         return d.innerHTML;
     }
 
-    // Initial fetch + poll every 30 seconds
+    // Initial fetch + near real-time polling every 5 seconds
     fetchNotifs();
-    setInterval(fetchNotifs, 30000);
+    setInterval(fetchNotifs, 5000);
     document.getElementById('notifDropdown').addEventListener('show.bs.dropdown', fetchNotifs);
     window.addEventListener('focus', fetchNotifs);
+
+    // Opening a row clears its gray tint + blue dot, and remembers it.
+    list.addEventListener('click', function(e) {
+        var item = e.target.closest('.hv-notif-item');
+        if (!item) { return; }
+        var nid = item.getAttribute('data-nid');
+        if (nid) { markRead(nid); }
+        item.classList.remove('is-unread');
+        var dot = item.querySelector('.hv-notif-dot');
+        if (dot) { dot.remove(); }
+    });
 })();
 </script>
 @endunless

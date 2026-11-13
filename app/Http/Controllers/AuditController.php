@@ -14,11 +14,11 @@ class AuditController extends Controller
      */
     public function index(Request $request)
     {
-        $filterUser   = (int) $request->input('user', 0);
+        $filterUser = (int) $request->input('user', 0);
         $filterAction = trim($request->input('action_type', ''));
-        $filterFrom   = $request->input('from', now()->subDays(7)->format('Y-m-d'));
-        $filterTo     = $request->input('to', now()->format('Y-m-d'));
-        $perPage      = 50;
+        $filterFrom = $request->input('from', now()->subDays(7)->format('Y-m-d'));
+        $filterTo = $request->input('to', now()->format('Y-m-d'));
+        $perPage = 10;
 
         // Build query
         $query = AuditLog::select('audit_log.*', 'users.full_name', 'users.email as user_email')

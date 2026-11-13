@@ -64,6 +64,7 @@ class RecoveryApprovalService
             'message' => ($viewer->canVerifyResetFor($reset->user) ? 'Password reset identity verification needed — ' : ($reset->user->isStaffRole() && ! $reset->hasValidManagerVerification() ? 'Password reset awaiting manager verification — ' : 'Password reset approval needed — ')).($reset->user->full_name ?? 'account holder'),
             'context' => $reset->user->branch->branch_name ?? 'No branch',
             'time' => ($reset->email_verified_at ?? $reset->updated_at)->diffForHumans(),
+            'ts' => ($reset->email_verified_at ?? $reset->updated_at)->timestamp,
             'link' => route('reset-requests', ['request' => $reset->id]),
         ])->all();
     }

@@ -49,9 +49,9 @@ class PresentationSeeder extends Seeder
     private const OPERATIONAL_DB = 'hidden_vietnam';
 
     /** Window: first and last Monday-anchored weeks (inclusive). */
-    private const WINDOW_START = '2026-11-01';
+    private const WINDOW_START = '2026-10-01';
 
-    private const WINDOW_END = '2027-01-31';
+    private const WINDOW_END = '2026-11-12';
 
     private OrderLabelService $labels;
 
@@ -79,9 +79,13 @@ class PresentationSeeder extends Seeder
 
     private int $ordersMade = 0;
 
+    /** Real wall-clock time captured before any Carbon::setTestNow — nothing is dated past this. */
+    private Carbon $cutoff;
+
     public function run(): void
     {
         $this->guardTarget();
+        $this->cutoff = Carbon::now();
 
         $this->labels = new OrderLabelService;
         $this->groups = new OrderGroupLabelService;
@@ -192,7 +196,7 @@ class PresentationSeeder extends Seeder
         $tanza = collect($this->operating)->firstWhere('branch_type', 'main') ?? $this->operating[0];
 
         $this->users['owner'] = $this->ensureUser('owner', 'Hidden Vietnam Owner', 'owner@hvfrms.test', 'owner', $tanza->id);
-        $this->users['admin'] = $this->ensureUser('admin', 'System Administrator', 'admin@hvfrms.test', 'admin', $tanza->id);
+        $this->users['admin'] = $this->ensureUser('admin', 'System Administrator', 'vietnamhidden2026@gmail.com', 'admin', $tanza->id);
         $this->users['commissary_manager'] = $this->ensureUser('commissary_manager', 'Commissary Manager', 'commissary.manager@hvfrms.test', 'commissary_manager', $this->commissary->id);
         $this->users['commissary_staff'] = $this->ensureUser('commissary_staff', 'Commissary Staff', 'commissary.staff@hvfrms.test', 'commissary_staff', $this->commissary->id);
 
@@ -262,6 +266,9 @@ class PresentationSeeder extends Seeder
     {
         $weekStart = Carbon::parse(self::WINDOW_START)->startOfWeek();
         $end = Carbon::parse(self::WINDOW_END)->endOfWeek();
+        if ($end->gt($this->cutoff)) {
+            $end = $this->cutoff->copy();
+        }
         $weekIndex = 0;
 
         for ($monday = $weekStart->copy(); $monday->lte($end); $monday->addWeek()) {
@@ -273,6 +280,10 @@ class PresentationSeeder extends Seeder
                 $orderCount = random_int(1, 2);
                 for ($o = 0; $o < $orderCount; $o++) {
                     $orderDay = $monday->copy()->addDays(random_int(0, 3))->setTime(random_int(8, 15), random_int(0, 59));
+                    // Never place an order in the future relative to real "now".
+                    if ($orderDay->gt($this->cutoff)) {
+                        continue;
+                    }
                     Carbon::setTestNow($orderDay);
 
                     $lines = $this->orderLinesFor();
@@ -287,13 +298,22 @@ class PresentationSeeder extends Seeder
                         $stage = 'received_exception';
                     }
 
-                    Carbon::setTestNow($orderDay->copy()->addDays(random_int(1, 3)));
+                    // Clamp the progression timestamp so no record is dated ahead of now.
+                    $advanceDay = $orderDay->copy()->addDays(random_int(1, 3));
+                    if ($advanceDay->gt($this->cutoff)) {
+                        $advanceDay = $this->cutoff->copy();
+                    }
+                    Carbon::setTestNow($advanceDay);
                     $this->advanceOrder($order, $stage);
                     $this->ordersMade++;
                 }
 
                 // Branch consumption through the week (drives the forecast).
-                Carbon::setTestNow($monday->copy()->addDays(5)->setTime(18, 0));
+                $consumptionDay = $monday->copy()->addDays(5)->setTime(18, 0);
+                if ($consumptionDay->gt($this->cutoff)) {
+                    $consumptionDay = $this->cutoff->copy();
+                }
+                Carbon::setTestNow($consumptionDay);
                 $this->recordConsumption($branch, $monday);
             }
         }

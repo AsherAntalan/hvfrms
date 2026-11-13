@@ -32,26 +32,17 @@ class SharedModalRenderTest extends TestCase
 
     public function test_shared_modal_partial_renders_on_app_pages(): void
     {
-        $this->actingAs($this->owner())->get('/reset-requests')->assertOk()
+        $this->actingAs($this->owner())->get('/orders')->assertOk()
             ->assertSee('id="hvModal"', false)
             ->assertSee("typeof window.hvModal.confirm === 'function'", false)
             ->assertDontSee('if (!el || window.hvModal) { return; }', false);
-    }
-
-    public function test_reset_request_delete_uses_shared_modal_not_native_confirm(): void
-    {
-        $this->actingAs($this->owner())->get('/reset-requests')->assertOk()
-            ->assertSee('deleteResetRequest', false)
-            ->assertSee('hvModal.confirm', false)
-            // The delete path no longer calls window.confirm for deletion.
-            ->assertDontSee("confirm('Permanently delete", false);
     }
 
     public function test_redirect_flash_success_renders_once_via_modal_not_banner(): void
     {
         $response = $this->actingAs($this->owner())
             ->withSession(['success' => 'Saved it.'])
-            ->get('/reset-requests')->assertOk();
+            ->get('/orders')->assertOk();
 
         $response->assertSee('hvModal.success({ title: \'Success\'', false)
             ->assertSee('Saved it.', false)

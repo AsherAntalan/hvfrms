@@ -24,15 +24,15 @@ class LoginSessionExpiryTest extends TestCase
     public function test_stale_login_token_returns_to_a_fresh_login_without_replaying_credentials(): void
     {
         $this->withSession(['_token' => 'current-token'])->post(route('login.submit'), [
-            '_token' => 'expired-token', 'login' => 'admin', 'password' => 'private-password',
+            '_token' => 'expired-token', 'login' => 'admin', 'password' => 'Private-Password1!',
         ])->assertRedirect(route('login'))->assertSessionHas('warning')->assertSessionMissing('_old_input.password');
         $this->assertGuest();
-        $this->get(route('login'))->assertOk()->assertSee('Your sign-in session expired.')->assertDontSee('private-password');
+        $this->get(route('login'))->assertOk()->assertSee('Your sign-in session expired.')->assertDontSee('Private-Password1!');
     }
 
     public function test_json_login_keeps_the_419_response(): void
     {
-        $this->postJson(route('login.submit'), ['login' => 'admin', 'password' => 'private-password'])->assertStatus(419);
+        $this->postJson(route('login.submit'), ['login' => 'admin', 'password' => 'Private-Password1!'])->assertStatus(419);
         $this->assertGuest();
     }
 

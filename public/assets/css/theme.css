@@ -508,21 +508,71 @@ body.hv-app {
 @keyframes hvToastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes hvToastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
 
-/* Notification dropdown item */
+/* Notification dropdown item (Facebook-style: white, unread = gray tint) */
 .hv-notif-item {
     display: flex;
-    gap: 10px;
-    padding: 10px 16px;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
     text-decoration: none;
     color: var(--ink);
-    border-bottom: 1px solid var(--border);
+    position: relative;
+    background: #fff;
     transition: background 0.15s;
     font-size: 13px;
 }
-.hv-notif-item:hover { background: var(--cream); color: var(--ink); }
-.hv-notif-item .hv-notif-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
-.hv-notif-item .hv-notif-text { flex: 1; min-width: 0; line-height: 1.35; }
-.hv-notif-item .hv-notif-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.hv-notif-item + .hv-notif-item { border-top: 1px solid var(--border); }
+.hv-notif-item:hover { background: #f2f3f5; color: var(--ink); }
+/* Unread rows carry the opaque gray tint; opening a row clears it. */
+.hv-notif-item.is-unread { background: #ebf2fb; }
+.hv-notif-item.is-unread:hover { background: #e2ecf9; }
+.hv-notif-item .hv-notif-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 20px;
+}
+.hv-notif-item .hv-notif-text { flex: 1; min-width: 0; line-height: 1.35; padding-right: 16px; }
+.hv-notif-item .hv-notif-msg { color: var(--ink); font-weight: 500; }
+.hv-notif-item.is-unread .hv-notif-msg { font-weight: 600; }
+.hv-notif-item .hv-notif-time { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.hv-notif-item .hv-notif-dot {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #1b74e4;
+}
+
+/* Notification feed cards — uniform, hoverable, click opens details */
+.notif-item { transition: background 0.15s, box-shadow 0.15s; }
+.notif-item:hover { background: #f7f8fa; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06); }
+
+/* Dismiss (X) button on notification feed cards */
+.notif-dismiss {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.notif-dismiss:hover { background: rgba(0, 0, 0, 0.06); color: var(--ink); }
 
 
 /* ═══ TOP BAR (inside main content) ═════════════════════ */
@@ -1131,7 +1181,8 @@ body{ background: var(--shell-field); background-attachment: fixed; }
 /* The area right of the sidebar: red header stacked over the cream panel */
 .hv-shell{
   margin-left: var(--sidebar-width);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   transition: margin-left 0.22s ease;
@@ -1148,7 +1199,7 @@ body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
   padding: 14px 1.9rem;
   min-height: var(--topbar-height);
 }
-.hv-topbar::after{ display: none; }          /* drop the cream-panel gold tick */
+.hv-topbar::after{ display: none; }
 .hv-topbar h5{ color: #fff; }
 .hv-topbar .text-muted{ color: rgba(255,255,255,.80) !important; }
 .hv-hamburger-main{ color: #fff; }
@@ -1169,6 +1220,9 @@ body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
   box-shadow: none;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 1.7rem 1.9rem 3rem;
 }
 @media (max-width: 991.98px){
@@ -1257,3 +1311,13 @@ body.sidebar-collapsed .hv-shell{ margin-left: var(--sidebar-rail); }
 @media (max-width: 480px){
   .hv-auth-loading-card{ padding: 28px 22px 20px; border-radius: 16px; }
 }
+
+/* ═══ Shared list pagination (orders, requests, notifications) ═══ */
+.hv-inv-pager{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.hv-page-btn{ min-width:34px; height:32px; padding:0 .55rem; border:1px solid var(--border);
+  background:#fff; color:var(--maroon-dark); border-radius:8px; font-size:13px; font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center; gap:.25rem; cursor:pointer; }
+.hv-page-btn:hover:not(:disabled):not(.active){ background:var(--gold-soft); border-color:var(--maroon); }
+.hv-page-btn.active{ background:var(--maroon); border-color:var(--maroon); color:#fff; cursor:default; }
+.hv-page-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.hv-page-gap{ padding:0 2px; color:var(--muted,#8a817a); }

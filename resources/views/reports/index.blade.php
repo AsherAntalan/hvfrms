@@ -36,11 +36,11 @@
         <input type="hidden" name="tab" id="reportTabField" value="{{ $activeReport }}">
         <div class="col-12" id="presetRow">
             <label class="form-label small fw-semibold mb-1 d-block">Period</label>
-            <div class="btn-group btn-group-sm" role="group" aria-label="Date presets">
-                <button type="button" class="btn hv-preset {{ $datePreset === 'today' ? 'active' : '' }}" data-preset="today">Today</button>
-                <button type="button" class="btn hv-preset {{ $datePreset === 'last7' ? 'active' : '' }}" data-preset="last7">Last 7 Days</button>
-                <button type="button" class="btn hv-preset {{ $datePreset === 'month' ? 'active' : '' }}" data-preset="month">This Month</button>
-                <button type="button" class="btn hv-preset {{ $datePreset === 'custom' ? 'active' : '' }}" data-preset="custom">Custom Range</button>
+            <div class="d-flex flex-wrap gap-2" role="group" aria-label="Date presets">
+                <button type="button" class="btn btn-sm hv-preset {{ $datePreset === 'today' ? 'active' : '' }}" data-preset="today">Today</button>
+                <button type="button" class="btn btn-sm hv-preset {{ $datePreset === 'last7' ? 'active' : '' }}" data-preset="last7">Last 7 Days</button>
+                <button type="button" class="btn btn-sm hv-preset {{ $datePreset === 'month' ? 'active' : '' }}" data-preset="month">This Month</button>
+                <button type="button" class="btn btn-sm hv-preset {{ $datePreset === 'custom' ? 'active' : '' }}" data-preset="custom">Custom Range</button>
             </div>
         </div>
         <div class="col-md-3" id="colDateFrom">
@@ -55,7 +55,7 @@
             <label class="form-label small fw-semibold mb-1">Branch</label>
             @if($commissaryReports ?? false)
                 {{-- Commissary reports scope by DESTINATION branch; default All Branches --}}
-                <select class="form-select form-select-sm" name="branch">
+                <select class="form-select form-select-sm" name="branch" onchange="this.form.submit()">
                     <option value="0" {{ (int) $commissaryBranchFilter === 0 ? 'selected' : '' }}>All Branches</option>
                     @foreach($commissaryBranches as $br)
                         <option value="{{ $br->id }}" {{ (int) $commissaryBranchFilter === $br->id ? 'selected' : '' }}>{{ $br->branch_name }}</option>
@@ -67,7 +67,7 @@
                     {{ $branches->firstWhere('id', $branchFilter)->branch_name ?? ($branches->first()->branch_name ?? 'Your branch') }}
                 </div>
             @else
-                <select class="form-select form-select-sm" name="branch">
+                <select class="form-select form-select-sm" name="branch" onchange="this.form.submit()">
                     <option value="0" {{ $branchFilter === 0 ? 'selected' : '' }}>All Branches</option>
                     @foreach($branches as $br)
                         <option value="{{ $br->id }}" {{ $branchFilter === $br->id ? 'selected' : '' }}>
@@ -77,9 +77,12 @@
                 </select>
             @endif
         </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-maroon btn-sm w-100">
-                <i class="ph ph-funnel me-1"></i> Apply Filters
+        <div class="col-md-3 d-flex gap-2 align-items-end">
+            <button type="submit" class="btn btn-maroon btn-sm flex-fill">
+                <i class="ph ph-funnel me-1"></i> Apply
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary flex-fill" onclick="window.location.href=location.pathname + '?tab={{ $activeReport }}'">
+                <i class="ph ph-x" aria-hidden="true"></i> Clear Filters
             </button>
         </div>
         <div class="col-12">
@@ -607,6 +610,15 @@
 .hv-preset.active{ background:var(--maroon); border-color:var(--maroon); color:#fff; }
 .hv-preset.active:hover{ background:var(--maroon-dark); color:#fff; }
 .hv-preset:focus-visible{ outline:2px solid var(--maroon); outline-offset:2px; }
+/* Report table pagination — matches the All Branches Inventory pager */
+.hv-inv-pager{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.hv-page-btn{ min-width:34px; height:32px; padding:0 .55rem; border:1px solid var(--border);
+  background:#fff; color:var(--maroon-dark); border-radius:8px; font-size:13px; font-weight:600;
+  display:inline-flex; align-items:center; justify-content:center; gap:.25rem; cursor:pointer; }
+.hv-page-btn:hover:not(:disabled):not(.active){ background:var(--gold-soft); border-color:var(--maroon); }
+.hv-page-btn.active{ background:var(--maroon); border-color:var(--maroon); color:#fff; cursor:default; }
+.hv-page-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.hv-page-gap{ padding:0 2px; color:var(--muted,#8a817a); }
 @media print {
     .hv-sidebar, .hv-topbar, .no-print, .nav-tabs, form, .alert { display: none !important; }
     .tab-pane { display: block !important; opacity: 1 !important; }
@@ -830,6 +842,162 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
+});
+</script>
+<script>
+// ---- Client-side pagination (10 per page) for report tables ----
+// Mirrors the All Branches Inventory paging: "Showing X–Y of N" + numbered
+// Prev/Next controls. Rows live in the DOM; we page them without a reload so
+// the active tab and filters are preserved. Short tables (≤ perPage) are left
+// alone, and printing reveals every row.
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+    var PER_PAGE = 10;
+    var registry = [];
+
+    function pageList(cur, total) {
+        var out = [], window = 2;
+        var start = Math.max(1, cur - window), end = Math.min(total, cur + window);
+        if (start > 1) { out.push(1); if (start > 2) { out.push('…'); } }
+        for (var p = start; p <= end; p++) { out.push(p); }
+        if (end < total) { if (end < total - 1) { out.push('…'); } out.push(total); }
+        return out;
+    }
+
+    document.querySelectorAll('.tab-pane table').forEach(function (table) {
+        var tbody = table.tBodies[0];
+        if (!tbody || tbody.id === 'archBody') { return; } // skip the dynamic archives table
+        var allRows = Array.prototype.slice.call(tbody.rows).filter(function (r) { return r.cells.length > 1; });
+        if (allRows.length <= PER_PAGE) { return; }
+
+        var card = table.closest('.hv-card') || table.closest('.table-responsive') || table;
+
+        // Client-side search filter above the table (mirrors the inventory filter).
+        var firstHeader = table.tHead && table.tHead.rows[0] && table.tHead.rows[0].cells[0]
+            ? (table.tHead.rows[0].cells[0].textContent || '').trim().toLowerCase() : '';
+        var productFirst = firstHeader === 'product';
+
+        var filterBar = document.createElement('div');
+        filterBar.className = 'd-flex flex-wrap align-items-center gap-2 mb-2 no-print';
+        var controlsHtml = '<div class="input-group input-group-sm" style="max-width:280px;">'
+            + '<span class="input-group-text"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></span>'
+            + '<input type="text" class="form-control hv-rpage-search" placeholder="Search product…" aria-label="Search this table">'
+            + '</div>';
+        if (productFirst) {
+            controlsHtml += '<select class="form-select form-select-sm hv-rpage-product" aria-label="Filter by product" style="max-width:200px;"></select>'
+                + '<select class="form-select form-select-sm hv-rpage-sort" aria-label="Sort products" style="max-width:170px;">'
+                + '<option value="az">Product A&ndash;Z</option><option value="za">Product Z&ndash;A</option></select>';
+        }
+        filterBar.innerHTML = controlsHtml;
+        card.parentNode.insertBefore(filterBar, card);
+
+        var productSel = filterBar.querySelector('.hv-rpage-product');
+        var sortSel = filterBar.querySelector('.hv-rpage-sort');
+        if (productSel) {
+            var names = [];
+            allRows.forEach(function (r) {
+                var n = (r.cells[0].textContent || '').trim();
+                if (n && names.indexOf(n) === -1) { names.push(n); }
+            });
+            names.sort(function (a, b) { return a.localeCompare(b); });
+            productSel.innerHTML = '<option value="">All Products</option>' + names.map(function (n) {
+                var esc = n.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                return '<option value="' + esc + '">' + esc + '</option>';
+            }).join('');
+        }
+
+        var bar = document.createElement('div');
+        bar.className = 'd-flex flex-wrap justify-content-between align-items-center gap-2 mt-2';
+        bar.innerHTML = '<div class="text-muted small hv-rpage-info" role="status" aria-live="polite"></div>'
+            + '<nav class="hv-inv-pager hv-rpage-nav" aria-label="Report pagination"></nav>';
+        card.parentNode.insertBefore(bar, card.nextSibling);
+
+        var info = bar.querySelector('.hv-rpage-info');
+        var nav = bar.querySelector('.hv-rpage-nav');
+        var state = { page: 1, all: allRows, rows: allRows, info: info, nav: nav, pages: 1 };
+        registry.push(state);
+
+        function gap() {
+            var s = document.createElement('span');
+            s.className = 'hv-page-gap';
+            s.setAttribute('aria-hidden', 'true');
+            s.textContent = '…';
+            return s;
+        }
+
+        function btn(label, target, opts) {
+            opts = opts || {};
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'hv-page-btn' + (opts.active ? ' active' : '');
+            b.innerHTML = label;
+            if (opts.disabled) { b.disabled = true; }
+            if (opts.active) { b.setAttribute('aria-current', 'page'); }
+            if (!opts.disabled && !opts.active) {
+                b.addEventListener('click', function () { state.page = target; render(state); });
+            }
+            return b;
+        }
+
+        function render(s) {
+            s.pages = Math.max(1, Math.ceil(s.rows.length / PER_PAGE));
+            if (s.page > s.pages) { s.page = s.pages; }
+            if (s.page < 1) { s.page = 1; }
+            var start = (s.page - 1) * PER_PAGE, end = start + PER_PAGE;
+            s.all.forEach(function (r) { r.style.display = 'none'; });
+            s.rows.forEach(function (r, i) { if (i >= start && i < end) { r.style.display = ''; } });
+            s.info.textContent = s.rows.length
+                ? 'Showing ' + (start + 1) + '–' + Math.min(end, s.rows.length) + ' of ' + s.rows.length
+                : 'No matching rows';
+            s.nav.innerHTML = '';
+            if (s.pages > 1) {
+                s.nav.appendChild(btn('<i class="ph ph-caret-left" aria-hidden="true"></i> Prev', s.page - 1, { disabled: s.page === 1 }));
+                pageList(s.page, s.pages).forEach(function (p) {
+                    if (p === '…') { s.nav.appendChild(gap()); }
+                    else { s.nav.appendChild(btn(String(p), p, { active: p === s.page })); }
+                });
+                s.nav.appendChild(btn('Next <i class="ph ph-caret-right" aria-hidden="true"></i>', s.page + 1, { disabled: s.page === s.pages }));
+            }
+        }
+        state.render = render;
+
+        var searchInput = filterBar.querySelector('.hv-rpage-search');
+        function applyFilters() {
+            var q = searchInput.value.trim().toLowerCase();
+            var prod = productSel ? productSel.value : '';
+            var rows = state.all.filter(function (r) {
+                if (q && r.textContent.toLowerCase().indexOf(q) === -1) { return false; }
+                if (prod && (r.cells[0].textContent || '').trim() !== prod) { return false; }
+                return true;
+            });
+            if (sortSel) {
+                var dir = sortSel.value === 'za' ? -1 : 1;
+                rows = rows.slice().sort(function (a, b) {
+                    return dir * (a.cells[0].textContent || '').trim().localeCompare((b.cells[0].textContent || '').trim());
+                });
+                rows.forEach(function (r) { tbody.appendChild(r); }); // reorder DOM so sort is visible
+            }
+            state.rows = rows;
+            state.page = 1;
+            render(state);
+        }
+        searchInput.addEventListener('input', applyFilters);
+        if (productSel) { productSel.addEventListener('change', applyFilters); }
+        if (sortSel) { sortSel.addEventListener('change', applyFilters); }
+
+        if (sortSel) { applyFilters(); } else { render(state); }
+    });
+
+    // Printing must show every (filtered) row, not just the current page.
+    window.addEventListener('beforeprint', function () {
+        registry.forEach(function (s) {
+            s.all.forEach(function (r) { r.style.display = 'none'; });
+            s.rows.forEach(function (r) { r.style.display = ''; });
+        });
+    });
+    window.addEventListener('afterprint', function () {
+        registry.forEach(function (s) { s.render(s); });
+    });
 });
 </script>
 @endpush

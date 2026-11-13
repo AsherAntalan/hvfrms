@@ -24,14 +24,16 @@ class OrderPaymentService
         return $request->validate([
             'payment_reference' => ['required', 'string', 'regex:/\A[A-Z0-9]{6,40}\z/', Rule::unique('orders', 'payment_reference')],
             'payment_screenshot' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'payment_account_id' => ['nullable', 'integer', Rule::exists('payment_accounts', 'id')->where('is_active', true)],
         ], [
-            'payment_reference.required' => 'Enter the GCash payment reference number before placing your order.',
-            'payment_reference.regex' => 'Enter the reference shown on your GCash receipt (6 to 40 letters or digits).',
+            'payment_reference.required' => 'Enter the payment reference number before placing your order.',
+            'payment_reference.regex' => 'Enter the reference shown on your payment receipt (6 to 40 letters or digits).',
             'payment_reference.unique' => 'This payment reference has already been used for an order. Contact the Commissary if you need a correction.',
-            'payment_screenshot.required' => 'Upload your GCash payment screenshot before placing your order.',
+            'payment_screenshot.required' => 'Upload your payment screenshot before placing your order.',
             'payment_screenshot.image' => 'The payment screenshot must be a valid image.',
             'payment_screenshot.mimes' => 'Use a JPG, PNG, or WebP payment screenshot.',
             'payment_screenshot.max' => 'The payment screenshot must be 5 MB or smaller.',
+            'payment_account_id.exists' => 'Select an active payment method.',
         ]);
     }
 
@@ -46,6 +48,7 @@ class OrderPaymentService
             $order->load('branch', 'orderedByUser', 'orderItems.item');
             $order->update([
                 'payment_reference' => $payment['payment_reference'],
+                'payment_account_id' => $payment['payment_account_id'] ?? null,
                 'payment_screenshot_path' => $path,
                 'payment_submitted_at' => now(),
                 'proforma_snapshot' => $this->snapshot($order),

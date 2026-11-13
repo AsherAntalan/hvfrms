@@ -13,7 +13,6 @@ use App\Models\User;
 use App\Services\AccountRequestService;
 use App\Services\CommissarySalesService;
 use App\Services\DemoSalesService;
-use App\Services\RecoveryApprovalService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -37,7 +36,7 @@ class DashboardController extends Controller
 
         $stats = [];
         $stats['account_requests'] = count(app(AccountRequestService::class)->notificationItemsFor($user));
-        $stats['recovery_requests'] = app(RecoveryApprovalService::class)->countFor($user);
+        $stats['recovery_requests'] = 0;
         $stats['receiving_issues'] = $user->isAdmin()
             ? ReceivingIssue::where('status', 'pending')->whereIn('order_id', Order::where('status', 'delivering')->whereNull('archived_at')->select('id'))->count()
             : 0;

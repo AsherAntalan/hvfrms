@@ -13,6 +13,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AccountRequestController extends Controller
@@ -36,13 +37,21 @@ class AccountRequestController extends Controller
         if (is_string($request->input('username'))) {
             $request->merge(['username' => strtolower(trim($request->input('username')))]);
         }
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => strtolower(trim($request->input('email')))]);
+        }
         $data = $request->validate([
             'full_name' => ['required', 'string', 'max:150'],
+            'email' => ['nullable', 'required_with:password', 'email', 'max:255', 'unique:users,email', 'unique:account_requests,email'],
             'username' => ['required', 'string', 'max:50', 'regex:/\A[A-Za-z0-9_.-]+\z/', 'unique:users,username', 'unique:account_requests,username'],
+            'password' => ['nullable', 'required_with:email', 'string', Password::min(8)->mixedCase()->numbers()->symbols()],
         ]);
         $entry = AccountRequest::create([
             'requested_by' => $actor->id, 'branch_id' => $actor->branch_id,
-            'full_name' => trim($data['full_name']), 'username' => strtolower(trim($data['username'])),
+            'full_name' => trim($data['full_name']),
+            'email' => $data['email'] ?? null,
+            'password_hash' => ! empty($data['password']) ? Hash::make($data['password']) : null,
+            'username' => strtolower(trim($data['username'])),
             'requested_role' => $actor->isBranchManager() ? 'branch_staff' : 'commissary_staff', 'status' => 'pending',
         ]);
         $this->accounts->audit($actor, $entry, 'account_request_submitted');
@@ -113,19 +122,23 @@ class AccountRequestController extends Controller
                         throw ValidationException::withMessages(['id' => 'Requester/branch is no longer eligible, or the username is already taken.']);
                     }
                     $role = Role::where('role_name', $entry->requested_role)->firstOrFail();
+                    $managerSet = ! empty($entry->password_hash);
                     $user = User::create([
-                        'username' => $entry->username, 'full_name' => $entry->full_name, 'email' => null,
-                        'password_hash' => Hash::make(Str::random(40)), 'role_id' => $role->id,
-                        'branch_id' => $entry->branch_id, 'status' => 'active', 'must_change_password' => true,
+                        'username' => $entry->username, 'full_name' => $entry->full_name, 'email' => $entry->email,
+                        'password_hash' => $managerSet ? $entry->password_hash : Hash::make(Str::random(40)), 'role_id' => $role->id,
+                        'branch_id' => $entry->branch_id, 'status' => 'active', 'must_change_password' => ! $managerSet,
                     ]);
                     $entry->update(['status' => 'approved', 'user_id' => $user->id, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
-                    $this->accounts->issuePassword($entry, $user);
+                    // Only generate a temporary password when the manager did not set one.
+                    if (! $managerSet) {
+                        $this->accounts->issuePassword($entry, $user);
+                    }
                 }
             }
             $this->accounts->audit($actor, $entry, 'account_request_'.$action);
 
             return response()->json(['ok' => true, 'message' => match ($action) {
-                'approve' => 'Account created. The requesting manager can reveal the temporary password once. It expires in 24 hours.',
+                'approve' => 'Account created. The employee can sign in with the email and password set by the requesting manager.',
                 'replace' => 'Replacement issued. The previous temporary password is invalid.',
                 default => 'Account request rejected.',
             }])->header('Cache-Control', 'no-store, private');

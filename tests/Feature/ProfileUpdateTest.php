@@ -90,8 +90,8 @@ class ProfileUpdateTest extends TestCase
         $user->profile_updated_at = now();
         $user->save();
         $this->actingAs($user)->post(route('profile.password'), ['current_password' => 'password123',
-            'new_password' => 'new-password123', 'new_password_confirmation' => 'new-password123'])->assertSessionHasNoErrors();
-        $this->assertTrue(Hash::check('new-password123', $user->fresh()->password_hash));
+            'new_password' => 'New-Password123!', 'new_password_confirmation' => 'New-Password123!'])->assertSessionHasNoErrors();
+        $this->assertTrue(Hash::check('New-Password123!', $user->fresh()->password_hash));
         auth()->logout();
         $this->post(route('profile.information'), [])->assertRedirect(route('login'));
     }

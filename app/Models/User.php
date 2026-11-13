@@ -26,6 +26,9 @@ class User extends Authenticatable
         'locked_until',
         'reset_token',
         'reset_token_expires',
+        'otp_code_hash',
+        'otp_expires_at',
+        'otp_attempts',
     ];
 
     protected $hidden = [
@@ -34,6 +37,8 @@ class User extends Authenticatable
         'password_hash',
         'reset_token',
         'reset_token_expires',
+        'otp_code_hash',
+        'otp_expires_at',
         'failed_attempts',
         'locked_until',
     ];
@@ -52,6 +57,7 @@ class User extends Authenticatable
             'recovery_code' => 'encrypted',
             'locked_until' => 'datetime',
             'reset_token_expires' => 'datetime',
+            'otp_expires_at' => 'datetime',
         ];
     }
 

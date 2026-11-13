@@ -77,7 +77,7 @@ class CommissaryAlertsTest extends TestCase
         }
 
         $response = $this->actingAs($w['users']['commissary_manager'])->get('/alerts')->assertOk()
-            ->assertSee('Notifications')->assertSee('Request awaiting review')->assertSee('Preparation in progress')
+            ->assertSee('Notifications')->assertSee('Order waiting for approval')->assertSee('Preparation in progress')
             ->assertViewHas('countOpen', 0)->assertViewHas('operationalOrderCount', 4)->assertDontSee('LEGACY-');
         if ($folder = getenv('PRODUCTS_BROWSER_ARTIFACTS')) {
             if (! is_dir($folder)) {

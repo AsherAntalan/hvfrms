@@ -45,7 +45,7 @@ class CommissaryOrderNotificationTest extends TestCase
             $res = $this->actingAs($u)->getJson('/notifications')->assertOk();
             $this->assertGreaterThanOrEqual(1, $res->json('sidebar.orders'));   // badge counts the order
             $msgs = collect($res->json('items'))->pluck('message')->implode(' | ');
-            $this->assertStringContainsString('ORD-N-1 awaiting approval', $msgs);
+            $this->assertStringContainsString('ORD-N-1 waiting for approval', $msgs);
         }
     }
 

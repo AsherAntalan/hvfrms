@@ -23,6 +23,9 @@ class Order extends Model
         'confirmed_by',
         'confirmed_at',
         'settled_at',
+        'expected_delivery_date',
+        'delivery_date_note',
+        'payment_account_id',
         'declined_by',
         'declined_at',
         'decline_reason',
@@ -56,6 +59,7 @@ class Order extends Model
             'delivered_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'settled_at' => 'datetime',
+            'expected_delivery_date' => 'date',
             'labels_print_requested_at' => 'datetime',
         ];
     }

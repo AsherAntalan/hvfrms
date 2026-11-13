@@ -13,6 +13,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class InitialPasswordController extends Controller
@@ -30,7 +31,7 @@ class InitialPasswordController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
+            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()->symbols(), 'confirmed', 'different:current_password'],
         ]);
         DB::transaction(function () use ($request, $data): void {
             $user = User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();

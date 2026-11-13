@@ -12,6 +12,7 @@ use App\Models\OrderItem;
 use App\Models\OrderProduction;
 use App\Models\ReceivingIssue;
 use App\Models\User;
+use App\Services\AdminNotifier;
 use App\Services\OrderGroupLabelService;
 use App\Services\OrderLabelService;
 use App\Services\OrderPaymentService;
@@ -76,7 +77,7 @@ class OrderController extends Controller
         $simpleQueues = $user->isOwner() && ! $user->isCommissaryRole();
         $organizeCommissaryOrders = $user->isCommissaryRole() || $simpleQueues;
         $orderQueues = $simpleQueues
-            ? ['active' => 'Active', 'all' => 'All Orders', 'history' => 'History']
+            ? ['active' => 'Active Orders', 'history' => 'History']
             : ['review' => 'Needs Review', 'prepare' => 'To Prepare', 'release' => 'For Release', 'transit' => 'In Transit', 'history' => 'History', 'all' => 'All Orders'];
         $orderQueueCounts = array_fill_keys(array_keys($orderQueues), 0);
         $defaultOrderQueue = 'all';
@@ -88,9 +89,14 @@ class OrderController extends Controller
                 }
             }
             $orderQueueCounts['all'] = $orders->count();
+            // Owner/Admin "Active Orders" tab lists every order; status is narrowed
+            // via the status filter, so its badge reflects the full count.
+            if ($simpleQueues) {
+                $orderQueueCounts['active'] = $orders->count();
+            }
             $priorities = $user->isCommissaryStaff()
                 ? ['release', 'transit', 'review', 'prepare', 'history', 'all']
-                : ($simpleQueues ? ['active', 'history', 'all'] : array_keys($orderQueues));
+                : ($simpleQueues ? ['active', 'history'] : array_keys($orderQueues));
             foreach ($priorities as $queue) {
                 if ($orderQueueCounts[$queue] > 0) {
                     $defaultOrderQueue = $queue;
@@ -307,8 +313,39 @@ class OrderController extends Controller
 
             return response()->json(['ok' => true, 'issue_id' => $issue->id, 'message' => 'Branch-confirmed receiving issue submitted. Admin can now review and reprocess this receipt.']);
         }
+        if ($action === 'request_refund') {
+            abort_unless($user->isBranchManager(), 403);
+            $request->merge(['reason' => trim((string) $request->input('reason'))]);
+            $data = $request->validate([
+                'id' => ['required', 'integer'],
+                'reason' => ['required', 'string', 'min:10', 'max:2000'],
+                'photo' => ['required', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120'],
+                'items' => ['required', 'string'],
+            ]);
+            $damaged = json_decode($data['items'], true);
+            if (! is_array($damaged) || $damaged === []) {
+                return response()->json(['ok' => false, 'error' => 'Enter the damaged quantity for at least one item.'], 422);
+            }
+            $order = Order::findOrFail($data['id']);
+            $file = $request->file('photo');
+            $name = 'refund_'.time().'_'.bin2hex(random_bytes(6)).'.'.strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            $dir = public_path('uploads/refunds');
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            $file->move($dir, $name);
+            $issue = app(ReceivingIssueService::class)->reportRefund($order, $user, $data['reason'], 'uploads/refunds/'.$name, $damaged);
+
+            AdminNotifier::send(
+                'Refund request — '.$order->order_number,
+                'Branch refund request submitted',
+                ["{$user->full_name} requested a refund for Order {$order->order_number} at ".($order->branch->branch_name ?? 'their branch').'.', 'Reason: '.$data['reason'], 'Review it to remove the damaged stock from inventory.'],
+            );
+
+            return response()->json(['ok' => true, 'issue_id' => $issue->id, 'message' => 'Refund request submitted. The commissary manager or admin will review your photo and remove the damaged stock on approval.']);
+        }
         if ($action === 'resolve_receiving_issue') {
-            abort_unless($user->isAdmin(), 403);
+            abort_unless($user->isAdmin() || $user->isCommissaryManager(), 403);
             $request->merge(['reason' => trim((string) $request->input('reason'))]);
             $data = $request->validate([
                 'issue_id' => ['required', 'integer'], 'reason' => ['required', 'string', 'min:10', 'max:2000'],
@@ -365,6 +402,45 @@ class OrderController extends Controller
             }
 
             return response()->json($labels->prepare($order, $expiry, $user, $fulfillment));
+        }
+
+        // ── COMMISSARY SETS EXPECTED DELIVERY DATE ──────────
+        if ($action === 'set_delivery_date') {
+            abort_unless($user->isOwner() || $user->isCommissaryManager(), 403);
+            $order = Order::findOrFail((int) $request->input('id'));
+            if (in_array($order->status, ['delivered', 'settled', 'cancelled', 'declined'], true)) {
+                return response()->json(['ok' => false, 'error' => 'This order is already closed.'], 422);
+            }
+            $validated = $request->validate([
+                'delivery_date' => ['required', 'date', 'after_or_equal:today'],
+                'delivery_note' => ['nullable', 'string', 'max:255'],
+            ]);
+            $date = \Illuminate\Support\Carbon::parse($validated['delivery_date']);
+            $note = trim((string) ($validated['delivery_note'] ?? '')) ?: null;
+            $order->update(['expected_delivery_date' => $date->toDateString(), 'delivery_date_note' => $note]);
+
+            // Notify the destination branch in the order notifications feed. Alerts
+            // are unique per (order_id, alert_type), so update the order's single
+            // operational alert in place and re-open it as unreviewed.
+            Alert::updateOrCreate(
+                ['order_id' => $order->id, 'alert_type' => 'operational'],
+                [
+                    'branch_id' => $order->branch_id,
+                    'severity' => 'info',
+                    'message' => "Order {$order->order_number} is scheduled for delivery on {$date->format('M j, Y')}.".($note ? ' Note: '.$note : ''),
+                    'is_resolved' => false,
+                    'resolved_by' => null,
+                    'resolved_at' => null,
+                ]
+            );
+
+            AuditLog::create([
+                'user_id' => $user->id, 'action' => 'set delivery date', 'table_name' => 'orders',
+                'record_id' => $order->id, 'details' => 'Expected delivery '.$date->toDateString().($note ? ' — '.$note : ''),
+                'ip_address' => $request->ip(),
+            ]);
+
+            return response()->json(['ok' => true, 'message' => 'Delivery date set to '.$date->format('M j, Y').'.', 'expected_delivery_date' => $date->format('M j, Y')]);
         }
 
         // ── CREATE ORDER ────────────────────────────────────
@@ -879,6 +955,12 @@ class OrderController extends Controller
                 }
                 DB::commit();
 
+                AdminNotifier::send(
+                    'Order delivered — '.$order->order_number,
+                    'Order delivered and received',
+                    ["Order {$order->order_number} was received at {$order->branch_name}.", 'The goods have been added to the branch inventory.'],
+                );
+
                 return response()->json($recv);
             } catch (ValidationException $e) {
                 DB::rollBack();
@@ -1049,18 +1131,24 @@ class OrderController extends Controller
                     'status' => $order->status,
                     'receiving_issue' => $receivingIssue ? [
                         'id' => $receivingIssue->id, 'reason' => $receivingIssue->reason,
+                        'type' => $receivingIssue->type,
+                        'photo_url' => $receivingIssue->photo_path ? asset($receivingIssue->photo_path) : null,
                         'reported_by' => User::whereKey($receivingIssue->reported_by)->value('full_name'),
                         'reported_at' => $fmt($receivingIssue->created_at), 'receipt' => $receivingIssue->receipt,
                     ] : null,
                     'actions' => [
                         'can_report_receiving_issue' => $receiptReady && $user->isBranchManager() && (int) $user->branch_id === (int) $order->branch_id,
-                        'can_resolve_receiving_issue' => $isActiveOrder && $order->status === 'delivering' && $user->isAdmin() && $receivingIssue !== null,
+                        // Refund: the branch manager files it on a received order with no open issue.
+                        'can_request_refund' => $user->isBranchManager() && (int) $user->branch_id === (int) $order->branch_id
+                            && in_array($order->status, ['delivered', 'settled'], true) && $order->archived_at === null && $receivingIssue === null,
+                        'can_resolve_receiving_issue' => ($user->isAdmin() || $user->isCommissaryManager()) && $receivingIssue !== null && $receivingIssue->status === 'pending',
                         'can_prepare' => $isActiveOrder && $canPrepare && in_array($order->status, ['approved', 'preparing'], true) && ! $hasPreparedOutput,
                         'can_release' => $isActiveOrder && $canRelease && in_array($order->status, ['approved', 'preparing', 'delivering'], true) && $hasPreparedOutput && (int) $productions->sum('produced_qty') > $releasedQuantity,
                         'can_receive' => ! $user->isAdmin() && $isActiveOrder && $order->status === 'delivering' && (! $hasPreparedOutput || ((int) $productions->sum('produced_qty') > 0 && $releasedQuantity >= (int) $productions->sum('produced_qty'))) && ($user->isOwner() || ($user->isBranchManager() && (int) $order->branch_id === (int) $user->branch_id)),
                         'can_cancel' => $isActiveOrder && $canCancel && in_array($order->status, ['pending', 'approved', 'preparing', 'delivering'], true) && $releasedQuantity === 0,
                         'labels_url' => $canPrepare && $productions->isNotEmpty() && ! in_array($order->status, ['cancelled', 'declined'], true) ? route('orders.labels', $order) : null,
                         'scan_out_url' => $canRelease ? route('stock', ['mode' => 'out']) : null,
+                        'can_set_delivery_date' => ($user->isOwner() || $user->isCommissaryManager()) && in_array($order->status, ['pending', 'approved', 'preparing', 'delivering'], true),
                     ],
                     'shipment_qr' => $order->status === 'delivering' ? OrderWorkflowService::shipmentQr($order) : null,
                     'ordered_by_name' => $order->ordered_by_name,
@@ -1077,6 +1165,9 @@ class OrderController extends Controller
                     'delivered_at' => $fmt($order->delivered_at),
                     'confirmed_at' => $fmt($order->confirmed_at),
                     'settled_at' => $fmt($order->settled_at),
+                    'expected_delivery_date' => $order->expected_delivery_date ? $order->expected_delivery_date->format('M j, Y') : null,
+                    'expected_delivery_date_input' => $order->expected_delivery_date ? $order->expected_delivery_date->toDateString() : null,
+                    'delivery_date_note' => $order->delivery_date_note,
                     'declined_by_name' => $declinedBy,
                     'declined_at' => $fmt($order->declined_at),
                     'decline_reason' => $order->decline_reason,

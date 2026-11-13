@@ -411,6 +411,7 @@ class ReportsArchiveTest extends TestCase
         $otherRes = $this->actingAs($owner)->get('/forecast?branch='.$other->id);
         $otherRes->assertOk();
         $otherRes->assertSee('Branch Scoped Item');
-        $otherRes->assertDontSee('<select', false);
+        // The branch scope is now chosen from the inventory-style filter bar.
+        $otherRes->assertSee('id="fcBranch"', false);
     }
 }

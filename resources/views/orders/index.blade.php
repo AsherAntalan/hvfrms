@@ -52,26 +52,17 @@
     @if(!$showArchivedOrders)
     <div class="d-flex flex-wrap gap-2">
     <a class="btn btn-sm btn-outline-secondary" href="{{ route('orders', ['archived' => 1]) }}"><i class="ph ph-archive-box me-1"></i> Archived Orders <span class="badge rounded-pill bg-secondary ms-1">{{ $archivedOrderCount }}</span></a>
-    @if(!$user->isCommissaryStaff())
-    @if($isBM)
-    <a href="{{ route('ordering') }}" class="btn btn-maroon btn-sm">
-        <i class="ph ph-plus me-1"></i> New Order
-    </a>
-    @else
+    @if(!$isBM && !$user->isCommissaryStaff())
     <button class="btn btn-maroon btn-sm" onclick="openOrderModal()">
         <i class="ph ph-plus me-1"></i> New Order
     </button>
-    @endif
     @endif
     </div>
     @endif
 </div>
 
 @if(!$showArchivedOrders)
-<div class="hv-card p-3 mb-3 small">
-    <strong>Order flow:</strong> Request &rarr; Review &rarr; Prepare &rarr; Print labels &rarr; Dispatch &rarr; Receive
-    <div class="text-muted mt-1">Preparation records actual quantities. Printing labels does not dispatch goods. Receiving adds only accepted quantities to destination inventory.</div>
-</div>
+<p class="small text-muted mb-3"><strong>Order flow:</strong> Request &rarr; Review &rarr; Prepare &rarr; Print labels &rarr; Dispatch &rarr; Receive</p>
 
 @endif
 
@@ -89,11 +80,12 @@
 <!-- Filter Bar -->
 <div class="hv-card p-2 mb-3">
     <div class="row g-2 align-items-center">
-        <div class="col-md-3">
+        <div class="col-12 col-lg">
             <input type="text" class="form-control form-control-sm" id="orderSearch"
-                   placeholder="{{ $organizeCommissaryOrders ? 'Search order #, branch, or requester...' : 'Search order #...' }}" oninput="filterOrders()">
+                   placeholder="{{ $organizeCommissaryOrders ? 'Search order #, branch, or requester...' : 'Search order #...' }}"
+                   oninput="filterOrders()">
         </div>
-        <div class="col-md-3 {{ $isBranchScoped && !$isWarehouse ? 'd-none' : '' }}">
+        <div class="col-6 col-md-4 col-lg-auto {{ $isBranchScoped && !$isWarehouse ? 'd-none' : '' }}">
             <select class="form-select form-select-sm" id="filterBranch" onchange="filterOrders()">
                 <option value="">All Branches</option>
                 @foreach($branches as $br)
@@ -101,7 +93,7 @@
                 @endforeach
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-4 col-lg-auto">
             <select class="form-select form-select-sm" id="filterStatus" onchange="filterOrders()">
                 <option value="">All Statuses</option>
                 <option value="pending">Pending</option>
@@ -114,7 +106,21 @@
                 <option value="declined">Declined</option>
             </select>
         </div>
-        <div class="col-md-3 text-end">
+        @if($organizeCommissaryOrders)
+        <div class="col-6 col-md-4 col-lg-auto">
+            <select id="orderSort" class="form-select form-select-sm" aria-label="Sort orders" onchange="filterOrders()">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="branch">Branch A–Z</option>
+            </select>
+        </div>
+        @endif
+        <div class="col-auto">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearOrderFilters()">
+                <i class="ph ph-x" aria-hidden="true"></i> Clear Filters
+            </button>
+        </div>
+        <div class="col text-end">
             <span class="text-muted small" id="orderCount" role="status" aria-live="polite">
                 {{ $orders->count() }} order{{ $orders->count() !== 1 ? 's' : '' }}
             </span>
@@ -125,15 +131,6 @@
 @if($organizeCommissaryOrders)
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
     <div class="small text-muted" id="orderQueueHint">Choose a work queue to focus on the next action.</div>
-    <div class="d-flex align-items-center gap-2">
-        <label for="orderSort" class="small text-muted mb-0">Sort</label>
-        <select id="orderSort" class="form-select form-select-sm w-auto" onchange="filterOrders()">
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="branch">Branch A–Z</option>
-        </select>
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearOrderFilters()">Clear filters</button>
-    </div>
 </div>
 @endif
 
@@ -271,6 +268,10 @@
             </tbody>
         </table>
     </div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 px-3 py-3 no-print">
+        <div class="text-muted small" id="ordersPagerInfo" role="status" aria-live="polite"></div>
+        <nav class="hv-inv-pager" id="ordersPagerNav" aria-label="Orders pagination"></nav>
+    </div>
 </div>
 
 @include('partials.order-prepare')
@@ -359,19 +360,32 @@
 
 <!-- View Order Modal -->
 @endunless
+@push('styles')
+<style>
+#viewModal .modal-content { border: 0; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 44px rgba(0, 0, 0, 0.16); }
+#viewModal .modal-header { padding: 1rem 1.25rem; }
+#viewModal .modal-footer { padding: 0.85rem 1.25rem; }
+#viewModalBody { padding: 1.25rem; }
+#viewModalBody p { margin-bottom: 0.4rem; }
+#viewModalBody section { background: #fafbfc; border-color: #e9ecef !important; border-radius: 10px; }
+#viewModalBody .table thead th { color: #6b7280; font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid #e9ecef; }
+#viewModalBody .table td, #viewModalBody .table th { border-color: #f1f3f5; }
+#viewModalBody a[target="_blank"] { color: var(--maroon); font-weight: 600; }
+</style>
+@endpush
 <div class="modal fade" id="viewModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header" style="background:var(--gold-soft);">
+            <div class="modal-header" style="background:#f6f7f9;border-bottom:1px solid #e9ecef;">
                 <h5 class="modal-title" id="viewModalTitle" style="color:var(--maroon);font-weight:700;">
-                    <i class="ph ph-receipt me-1"></i> Order Details
+                    Order Details
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="viewModalBody">
                 <div class="text-center py-4 text-muted">Loading...</div>
             </div>
-            <div class="modal-footer" id="viewModalFooter">
+            <div class="modal-footer" id="viewModalFooter" style="background:#f6f7f9;border-top:1px solid #e9ecef;">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -687,10 +701,19 @@ async function viewOrder(orderId) {
             if (o.delivered_at) html += '<p class="mb-1"><strong>Delivered at:</strong> ' + o.delivered_at + '</p>';
             if (o.confirmed_by_name) html += '<p class="mb-1"><strong>Confirmed by:</strong> ' + o.confirmed_by_name + '</p>';
             if (o.settled_at) html += '<p class="mb-1"><strong>Settled at:</strong> ' + o.settled_at + '</p>';
+            if (o.expected_delivery_date) html += '<p class="mb-1"><strong>Expected delivery:</strong> ' + escH(o.expected_delivery_date) + (o.delivery_date_note ? ' <span class="text-muted small">(' + escH(o.delivery_date_note) + ')</span>' : '') + '</p>';
             if (o.remarks) html += '<p class="mb-1"><strong>Remarks:</strong> ' + escH(o.remarks) + '</p>';
             html += '</div></div>';
-            if (o.proforma_url) html += '<p><a href="' + escH(o.proforma_url) + '" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">Print proforma invoice</a></p>';
-            else if (o.proforma_awaiting_approval) html += '<p class="small text-muted">Proforma printing becomes available after confirmation by the Owner, Admin, or Commissary Manager.</p>';
+            if (o.actions && o.actions.can_set_delivery_date) {
+                var ddVal = o.expected_delivery_date_input || '';
+                html += '<div class="border rounded p-3 mb-3 bg-light"><div class="fw-semibold small mb-2"><i class="ph ph-truck me-1"></i>Commissary delivery schedule</div>'
+                    + '<div class="row g-2 align-items-end">'
+                    + '<div class="col-sm-5"><label class="form-label small mb-1" for="deliveryDateInput">Expected delivery date</label><input type="date" id="deliveryDateInput" class="form-control form-control-sm" value="' + ddVal + '"></div>'
+                    + '<div class="col-sm-5"><label class="form-label small mb-1" for="deliveryNoteInput">Note (optional)</label><input type="text" id="deliveryNoteInput" class="form-control form-control-sm" maxlength="255" placeholder="e.g. delayed by typhoon" value="' + escH(o.delivery_date_note || '') + '"></div>'
+                    + '<div class="col-sm-2"><button type="button" class="btn btn-sm btn-maroon w-100" onclick="setDeliveryDate(' + o.id + ')">Save</button></div>'
+                    + '</div><div class="small text-muted mt-2">Saving notifies ' + escH(o.branch_name) + ' in their order notifications.</div></div>';
+            }
+            if (o.proforma_awaiting_approval && !o.proforma_url) html += '<p class="small text-muted">Proforma printing becomes available after confirmation by the Owner, Admin, or Commissary Manager.</p>';
             if (o.payment_reference) {
                 html += '<section class="border rounded p-3 mb-3"><strong>GCash proof submitted — for manual review</strong><p class="mb-1">Reference: ' + escH(o.payment_reference) + '</p><p class="small text-muted">Check the received funds, amount, and reference before approving. Uploading proof does not verify payment.</p>';
                 if (o.payment_screenshot_url) html += '<a href="' + escH(o.payment_screenshot_url) + '" target="_blank" rel="noopener">Open payment screenshot<img src="' + escH(o.payment_screenshot_url) + '" alt="Submitted GCash payment screenshot" class="d-block mt-2 rounded" style="max-width:100%;max-height:220px;object-fit:contain"></a>';
@@ -750,13 +773,18 @@ function renderReviewFooter(o) {
     currentReviewOrder = reviewable ? o : null;
     if (title) {
         title.innerHTML = reviewable
-            ? '<i class="ph ph-clipboard-text me-1"></i> Review Order — ' + escapeHtml(o.order_number)
-            : '<i class="ph ph-receipt me-1"></i> Order Details';
+            ? 'Review Order — ' + escapeHtml(o.order_number)
+            : 'Order Details';
     }
     let html = '<button type="button" class="btn btn-light" data-bs-dismiss="modal">' + (reviewable ? 'Back' : 'Close') + '</button>';
+    @unless($user->isBranchManager())
+    if (o && o.proforma_url) {
+        html += '<a class="btn btn-outline-secondary" href="' + escapeHtml(o.proforma_url) + '" target="_blank" rel="noopener">Print proforma invoice</a>';
+    }
+    @endunless
     if (reviewable) {
         html += '<button type="button" class="btn btn-outline-danger" id="btnReviewDecline" onclick="declineReviewOrder()"><i class="ph ph-x-circle me-1"></i> Decline Request</button>';
-        html += '<button type="button" class="btn btn-maroon" id="btnReviewApprove" onclick="approveReviewOrder()"><i class="ph ph-check-circle me-1"></i> Approve Request</button>';
+        html += '<button type="button" class="btn btn-success" id="btnReviewApprove" onclick="approveReviewOrder()"><i class="ph ph-check-circle me-1"></i> Approve Request</button>';
     }
     if (o && o.status === 'delivering' && o.actions) {
         if (o.actions.labels_url) {
@@ -764,7 +792,7 @@ function renderReviewFooter(o) {
         }
         @unless($user->isAdmin())
         if (o.actions.can_receive) {
-            html += '<a class="btn btn-success" href="{{ route('delivery') }}">Receive / Confirm</a>';
+            html += '<button type="button" class="btn btn-success" id="btnForceReceive">Force Receive</button>';
         }
         @endunless
     }
@@ -772,13 +800,68 @@ function renderReviewFooter(o) {
     window.HVReceivingIssue.addAction(footer, o);
     const labelsButton = document.getElementById('detailsPrintLabels');
     if (labelsButton) labelsButton.onclick = () => hvPrintLabelsUrl(o.actions.labels_url);
+    const receiveButton = document.getElementById('btnForceReceive');
+    if (receiveButton) receiveButton.onclick = () => forceReceiveOrder(o.id, o.order_number);
 }
 
 function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
 
+// Receive the whole order in full from the modal (confirm first). Reuses the
+// order-level receive path (no QR scan = full acceptance) and closes the order.
+async function forceReceiveOrder(orderId, number) {
+    const result = await window.hvModal.confirm({
+        title: 'Receive order ' + number + '?',
+        message: 'Confirm you received this order in full. This marks it delivered and adds the goods to your branch stock. It cannot be undone.',
+        confirmText: 'Receive',
+        action: async function () {
+            const data = new FormData();
+            data.append('_token', CSRF);
+            data.append('action', 'receive_scan');
+            data.append('id', orderId);
+            const response = await fetch(API, { method: 'POST', body: data, headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+            const json = await response.json();
+            if (!json.ok) { return { ok: false, error: json.error || json.message || 'Could not receive the order.' }; }
+            return { ok: true };
+        },
+        success: { title: 'Order received', message: 'Order ' + number + ' has been received and closed.' },
+    });
+    if (result && result.ok) { if (viewModal) { viewModal.hide(); } await refreshOrdersTable(); }
+}
+
 // Approve the pending order under review. Reuses the existing review_order
 // transition (which locks + revalidates pending server-side). Does not prepare,
 // dispatch, receive, close, or verify payment.
+// Commissary sets/updates the expected delivery date; notifies the branch.
+async function setDeliveryDate(orderId) {
+    var dateEl = document.getElementById('deliveryDateInput');
+    var noteEl = document.getElementById('deliveryNoteInput');
+    if (!dateEl || !dateEl.value) { hvOrderToast('Pick a delivery date first.', 'error'); return; }
+    var btn = dateEl.closest('.border').querySelector('button');
+    var original = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+    var data = new FormData();
+    data.append('action', 'set_delivery_date');
+    data.append('id', orderId);
+    data.append('delivery_date', dateEl.value);
+    data.append('delivery_note', noteEl ? noteEl.value : '');
+    data.append('_token', CSRF);
+    try {
+        var res = await fetch(API, { method: 'POST', body: data, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        var json = await res.json();
+        if (json.ok) {
+            hvOrderToast(json.message || 'Delivery date saved.', 'success');
+            await viewOrder(orderId);
+        } else {
+            var msg = json.error || (json.errors ? Object.values(json.errors).flat().join(' ') : 'Could not save the delivery date.');
+            hvOrderToast(msg, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = original; }
+        }
+    } catch (e) {
+        hvOrderToast('Network error. Please try again.', 'error');
+        if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
+}
+
 async function approveReviewOrder() {
     if (!currentReviewOrder) { return; }
     const approveBtn = document.getElementById('btnReviewApprove');
@@ -888,6 +971,8 @@ function hvOrderToast(message, severity) {
 }
 
 let activeOrderQueue = @json($organizeCommissaryOrders ? $defaultOrderQueue : null);
+let orderPage = 1;
+const ORDERS_PER_PAGE = 10;
 
 function selectOrderQueue(queue) {
     activeOrderQueue = queue;
@@ -903,6 +988,7 @@ function clearOrderFilters() {
 }
 
 function filterOrders() {
+    orderPage = 1;
     const search = document.getElementById('orderSearch').value.trim().toLowerCase();
     const branch = document.getElementById('filterBranch').value;
     const status = document.getElementById('filterStatus').value;
@@ -919,10 +1005,14 @@ function filterOrders() {
             queueCounts.all++;
             if (row.dataset.queue && row.dataset.queue !== 'all') queueCounts[row.dataset.queue]++;
         }
-        const show = matches && (!activeOrderQueue || activeOrderQueue === 'all' || row.dataset.queue === activeOrderQueue);
+        const queueOk = !activeOrderQueue || activeOrderQueue === 'all' || activeOrderQueue === 'active' || row.dataset.queue === activeOrderQueue;
+        const anyFilter = search || branch || status;
+        const show = matches && (anyFilter || queueOk);
+        row.dataset.shown = show ? '1' : '0';
         row.style.display = show ? '' : 'none';
         if (show) visible++;
     });
+    queueCounts.active = queueCounts.all;
     document.getElementById('orderCount').textContent = visible + ' order' + (visible !== 1 ? 's' : '');
     const empty = document.getElementById('orderFilterEmpty');
     if (empty) empty.hidden = visible > 0;
@@ -931,7 +1021,7 @@ function filterOrders() {
     const hint = document.getElementById('orderQueueHint');
     if (hint) {
         const hints = {
-            active:'Orders still in progress — not yet received or closed.',
+            active:'All orders across every stage — narrow with the status filter.',
             review:'Branch requests awaiting approval or decline.',
             prepare:'Reviewed requests that still need preparation or picking.',
             release:'Prepared goods with quantities still to scan out, including partial releases.',
@@ -949,7 +1039,53 @@ function filterOrders() {
         const body = document.getElementById('ordersTableBody');
         rows.forEach(row => body.insertBefore(row, empty));
     }
+    renderOrderPage();
 }
+
+function renderOrderPage() {
+    const shown = [...document.querySelectorAll('.order-row')].filter(r => r.dataset.shown === '1');
+    const pages = Math.max(1, Math.ceil(shown.length / ORDERS_PER_PAGE));
+    if (orderPage > pages) { orderPage = pages; }
+    if (orderPage < 1) { orderPage = 1; }
+    const start = (orderPage - 1) * ORDERS_PER_PAGE, end = start + ORDERS_PER_PAGE;
+    shown.forEach((r, i) => { r.style.display = (i >= start && i < end) ? '' : 'none'; });
+
+    const info = document.getElementById('ordersPagerInfo');
+    const nav = document.getElementById('ordersPagerNav');
+    if (info) {
+        info.textContent = shown.length
+            ? 'Showing ' + (start + 1) + '–' + Math.min(end, shown.length) + ' of ' + shown.length + ' order' + (shown.length !== 1 ? 's' : '')
+            : '';
+    }
+    if (!nav) { return; }
+    nav.innerHTML = '';
+    if (pages <= 1) { return; }
+    const mk = function (label, target, opts) {
+        opts = opts || {};
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'hv-page-btn' + (opts.active ? ' active' : '');
+        b.innerHTML = label;
+        if (opts.disabled) { b.disabled = true; }
+        if (opts.active) { b.setAttribute('aria-current', 'page'); }
+        if (!opts.disabled && !opts.active) { b.addEventListener('click', function () { orderPage = target; renderOrderPage(); }); }
+        return b;
+    };
+    const win = 2, s = Math.max(1, orderPage - win), e = Math.min(pages, orderPage + win);
+    const seq = [];
+    if (s > 1) { seq.push(1); if (s > 2) { seq.push('…'); } }
+    for (let p = s; p <= e; p++) { seq.push(p); }
+    if (e < pages) { if (e < pages - 1) { seq.push('…'); } seq.push(pages); }
+    nav.appendChild(mk('<i class="ph ph-caret-left"></i> Prev', orderPage - 1, { disabled: orderPage === 1 }));
+    seq.forEach(function (p) {
+        if (p === '…') { const g = document.createElement('span'); g.className = 'hv-page-gap'; g.textContent = '…'; nav.appendChild(g); }
+        else { nav.appendChild(mk(String(p), p, { active: p === orderPage })); }
+    });
+    nav.appendChild(mk('Next <i class="ph ph-caret-right"></i>', orderPage + 1, { disabled: orderPage === pages }));
+}
+
+window.addEventListener('beforeprint', function () { document.querySelectorAll('.order-row').forEach(function (r) { if (r.dataset.shown === '1') { r.style.display = ''; } }); });
+window.addEventListener('afterprint', renderOrderPage);
 
 </script>
 @endpush

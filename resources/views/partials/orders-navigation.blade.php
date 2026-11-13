@@ -7,7 +7,7 @@
     <a href="{{ route('ordering') }}" data-orders-view="supplies"
        class="hv-orders-navigation-link {{ request()->routeIs('ordering*') ? 'active' : '' }}"
        @if(request()->routeIs('ordering*')) aria-current="page" @endif>
-        Order Supplies
+        Order Products
     </a>
     <a href="{{ route('orders') }}" data-orders-view="all"
        class="hv-orders-navigation-link {{ request()->routeIs('orders*') ? 'active' : '' }}"
